@@ -1,12 +1,50 @@
 {
-  "name": "opencode-plugin",
-  "module": "index.ts",
+  "name": "opencode-supermemory",
+  "version": "0.1.0",
+  "description": "OpenCode plugin that gives coding agents persistent memory using Supermemory",
   "type": "module",
-  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "opencode-supermemory": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target node && bun build ./src/cli.ts --outfile ./dist/cli.js --target node && tsc --emitDeclarationOnly",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "supermemory",
+    "memory",
+    "ai",
+    "coding-agent"
+  ],
+  "author": "Supermemory",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/supermemoryai/opencode-supermemory"
+  },
+  "dependencies": {
+    "supermemory": "^4.0.0"
+  },
   "devDependencies": {
+    "@opencode-ai/plugin": "^1.0.191",
     "@types/bun": "latest"
   },
   "peerDependencies": {
-    "typescript": "^5"
-  }
+    "typescript": "^5.9.3"
+  },
+  "opencode": {
+    "type": "plugin",
+    "hooks": [
+      "chat.message",
+      "event"
+    ]
+  },
+  "files": [
+    "dist"
+  ]
 }
