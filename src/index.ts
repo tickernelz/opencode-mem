@@ -98,21 +98,25 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
         if (isFirstMessage) {
           injectedSessions.add(input.sessionID);
 
-          const [profile, userMemories, projectMemoriesList] = await Promise.all([
+          const [profileResult, userMemoriesResult, projectMemoriesListResult] = await Promise.all([
             supermemoryClient.getProfile(tags.user, userMessage),
             supermemoryClient.searchMemories(userMessage, tags.user),
             supermemoryClient.listMemories(tags.project, CONFIG.maxProjectMemories),
           ]);
 
+          const profile = profileResult.success ? profileResult : null;
+          const userMemories = userMemoriesResult.success ? userMemoriesResult : { results: [] };
+          const projectMemoriesList = projectMemoriesListResult.success ? projectMemoriesListResult : { memories: [] };
+
           const projectMemories = {
-            results: (projectMemoriesList?.memories || []).map((m: any) => ({
+            results: (projectMemoriesList.memories || []).map((m: any) => ({
               id: m.id,
               memory: m.summary,
               similarity: 1,
               title: m.title,
               metadata: m.metadata,
             })),
-            total: projectMemoriesList?.memories?.length || 0,
+            total: projectMemoriesList.memories?.length || 0,
             timing: 0,
           };
 
@@ -264,10 +268,10 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
                   { type: args.type }
                 );
 
-                if (!result) {
+                if (!result.success) {
                   return JSON.stringify({
                     success: false,
-                    error: "Failed to add memory",
+                    error: result.error || "Failed to add memory",
                   });
                 }
 
@@ -291,32 +295,51 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
                 const scope = args.scope;
 
                 if (scope === "user") {
-                  const results = await supermemoryClient.searchMemories(
+                  const result = await supermemoryClient.searchMemories(
                     args.query,
                     tags.user
                   );
-                  return formatSearchResults(args.query, scope, results, args.limit);
+                  if (!result.success) {
+                    return JSON.stringify({
+                      success: false,
+                      error: result.error || "Failed to search memories",
+                    });
+                  }
+                  return formatSearchResults(args.query, scope, result, args.limit);
                 }
 
                 if (scope === "project") {
-                  const results = await supermemoryClient.searchMemories(
+                  const result = await supermemoryClient.searchMemories(
                     args.query,
                     tags.project
                   );
-                  return formatSearchResults(args.query, scope, results, args.limit);
+                  if (!result.success) {
+                    return JSON.stringify({
+                      success: false,
+                      error: result.error || "Failed to search memories",
+                    });
+                  }
+                  return formatSearchResults(args.query, scope, result, args.limit);
                 }
 
-                const [userResults, projectResults] = await Promise.all([
+                const [userResult, projectResult] = await Promise.all([
                   supermemoryClient.searchMemories(args.query, tags.user),
                   supermemoryClient.searchMemories(args.query, tags.project),
                 ]);
 
+                if (!userResult.success || !projectResult.success) {
+                  return JSON.stringify({
+                    success: false,
+                    error: userResult.error || projectResult.error || "Failed to search memories",
+                  });
+                }
+
                 const combined = [
-                  ...(userResults.results || []).map((r) => ({
+                  ...(userResult.results || []).map((r) => ({
                     ...r,
                     scope: "user" as const,
                   })),
-                  ...(projectResults.results || []).map((r) => ({
+                  ...(projectResult.results || []).map((r) => ({
                     ...r,
                     scope: "project" as const,
                   })),
@@ -336,23 +359,23 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
               }
 
               case "profile": {
-                const profile = await supermemoryClient.getProfile(
+                const result = await supermemoryClient.getProfile(
                   tags.user,
                   args.query
                 );
 
-                if (!profile) {
+                if (!result.success) {
                   return JSON.stringify({
                     success: false,
-                    error: "Failed to fetch profile",
+                    error: result.error || "Failed to fetch profile",
                   });
                 }
 
                 return JSON.stringify({
                   success: true,
                   profile: {
-                    static: profile.profile?.static || [],
-                    dynamic: profile.profile?.dynamic || [],
+                    static: result.profile?.static || [],
+                    dynamic: result.profile?.dynamic || [],
                   },
                 });
               }
@@ -367,6 +390,13 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
                   containerTag,
                   limit
                 );
+
+                if (!result.success) {
+                  return JSON.stringify({
+                    success: false,
+                    error: result.error || "Failed to list memories",
+                  });
+                }
 
                 const memories = result.memories || [];
                 return JSON.stringify({
@@ -396,10 +426,10 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
                   args.memoryId
                 );
 
-                if (!result) {
+                if (!result.success) {
                   return JSON.stringify({
                     success: false,
-                    error: "Failed to delete memory",
+                    error: result.error || "Failed to delete memory",
                   });
                 }
 

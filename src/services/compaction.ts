@@ -308,8 +308,10 @@ export function createCompactionHook(
         { type: "conversation" }
       );
 
-      if (result) {
+      if (result.success) {
         log("[compaction] summary saved as memory", { sessionID, memoryId: result.id });
+      } else {
+        log("[compaction] failed to save summary", { error: result.error });
       }
     } catch (err) {
       log("[compaction] failed to save summary", { error: String(err) });

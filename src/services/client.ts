@@ -51,11 +51,11 @@ export class SupermemoryClient {
         TIMEOUT_MS
       );
       log("searchMemories: success", { count: result.results?.length || 0 });
-      return result;
+      return { success: true as const, ...result };
     } catch (error) {
-      log("searchMemories: error", { error: String(error) });
-      console.error("Supermemory: search failed", error);
-      return { results: [], total: 0, timing: 0 };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log("searchMemories: error", { error: errorMessage });
+      return { success: false as const, error: errorMessage, results: [], total: 0, timing: 0 };
     }
   }
 
@@ -70,11 +70,11 @@ export class SupermemoryClient {
         TIMEOUT_MS
       );
       log("getProfile: success", { hasProfile: !!result?.profile });
-      return result;
+      return { success: true as const, ...result };
     } catch (error) {
-      log("getProfile: error", { error: String(error) });
-      console.error("Supermemory: profile fetch failed", error);
-      return null;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log("getProfile: error", { error: errorMessage });
+      return { success: false as const, error: errorMessage, profile: null };
     }
   }
 
@@ -83,8 +83,9 @@ export class SupermemoryClient {
     containerTag: string,
     metadata?: { type?: MemoryType; tool?: string; [key: string]: unknown }
   ) {
+    log("addMemory: start", { containerTag, contentLength: content.length });
     try {
-      return await withTimeout(
+      const result = await withTimeout(
         this.getClient().memories.add({
           content,
           containerTag,
@@ -92,22 +93,28 @@ export class SupermemoryClient {
         }),
         TIMEOUT_MS
       );
+      log("addMemory: success", { id: result.id });
+      return { success: true as const, ...result };
     } catch (error) {
-      console.error("Supermemory: add memory failed", error);
-      return null;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log("addMemory: error", { error: errorMessage });
+      return { success: false as const, error: errorMessage };
     }
   }
 
   async deleteMemory(memoryId: string) {
+    log("deleteMemory: start", { memoryId });
     try {
       await withTimeout(
         this.getClient().memories.delete(memoryId),
         TIMEOUT_MS
       );
+      log("deleteMemory: success", { memoryId });
       return { success: true };
     } catch (error) {
-      console.error("Supermemory: delete memory failed", error);
-      return null;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log("deleteMemory: error", { memoryId, error: errorMessage });
+      return { success: false, error: errorMessage };
     }
   }
 
@@ -124,11 +131,11 @@ export class SupermemoryClient {
         TIMEOUT_MS
       );
       log("listMemories: success", { count: result.memories?.length || 0 });
-      return result;
+      return { success: true as const, ...result };
     } catch (error) {
-      log("listMemories: error", { error: String(error) });
-      console.error("Supermemory: list memories failed", error);
-      return { memories: [], pagination: { currentPage: 1, totalItems: 0, totalPages: 0 } };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log("listMemories: error", { error: errorMessage });
+      return { success: false as const, error: errorMessage, memories: [], pagination: { currentPage: 1, totalItems: 0, totalPages: 0 } };
     }
   }
 
@@ -137,7 +144,7 @@ export class SupermemoryClient {
     messages: ConversationMessage[],
     containerTags: string[],
     metadata?: Record<string, string | number | boolean>
-  ): Promise<ConversationIngestResponse | null> {
+  ) {
     log("ingestConversation: start", { conversationId, messageCount: messages.length });
     try {
       const response = await withTimeout(
@@ -160,16 +167,16 @@ export class SupermemoryClient {
       if (!response.ok) {
         const errorText = await response.text();
         log("ingestConversation: error response", { status: response.status, error: errorText });
-        return null;
+        return { success: false as const, error: `HTTP ${response.status}: ${errorText}` };
       }
 
       const result = await response.json() as ConversationIngestResponse;
       log("ingestConversation: success", { conversationId, status: result.status });
-      return result;
+      return { success: true as const, ...result };
     } catch (error) {
-      log("ingestConversation: error", { error: String(error) });
-      console.error("Supermemory: ingest conversation failed", error);
-      return null;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log("ingestConversation: error", { error: errorMessage });
+      return { success: false as const, error: errorMessage };
     }
   }
 }
