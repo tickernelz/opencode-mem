@@ -32,10 +32,11 @@ interface OpenCodeMemConfig {
   filterPrompt?: string;
   keywordPatterns?: string[];
   autoCaptureEnabled?: boolean;
-  autoCaptureThreshold?: number;
-  autoCaptureTimeThreshold?: number;
+  autoCaptureTokenThreshold?: number;
+  autoCaptureMinTokens?: number;
   autoCaptureMaxMemories?: number;
   autoCaptureSkipAfterCompaction?: number;
+  autoCaptureSummaryMaxLength?: number;
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
@@ -72,10 +73,11 @@ const DEFAULTS: Required<Omit<OpenCodeMemConfig, "embeddingApiUrl" | "embeddingA
   filterPrompt: "You are a stateful coding agent. Remember all the information, including but not limited to user's coding preferences, tech stack, behaviours, workflows, and any other relevant details.",
   keywordPatterns: [],
   autoCaptureEnabled: true,
-  autoCaptureThreshold: 15,
-  autoCaptureTimeThreshold: 0,
+  autoCaptureTokenThreshold: 10000,
+  autoCaptureMinTokens: 5000,
   autoCaptureMaxMemories: 10,
   autoCaptureSkipAfterCompaction: 5,
+  autoCaptureSummaryMaxLength: 0,
 };
 
 function isValidRegex(pattern: string): boolean {
@@ -123,20 +125,38 @@ const CONFIG_TEMPLATE = `{
   // "embeddingApiKey": "sk-...",
   
   // ============================================
-  // Memory/Summarization Model
+  // Auto-Capture Settings (REQUIRES EXTERNAL API)
   // ============================================
   
-  // Optional: Use external API for auto-capture summarization
-  // If not set, uses OpenCode's current session model (free!)
+  // IMPORTANT: Auto-capture ONLY works with external API
+  // It runs in background without blocking your main session
+  // Note: Ollama may not support tool calling. Use OpenAI, Anthropic, or Groq for best results.
   
-  // "memoryModel": "gpt-4o-mini",
-  // "memoryApiUrl": "https://api.openai.com/v1",
-  // "memoryApiKey": "sk-...",
+  "autoCaptureEnabled": true,
+  
+  // REQUIRED for auto-capture (all 3 must be set):
+  "memoryModel": "gpt-4o-mini",
+  "memoryApiUrl": "https://api.openai.com/v1",
+  "memoryApiKey": "sk-...",
   
   // Examples for other providers:
-  // Anthropic: "memoryApiUrl": "https://api.anthropic.com/v1"
-  // Groq: "memoryApiUrl": "https://api.groq.com/openai/v1"
-  // Ollama: "memoryApiUrl": "http://localhost:11434/v1", "memoryModel": "llama3"
+  // Anthropic: 
+  //   "memoryModel": "claude-3-5-haiku-20241022"
+  //   "memoryApiUrl": "https://api.anthropic.com/v1"
+  //   "memoryApiKey": "sk-ant-..."
+  // Groq (fast & cheap): 
+  //   "memoryModel": "llama-3.3-70b-versatile"
+  //   "memoryApiUrl": "https://api.groq.com/openai/v1"
+  //   "memoryApiKey": "gsk_..."
+  
+  // Token thresholds
+  "autoCaptureTokenThreshold": 10000,
+  "autoCaptureMinTokens": 5000,
+  "autoCaptureMaxMemories": 10,
+  "autoCaptureSkipAfterCompaction": 5,
+  
+  // Summary length: 0 = AI decides optimal length, >0 = character limit
+  "autoCaptureSummaryMaxLength": 0,
   
   // ============================================
   // Search Settings
@@ -146,17 +166,7 @@ const CONFIG_TEMPLATE = `{
   "maxMemories": 5,
   "maxProjectMemories": 10,
   
-  // ============================================
-  // Auto-Capture Settings
-  // ============================================
-  
-  "autoCaptureEnabled": true,
-  "autoCaptureThreshold": 15,
-  "autoCaptureTimeThreshold": 0,
-  "autoCaptureMaxMemories": 10,
-  "autoCaptureSkipAfterCompaction": 5,
-  
-  // ============================================
+  // ===================================
   // Advanced Settings
   // ============================================
   
@@ -197,10 +207,11 @@ export const CONFIG = {
     ...(fileConfig.keywordPatterns ?? []).filter(isValidRegex),
   ],
   autoCaptureEnabled: fileConfig.autoCaptureEnabled ?? DEFAULTS.autoCaptureEnabled,
-  autoCaptureThreshold: fileConfig.autoCaptureThreshold ?? DEFAULTS.autoCaptureThreshold,
-  autoCaptureTimeThreshold: fileConfig.autoCaptureTimeThreshold ?? DEFAULTS.autoCaptureTimeThreshold,
+  autoCaptureTokenThreshold: fileConfig.autoCaptureTokenThreshold ?? DEFAULTS.autoCaptureTokenThreshold,
+  autoCaptureMinTokens: fileConfig.autoCaptureMinTokens ?? DEFAULTS.autoCaptureMinTokens,
   autoCaptureMaxMemories: fileConfig.autoCaptureMaxMemories ?? DEFAULTS.autoCaptureMaxMemories,
   autoCaptureSkipAfterCompaction: fileConfig.autoCaptureSkipAfterCompaction ?? DEFAULTS.autoCaptureSkipAfterCompaction,
+  autoCaptureSummaryMaxLength: fileConfig.autoCaptureSummaryMaxLength ?? DEFAULTS.autoCaptureSummaryMaxLength,
   memoryModel: fileConfig.memoryModel,
   memoryApiUrl: fileConfig.memoryApiUrl,
   memoryApiKey: fileConfig.memoryApiKey,

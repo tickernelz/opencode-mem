@@ -20,7 +20,7 @@ interface ToolEntry {
 
 interface CaptureBuffer {
   sessionID: string;
-  iterationCount: number;
+  lastCaptureTokens: number;
   messages: MessageEntry[];
   tools: ToolEntry[];
   lastCaptureTime: number;
@@ -31,30 +31,65 @@ interface MemoryEntry {
   summary: string;
   scope: "user" | "project";
   type: MemoryType;
-  reasoning: string;
+  reasoning?: string;
 }
 
 interface CaptureResponse {
   memories: MemoryEntry[];
 }
 
+interface ToolCallResponse {
+  choices: Array<{
+    message: {
+      content?: string;
+      tool_calls?: Array<{
+        function: {
+          name: string;
+          arguments: string;
+        };
+      }>;
+    };
+    finish_reason?: string;
+  }>;
+}
+
 export class AutoCaptureService {
   private buffers = new Map<string, CaptureBuffer>();
   private capturing = new Set<string>();
-  private threshold: number;
-  private timeThreshold: number;
+  private tokenThreshold: number;
+  private minTokens: number;
   private enabled: boolean;
   private maxMemories: number;
 
   constructor() {
-    this.threshold = CONFIG.autoCaptureThreshold;
-    this.timeThreshold = CONFIG.autoCaptureTimeThreshold * 60 * 1000;
-    this.enabled = CONFIG.autoCaptureEnabled;
+    this.tokenThreshold = CONFIG.autoCaptureTokenThreshold;
+    this.minTokens = CONFIG.autoCaptureMinTokens;
     this.maxMemories = CONFIG.autoCaptureMaxMemories;
+    
+    this.enabled = CONFIG.autoCaptureEnabled && 
+                   !!CONFIG.memoryModel && 
+                   !!CONFIG.memoryApiUrl && 
+                   !!CONFIG.memoryApiKey;
+    
+    if (CONFIG.autoCaptureEnabled && !this.enabled) {
+      log("Auto-capture disabled: external API not configured (memoryModel, memoryApiUrl, memoryApiKey required)");
+    }
+    
+    if (this.enabled && CONFIG.memoryApiUrl?.includes('ollama')) {
+      log("Warning: Ollama may not support tool calling. Auto-capture might fail.");
+    }
   }
 
   isEnabled(): boolean {
     return this.enabled;
+  }
+  
+  getDisabledReason(): string | null {
+    if (!CONFIG.autoCaptureEnabled) return "Auto-capture disabled in config";
+    if (!CONFIG.memoryModel) return "memoryModel not configured";
+    if (!CONFIG.memoryApiUrl) return "memoryApiUrl not configured";
+    if (!CONFIG.memoryApiKey) return "memoryApiKey not configured";
+    return null;
   }
 
   toggle(): boolean {
@@ -66,28 +101,32 @@ export class AutoCaptureService {
     if (!this.buffers.has(sessionID)) {
       this.buffers.set(sessionID, {
         sessionID,
-        iterationCount: 0,
+        lastCaptureTokens: 0,
         messages: [],
         tools: [],
         lastCaptureTime: Date.now(),
-  fileEdits: 0,
+        fileEdits: 0,
       });
     }
     return this.buffers.get(sessionID)!;
   }
 
-  onSessionIdle(sessionID: string): boolean {
+  checkTokenThreshold(sessionID: string, totalTokens: number): boolean {
     if (!this.enabled) return false;
     if (this.capturing.has(sessionID)) return false;
 
     const buffer = this.getOrCreateBuffer(sessionID);
-    buffer.iterationCount++;
 
-    const timeSinceCapture = Date.now() - buffer.lastCaptureTime;
-    const iterationMet = buffer.iterationCount >= this.threshold;
-    const timeMet = this.timeThreshold > 0 && timeSinceCapture >= this.timeThreshold;
+    if (totalTokens < this.minTokens) return false;
 
-    return iterationMet || timeMet;
+    const tokensSinceCapture = totalTokens - buffer.lastCaptureTokens;
+
+    if (tokensSinceCapture >= this.tokenThreshold) {
+      buffer.lastCaptureTokens = totalTokens;
+      return true;
+    }
+
+    return false;
   }
 
   addMessage(sessionID: string, role: "user" | "assistant", content: string) {
@@ -120,45 +159,29 @@ export class AutoCaptureService {
       ? `\n\nTools executed:\n${buffer.tools.map((t) => `- ${t.name}`).join("\n")}`
       : "";
 
-    return `Analyze the last ${buffer.iterationCount} iterations of conversation.
+    const summaryGuidance = CONFIG.autoCaptureSummaryMaxLength > 0
+      ? `Keep summaries under ${CONFIG.autoCaptureSummaryMaxLength} characters.`
+      : "Extract key details and important information. Be concise but complete.";
 
-Extract distinct, actionable memories and categorize each by scope:
+    return `Analyze the recent conversation and extract distinct, actionable memories.
 
-**Scope definitions:**
-- "user": Cross-project user behaviors, preferences, patterns
-  Examples: "prefers TypeScript", "likes concise responses", "uses vim keybindings"
-  
-- "project": Project-specific knowledge, decisions, archit Examples: "uses Bun runtime", "API at /api/v1", "database is PostgreSQL"
+Categorize each memory by scope:
+- "user": Cross-project user behaviors, preferences, patterns (e.g., "prefers TypeScript", "likes concise responses")
+- "project": Project-specific knowledge, decisions, architecture (e.g., "uses Bun runtime", "API at /api/v1")
 
-**Memory types:**
-- preference: User preferences
-- learned-pattern: User behavior patterns
-- project-config: Project configuration/setup
-- architecture: Project architecture decisions
-- error-solution: Solutions to specific errors
-- conversation: General conversation summary
+Memory categorization:
+- Choose appropriate category/type for each memory (e.g., preference, architecture, workflow, bug-fix, configuration, pattern, etc)
+- Be specific and descriptive with categories
 
-Return JSON array (can be empty if nothing worth remembering):
-{
-  "memories": [
-    {
-      "summary": "Clear, concise summary (max 200 chars)",
-      "scope": "user" | "project",
-      "type": "preference" | "learned-pattern" | "project-config" | "architecture" | "error-solution" | "conversation",
-      "reasoning": "Why this is worth remembering"
-    }
-  ]
-}
-
-Conversation:
-${conversationText}${toolsText}
-
-IMPORTANT: 
+Summary guidelines:
+- ${summaryGuidance}
 - Only extract memories worth long-term retention
 - Be selective: quality over quantity
 - Each memory should be atomic and independent
-- Return empty array if nothing significant to remember
-- Maximum ${this.maxMemories} memories per capture`;
+- Maximum ${this.maxMemories} memories per capture
+
+Conversation:
+${conversationText}${toolsText}`;
   }
 
   markCapturing(sessionID: string) {
@@ -170,7 +193,7 @@ IMPORTANT:
     if (buffer) {
       this.buffers.set(sessionID, {
         sessionID,
-        iterationCount: 0,
+        lastCaptureTokens: buffer.lastCaptureTokens,
         messages: [],
         tools: [],
         lastCaptureTime: Date.now(),
@@ -185,7 +208,7 @@ IMPORTANT:
     if (!buffer) return null;
 
     return {
-      iterations: buffer.iterationCount,
+      lastCaptureTokens: buffer.lastCaptureTokens,
       messages: buffer.messages.length,
       tools: buffer.tools.length,
       fileEdits: buffer.fileEdits,
@@ -224,33 +247,17 @@ export async function performAutoCapture(
       return;
     }
 
-    const response = await summarizeWithAI(ctx, sessionID, prompt);
-    if (!response) {
-      throw new Error("Failed to generate summary");
-    }
-
-    let parsed: CaptureResponse;
-    try {
-      parsed = JSON.parse(response);
-      if (!parsed.memories || !Array.isArray(parsed.memories)) {
-        throw new Error("Invalid response format");
-      }
-    } catch (error) {
-      log("Auto-capture: JSON parse failed, using fallback", { error: String(error) });
-      parsed = {
-        memories: [{
-          summary: response.substring(0, 500),
-          scope: "project",
-          type: "conversation",
-          reasoning: "Fallback capture due to parse error"
-        }]
-      };
+    const captureResponse = await summarizeWithAI(ctx, sessionID, prompt);
+    if (!captureResponse || !captureResponse.memories || captureResponse.memories.length === 0) {
+      log("Auto-capture: no memories extracted", { sessionID });
+      service.clearBuffer(sessionID);
+      return;
     }
 
     const tags = getTags(directory);
     const results: Array<{ scope: string; id: string }> = [];
 
-    for (const memory of parsed.memories.slice(0, CONFIG.autoCaptureMaxMemories)) {
+    for (const memory of captureResponse.memories.slice(0, CONFIG.autoCaptureMaxMemories)) {
       if (!memory.summary || !memory.scope || !memory.type) {
         log("Auto-capture: invalid memory entry", { memory });
         continue;
@@ -326,25 +333,72 @@ async function summarizeWithAI(
   ctx: PluginInput,
   sessionID: string,
   prompt: string
-): Promise<string> {
+): Promise<CaptureResponse> {
   if (!ctx.client) {
     throw new Error("Client not available");
   }
 
-  const useExternalAPI = CONFIG.memoryModel && CONFIG.memoryApiUrl && CONFIG.memoryApiKey;
-
-  if (useExternalAPI) {
-    return await callExternalAPI(prompt);
-  } else {
-    return await callSessionModel(ctx, sessionID, prompt);
+  if (!CONFIG.memoryModel || !CONFIG.memoryApiUrl || !CONFIG.memoryApiKey) {
+    throw new Error("External API not configured. Auto-capture requires memoryModel, memoryApiUrl, and memoryApiKey.");
   }
+
+  return await callExternalAPIWithToolCalling(prompt);
 }
 
-async function callExternalAPI(prompt: string): Promise<string> {
+function createToolCallSchema() {
+  const summaryDescription = CONFIG.autoCaptureSummaryMaxLength > 0
+    ? `Memory summary (maximum ${CONFIG.autoCaptureSummaryMaxLength} characters). Focus on most critical information.`
+    : "Memory summary with key details and important information. Be concise but complete.";
+
+  return {
+    type: "function" as const,
+    function: {
+      name: "save_memories",
+      description: "Save extracted memories from conversation analysis",
+      parameters: {
+        type: "object",
+        properties: {
+          memories: {
+            type: "array",
+            description: "Array of memories extracted from the conversation",
+            items: {
+              type: "object",
+              properties: {
+                summary: {
+                  type: "string",
+                  description: summaryDescription
+                },
+                scope: {
+                  type: "string",
+                  enum: ["user", "project"],
+                  description: "user: cross-project user preferences/behaviors. project: project-specific knowledge/decisions."
+                },
+                type: {
+                  type: "string",
+                  description: "Category of this memory (e.g., preference, architecture, workflow, bug-fix, configuration, pattern, etc). Choose the most appropriate category."
+                },
+                reasoning: {
+                  type: "string",
+                  description: "Why this memory is important and worth retaining"
+                }
+              },
+              required: ["summary", "scope", "type"]
+            }
+          }
+        },
+        required: ["memories"]
+      }
+    }
+  };
+}
+
+async function callExternalAPIWithToolCalling(prompt: string): Promise<CaptureResponse> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
 
   try {
+    const tools = [createToolCallSchema()];
+    
     const response = await fetch(`${CONFIG.memoryApiUrl}/chat/completions`, {
       method: "POST",
       headers: {
@@ -353,53 +407,71 @@ async function callExternalAPI(prompt: string): Promise<string> {
       },
       body: JSON.stringify({
         model: CONFIG.memoryModel,
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
+        messages: [{ role: "user", content: prompt }],
+        tools: tools,
+        tool_choice: { type: "function", function: { name: "save_memories" } },
         temperature: 0.3,
       }),
       signal: controller.signal,
     });
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status} ${response.statusText}`);
+      const errorText = await response.text().catch(() => response.statusText);
+      throw new Error(`API error: ${response.status} - ${errorText}`);
     }
 
-    const data: any = await response.json();
-    return data.choices[0].message.content.trim();
+    const data = await response.json() as ToolCallResponse;
+    
+    if (!data.choices || !data.choices[0]) {
+      throw new Error("Invalid API response format");
+    }
+
+    const choice = data.choices[0];
+    
+    if (!choice.message.tool_calls || choice.message.tool_calls.length === 0) {
+      throw new Error("Tool calling not supported or not used by provider");
+    }
+    
+    const toolCall = choice.message.tool_calls[0];
+    if (!toolCall || toolCall.function.name !== "save_memories") {
+      throw new Error("Invalid tool call response");
+    }
+    
+    const parsed = JSON.parse(toolCall.function.arguments);
+    return validateCaptureResponse(parsed);
+    
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("API request timeout (30s)");
+    }
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function callSessionModel(
-  ctx: PluginInput,
-  sessionID: string,
-  prompt: string
-): Promise<string> {
-  if (!ctx.client) {
-    throw new Error("Client not available");
+function validateCaptureResponse(data: any): CaptureResponse {
+  if (!data || typeof data !== 'object') {
+    throw new Error("Response is not an object");
   }
-
-  const response = await ctx.client.session.prompt({
-    path: { id: sessionID },
-    body: {
-      noReply: false,
-      parts: [{ type: "text", text: prompt }],
-    },
+  
+  if (!Array.isArray(data.memories)) {
+    throw new Error("memories field is not an array");
+  }
+  
+  const validMemories = data.memories.filter((m: any) => {
+    return m && 
+           typeof m === 'object' && 
+           typeof m.summary === 'string' && 
+           m.summary.trim().length > 0 &&
+           (m.scope === 'user' || m.scope === 'project') &&
+           typeof m.type === 'string' &&
+           m.type.trim().length > 0;
   });
-
-  if (!response.data) {
-    throw new Error("No response from AI");
+  
+  if (validMemories.length === 0) {
+    throw new Error("No valid memories in response");
   }
-
-  const textParts = response.data.parts.filter(
-    (p: any) => p.type === "text"
-  );
-
-  return textParts.map((p: any) => p.text).join("").trim();
+  
+  return { memories: validMemories };
 }
-

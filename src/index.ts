@@ -134,12 +134,16 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
               });
 
               if (ctx.client?.tui) {
+                const autoCaptureStatus = autoCaptureService.isEnabled() 
+                  ? "Auto-capture: enabled" 
+                  : autoCaptureService.getDisabledReason() || "Auto-capture: disabled";
+                
                 await ctx.client.tui.showToast({
                   body: {
-                    title: "Memory System",
-                    message: "Ready!",
-                    variant: "success",
-                    duration: 2000,
+                    title: "Memory System Ready!",
+                    message: autoCaptureStatus,
+                    variant: autoCaptureService.isEnabled() ? "success" : "warning",
+                    duration: 3000,
                   },
                 }).catch(() => {});
               }
@@ -548,12 +552,13 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                 return JSON.stringify({
                   success: true,
                   stats: {
-                    iterations: stats.iterations,
+                    lastCaptureTokens: stats.lastCaptureTokens,
                     messages: stats.messages,
                     tools: stats.tools,
                     fileEdits: stats.fileEdits,
                     minutesSinceCapture: Math.floor(stats.timeSinceCapture / 60000),
-                    threshold: CONFIG.autoCaptureThreshold,
+                    tokenThreshold: CONFIG.autoCaptureTokenThreshold,
+                    minTokens: CONFIG.autoCaptureMinTokens,
                     enabled: autoCaptureService.isEnabled(),
                   },
                 });
@@ -583,25 +588,35 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       if (!autoCaptureService.isEnabled()) return;
 
       const event = input.event;
+      const props = event.properties as Record<string, unknown> | undefined;
 
-      if (event.type === "session.idle" && event.properties?.sessionID) {
-        const sessionID = event.properties.sessionID;
-        const shouldCapture = autoCaptureService.onSessionIdle(sessionID);
-        
+      if (event.type === "message.updated") {
+        const info = props?.info as any;
+        if (!info) return;
+
+        const sessionID = info.sessionID;
+        if (!sessionID) return;
+
+        if (info.role !== "assistant" || !info.finish) return;
+
+        const tokens = info.tokens;
+        if (!tokens) return;
+
+        const totalUsed = tokens.input + tokens.cache.read + tokens.output;
+
+        const shouldCapture = autoCaptureService.checkTokenThreshold(sessionID, totalUsed);
+
         if (shouldCapture) {
           const lastCompaction = compactionHook?.compactionTracker?.get(sessionID) || 0;
           const timeSinceCompaction = Date.now() - lastCompaction;
           const skipThreshold = CONFIG.autoCaptureSkipAfterCompaction * 60 * 1000;
-          
+
           if (timeSinceCompaction < skipThreshold) {
-            log("Auto-capture: skipped (recent compaction)", {
-              sessionID,
-              minutesSince: Math.floor(timeSinceCompaction / 60000),
-            });
+            log("Auto-capture: skipped (recent compaction)", { sessionID });
             autoCaptureService.clearBuffer(sessionID);
             return;
           }
-          
+
           performAutoCapture(ctx, autoCaptureService, sessionID, directory).catch(
             (err) => log("Auto-capture failed", { error: String(err) })
           );
