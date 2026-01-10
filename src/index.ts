@@ -7,6 +7,7 @@ import { formatContextForPrompt } from "./services/context.js";
 import { getTags } from "./services/tags.js";
 import { stripPrivateContent, isFullyPrivate } from "./services/privacy.js";
 import { createCompactionHook, type CompactionContext } from "./services/compaction.js";
+import { AutoCaptureService, performAutoCapture } from "./services/auto-capture.js";
 
 import { isConfigured, CONFIG } from "./config.js";
 import { log } from "./services/logger.js";
@@ -40,7 +41,14 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   const { directory } = ctx;
   const tags = getTags(directory);
   const injectedSessions = new Set<string>();
-  log("Plugin loaded", { directory, tags, configured: isConfigured() });
+  const autoCaptureService = new AutoCaptureService();
+  
+  log("Plugin loaded", { 
+    directory, 
+    tags, 
+    configured: isConfigured(),
+    autoCaptureEnabled: autoCaptureService.isEnabled()
+  });
 
   if (!isConfigured()) {
     log("Plugin disabled - memory system not configured");
@@ -223,7 +231,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           "Manage and query the local persistent memory system. Use 'search' to find relevant memories, 'add' to store new knowledge, 'profile' to view user profile, 'list' to see recent memories, 'forget' to remove a memory.",
         args: {
           mode: tool.schema
-            .enum(["add", "search", "profile", "list", "forget", "help"])
+            .enum(["add", "search", "profile", "list", "forget", "help", "capture-now", "auto-capture-toggle", "auto-capture-stats"])
             .optional(),
           content: tool.schema.string().optional(),
           query: tool.schema.string().optional(),
@@ -249,7 +257,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           scope?: MemoryScope;
           memoryId?: string;
           limit?: number;
-        }) {
+        }, toolCtx: { sessionID: string }) {
           if (!isConfigured()) {
             return JSON.stringify({
               success: false,
@@ -512,6 +520,45 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                 });
               }
 
+              case "capture-now": {
+                await performAutoCapture(ctx, autoCaptureService, toolCtx.sessionID, directory);
+                return JSON.stringify({
+                  success: true,
+                  message: "Manual capture triggered",
+                });
+              }
+
+              case "auto-capture-toggle": {
+                const enabled = autoCaptureService.toggle();
+                return JSON.stringify({
+                  success: true,
+                  message: `Auto-capture ${enabled ? "enabled" : "disabled"}`,
+                  enabled,
+                });
+              }
+
+              case "auto-capture-stats": {
+                const stats = autoCaptureService.getStats(toolCtx.sessionID);
+                if (!stats) {
+                  return JSON.stringify({
+                    success: true,
+                    message: "No capture data for this session",
+                  });
+                }
+                return JSON.stringify({
+                  success: true,
+                  stats: {
+                    iterations: stats.iterations,
+                    messages: stats.messages,
+                    tools: stats.tools,
+                    fileEdits: stats.fileEdits,
+                    minutesSinceCapture: Math.floor(stats.timeSinceCapture / 60000),
+                    threshold: CONFIG.autoCaptureThreshold,
+                    enabled: autoCaptureService.isEnabled(),
+                  },
+                });
+              }
+
               default:
                 return JSON.stringify({
                   success: false,
@@ -528,9 +575,50 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       }),
     },
 
-    event: async (input: { event: { type: string; properties?: unknown } }) => {
+    event: async (input: { event: { type: string; properties?: any } }) => {
       if (compactionHook) {
         await compactionHook.event(input);
+      }
+
+      if (!autoCaptureService.isEnabled()) return;
+
+      const event = input.event;
+
+      if (event.type === "session.idle" && event.properties?.sessionID) {
+        const shouldCapture = autoCaptureService.onSessionIdle(event.properties.sessionID);
+        if (shouldCapture) {
+          performAutoCapture(ctx, autoCaptureService, event.properties.sessionID, directory).catch(
+            (err) => log("Auto-capture failed", { error: String(err) })
+          );
+        }
+      }
+
+      if (event.type === "message.part.updated" && event.properties?.part) {
+        const part = event.properties.part;
+        if (part.type === "text" && part.text && event.properties.sessionID) {
+          const role = part.role || "assistant";
+          autoCaptureService.addMessage(event.properties.sessionID, role, part.text);
+        }
+      }
+
+      if (event.type === "tool.execute" && event.properties?.name) {
+        const sessionID = event.properties.sessionID;
+        if (sessionID) {
+          autoCaptureService.addTool(
+            sessionID,
+            event.properties.name,
+            event.properties.input,
+            String(event.properties.output || "")
+          );
+        }
+      }
+
+      if (event.type === "file.edited" && event.properties?.sessionID) {
+        autoCaptureService.onFileEdit(event.properties.sessionID);
+      }
+
+      if (event.type === "session.deleted" && event.properties?.sessionID) {
+        autoCaptureService.cleanup(event.properties.sessionID);
       }
     },
   };

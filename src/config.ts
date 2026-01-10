@@ -31,6 +31,14 @@ interface OpenCodeMemConfig {
   containerTagPrefix?: string;
   filterPrompt?: string;
   keywordPatterns?: string[];
+  autoCaptureEnabled?: boolean;
+  autoCaptureThreshold?: number;
+  autoCaptureTimeThreshold?: number;
+  autoCaptureScope?: "user" | "project";
+  autoCaptureModel?: {
+    providerID?: string;
+    modelID?: string;
+  };
 }
 
 const DEFAULT_KEYWORD_PATTERNS = [
@@ -52,7 +60,7 @@ const DEFAULT_KEYWORD_PATTERNS = [
   "always\\s+remember",
 ];
 
-const DEFAULTS: Required<Omit<OpenCodeMemConfig, "embeddingApiUrl" | "embeddingApiKey">> & { embeddingApiUrl?: string; embeddingApiKey?: string } = {
+const DEFAULTS: Required<Omit<OpenCodeMemConfig, "embeddingApiUrl" | "embeddingApiKey" | "autoCaptureModel">> & { embeddingApiUrl?: string; embeddingApiKey?: string; autoCaptureModel?: { providerID?: string; modelID?: string } } = {
   storagePath: join(DATA_DIR, "data"),
   embeddingModel: "Xenova/all-MiniLM-L6-v2",
   similarityThreshold: 0.6,
@@ -63,6 +71,10 @@ const DEFAULTS: Required<Omit<OpenCodeMemConfig, "embeddingApiUrl" | "embeddingA
   containerTagPrefix: "opencode",
   filterPrompt: "You are a stateful coding agent. Remember all the information, including but not limited to user's coding preferences, tech stack, behaviours, workflows, and any other relevant details.",
   keywordPatterns: [],
+  autoCaptureEnabled: true,
+  autoCaptureThreshold: 15,
+  autoCaptureTimeThreshold: 0,
+  autoCaptureScope: "project",
 };
 
 function isValidRegex(pattern: string): boolean {
@@ -106,6 +118,11 @@ export const CONFIG = {
     ...DEFAULT_KEYWORD_PATTERNS,
     ...(fileConfig.keywordPatterns ?? []).filter(isValidRegex),
   ],
+  autoCaptureEnabled: fileConfig.autoCaptureEnabled ?? DEFAULTS.autoCaptureEnabled,
+  autoCaptureThreshold: fileConfig.autoCaptureThreshold ?? DEFAULTS.autoCaptureThreshold,
+  autoCaptureTimeThreshold: fileConfig.autoCaptureTimeThreshold ?? DEFAULTS.autoCaptureTimeThreshold,
+  autoCaptureScope: fileConfig.autoCaptureScope ?? DEFAULTS.autoCaptureScope,
+  autoCaptureModel: fileConfig.autoCaptureModel,
 };
 
 export function isConfigured(): boolean {
