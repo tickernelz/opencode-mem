@@ -1,4 +1,3 @@
-import type { ProfileResponse } from "supermemory/resources";
 import { CONFIG } from "../config.js";
 
 interface MemoryResultMinimal {
@@ -11,12 +10,19 @@ interface MemoriesResponseMinimal {
   results?: MemoryResultMinimal[];
 }
 
+interface ProfileResponse {
+  profile?: {
+    static: string[];
+    dynamic: string[];
+  };
+}
+
 export function formatContextForPrompt(
   profile: ProfileResponse | null,
   userMemories: MemoriesResponseMinimal,
   projectMemories: MemoriesResponseMinimal
 ): string {
-  const parts: string[] = ["[SUPERMEMORY]"];
+  const parts: string[] = ["[MEMORY]"];
 
   if (CONFIG.injectProfile && profile?.profile) {
     const { static: staticFacts, dynamic: dynamicFacts } = profile.profile;

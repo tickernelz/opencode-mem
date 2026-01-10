@@ -1,26 +1,20 @@
-# opencode-supermemory
+# opencode-mem
 
-OpenCode plugin for persistent memory using [Supermemory](https://supermemory.ai).
+OpenCode plugin for persistent memory using local vector database.
 
-Your agent remembers what you tell it - across sessions, across projects.
+Your agent remembers what you tell it - across sessions, across projects. No API keys required.
 
 ## Installation
 
 ### For Humans
 
 ```bash
-bunx opencode-supermemory@latest install
-```
-
-Then get your API key from [console.supermemory.ai](https://console.supermemory.ai) and set it:
-
-```bash
-export SUPERMEMORY_API_KEY="sm_..."
+bunx opencode-mem@latest install
 ```
 
 **Or let your agent do it** - paste this into OpenCode:
 ```
-Install opencode-supermemory by following https://raw.githubusercontent.com/supermemoryai/opencode-supermemory/main/README.md
+Install opencode-mem by following https://raw.githubusercontent.com/tickernelz/opencode-mem/main/README.md
 ```
 
 ### For LLM Agents
@@ -28,17 +22,17 @@ Install opencode-supermemory by following https://raw.githubusercontent.com/supe
 <details>
 <summary>Instructions for LLM Agents (click to expand)</summary>
 
-If you're an LLM agent helping set up opencode-supermemory, follow these steps:
+If you're an LLM agent helping set up opencode-mem, follow these steps:
 
 #### Step 1: Run the installer
 
 ```bash
-bunx opencode-supermemory@latest install --no-tui
+bunx opencode-mem@latest install --no-tui
 ```
 
 This will:
 - Register the plugin in `~/.config/opencode/opencode.jsonc`
-- Create the `/supermemory-init` command
+- Create the `/mem-init` command
 
 #### Step 2: Verify the config
 
@@ -49,7 +43,7 @@ cat ~/.config/opencode/opencode.jsonc
 Should contain:
 ```json
 {
-  "plugin": ["opencode-supermemory"]
+  "plugin": ["opencode-mem"]
 }
 ```
 
@@ -59,8 +53,7 @@ If not, add it manually:
 ```jsonc
 {
   "plugin": [
-    "opencode-supermemory"
-    // ... other plugins
+    "opencode-mem"
   ]
 }
 ```
@@ -68,29 +61,11 @@ If not, add it manually:
 **JSON:**
 ```json
 {
-  "plugin": ["opencode-supermemory"]
+  "plugin": ["opencode-mem"]
 }
 ```
 
-#### Step 3: Configure API key
-
-Ask the user to get their API key from [console.supermemory.ai](https://console.supermemory.ai).
-
-Then set it via environment variable:
-
-```bash
-export SUPERMEMORY_API_KEY="sm_..."
-```
-
-Or create `~/.config/opencode/supermemory.jsonc`:
-
-```jsonc
-{
-  "apiKey": "sm_..."
-}
-```
-
-#### Step 4: Verify setup
+#### Step 3: Verify setup
 
 Tell the user to restart OpenCode and run:
 
@@ -98,14 +73,11 @@ Tell the user to restart OpenCode and run:
 opencode -c
 ```
 
-They should see `supermemory` in the tools list. If not, check:
-1. Is `SUPERMEMORY_API_KEY` set?
-2. Is the plugin in `opencode.jsonc`?
-3. Check logs: `tail ~/.opencode-supermemory.log`
+They should see `memory` in the tools list. If not, check logs: `tail ~/.opencode-mem.log`
 
-#### Step 5: Initialize codebase memory (optional)
+#### Step 4: Initialize codebase memory (optional)
 
-Run `/supermemory-init` to have the agent explore and memorize the codebase.
+Run `/mem-init` to have the agent explore and memorize the codebase.
 
 </details>
 
@@ -120,7 +92,7 @@ On first message, the agent receives (invisible to user):
 
 Example of what the agent sees:
 ```
-[SUPERMEMORY]
+[MEMORY]
 
 User Profile:
 - Prefers concise responses
@@ -149,11 +121,11 @@ Add custom triggers via `keywordPatterns` config.
 
 ### Codebase Indexing
 
-Run `/supermemory-init` to explore and memorize your codebase structure, patterns, and conventions.
+Run `/mem-init` to explore and memorize your codebase structure, patterns, and conventions.
 
 ### Preemptive Compaction
 
-When context hits 80% capacity:
+When context hits 80% capa:
 1. Triggers OpenCode's summarization
 2. Injects project memories into summary context
 3. Saves session summary as a memory
@@ -170,7 +142,7 @@ Content in `<private>` tags is never stored.
 
 ## Tool Usage
 
-The `supermemory` tool is available to the agent:
+The `memory` tool is available to the agent:
 
 | Mode | Args | Description |
 |------|------|-------------|
@@ -193,41 +165,54 @@ The `supermemory` tool is available to the agent:
 
 ## Configuration
 
-Create `~/.config/opencode/supermemory.jsonc`:
+Create `~/.config/opencode/opencode-mem.jsonc`:
 
 ```jsonc
 {
-  // API key (can also use SUPERMEMORY_API_KEY env var)
-  "apiKey": "sm_...",
+  "storagePath": "~/.opencode-mem/data",
   
-  // Min similarity for memory retrieval (0-1)
+  "embeddingModel": "Xenova/all-MiniLM-L6-v2",
+  
+  "embeddingApiUrl": "https://api.openai.com/v1",
+  "embeddingApiKey": "sk-...",
+  
   "similarityThreshold": 0.6,
   
-  // Max memories injected per request
   "maxMemories": 5,
   
-  // Max project memories listed
   "maxProjectMemories": 10,
   
-  // Max profile facts injected
   "maxProfileItems": 5,
   
-  // Include user profile in context
   "injectProfile": true,
   
-  // Prefix for container tags
   "containerTagPrefix": "opencode",
   
-  // Extra keyword patterns for memory detection (regex)
   "keywordPatterns": ["log\\s+this", "write\\s+down"]
 }
 ```
 
-All fields optional. Env var `SUPERMEMORY_API_KEY` takes precedence over config file.
+All fields optional.
+
+### Embedding Options
+
+**Local (default):**
+- Model: `Xenova/all-MiniLM-L6-v2` (~23MB)
+- No API key required
+- Runs on first use
+
+**OpenAI-compatible API:**
+- Set `embeddingApiUrl` and `embeddingApiKey`
+- Supports OpenAI, Azure OpenAI, or any compatible endpoint
+- Model name in `embeddingModel`
+
+**Alternative local models:**
+- `Xenova/all-mpnet-base-v2` (better quality, ~420MB)
+- `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (multilingual)
 
 ## Usage with Oh My OpenCode
 
-If you're using [Oh My OpenCode](https://github.com/code-yeongyu/oh-my-opencode), disable its built-in auto-compact hook to let supermemory handle context compaction:
+If you're using [Oh My OpenCode](https://github.com/code-yeongyu/oh-my-opencode), disable its built-in auto-compact hook to let opencode-mem handle context compaction:
 
 Add to `~/.config/opencode/oh-my-opencode.json`:
 
@@ -237,7 +222,7 @@ Add to `~/.config/opencode/oh-my-opencode.json`:
 }
 ```
 
-## Development
+## Develt
 
 ```bash
 bun install
@@ -249,15 +234,22 @@ Local install:
 
 ```jsonc
 {
-  "plugin": ["file:///path/to/opencode-supermemory"]
+  "plugin": ["file:///path/to/opencode-mem"]
 }
 ```
 
 ## Logs
 
 ```bash
-tail -f ~/.opencode-supermemory.log
+tail -f ~/.opencode-mem.log
 ```
+
+## Architecture
+
+- **Storage**: LanceDB (embedded vector database)
+- **Embeddings**: Local transformers or OpenAI-compatible API
+- **Data**: `~/.opencode-mem/data/`
+- **No external dependencies**: Fully standalone
 
 ## License
 

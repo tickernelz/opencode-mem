@@ -1,15 +1,37 @@
-import Supermemory from "supermemory";
-import { CONFIG, SUPERMEMORY_API_KEY, isConfigured } from "../config.js";
+import { connect } from "@lancedb/lancedb";
+import { pipeline, env } from "@xenova/transformers";
+import { existsSync, mkdirSync } from "node:fs";
+import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
-import type {
-  MemoryType,
-  ConversationMessage,
-  ConversationIngestResponse,
-} from "../types/index.js";
+import type { MemoryType } from "../types/index.js";
 
-const SUPERMEMORY_API_URL = "https://api.supermemory.ai";
+env.allowLocalModels = true;
+env.allowRemoteModels = true;
 
 const TIMEOUT_MS = 30000;
+
+interface MemoryRecord {
+  id: string;
+  content: string;
+  vector: number[];
+  containerTag: string;
+  type?: string;
+  createdAt: number;
+  updatedAt: number;
+  metadata?: string;
+}
+
+interface SearchResult {
+  id: string;
+  memory: string;
+  similarity: number;
+  metadata?: Record<string, unknown>;
+}
+
+interface ProfileData {
+  static: string[];
+  dynamic: string[];
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -20,38 +42,135 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
-export class SupermemoryClient {
-  private client: Supermemory | null = null;
+class EmbeddingService {
+  private pipe: any = null;
+  private initPromise: Promise<void> | null = null;
 
-  private getClient(): Supermemory {
-    if (!this.client) {
-      if (!isConfigured()) {
-        throw new Error("SUPERMEMORY_API_KEY not set");
+  async initialize(): Promise<void> {
+    if (this.pipe) return;
+    if (this.initPromise) return this.initPromise;
+
+    this.initPromise = (async () => {
+      try {
+        if (CONFIG.embeddingApiUrl && CONFIG.embeddingApiKey) {
+          log("Using OpenAI-compatible API for embeddings");
+          return;
+        }
+        log("Initializing local embedding model", { model: CONFIG.embeddingModel });
+        this.pipe = await pipeline("feature-extraction", CONFIG.embeddingModel);
+        log("Embedding model initialized");
+      } catch (error) {
+        log("Failed to initialize embedding model", { error: String(error) });
+        throw error;
       }
-      this.client = new Supermemory({ apiKey: SUPERMEMORY_API_KEY });
-      this.client.settings.update({
-	     	shouldLLMFilter: true,
-	      filterPrompt: CONFIG.filterPrompt
-      })
+    })();
+
+    return this.initPromise;
+  }
+
+  async embed(text: string): Promise<number[]> {
+    await this.initialize();
+
+    if (CONFIG.embeddingApiUrl && CONFIG.embeddingApiKey) {
+      const response = await fetch(`${CONFIG.embeddingApiUrl}/embeddings`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${CONFIG.embeddingApiKey}`,
+        },
+        body: JSON.stringify({
+          input: text,
+          model: CONFIG.embeddingModel,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API embedding failed: ${response.statusText}`);
+      }
+
+      const data: any = await response.json();
+      return data.data[0].embedding;
     }
-    return this.client;
+
+    const output = await this.pipe(text, { pooling: "mean", normalize: true });
+    return Array.from(output.data);
+  }
+}
+
+export class LocalMemoryClient {
+  private db: any = null;
+  private table: any = null;
+  private embedder: EmbeddingService;
+  private initPromise: Promise<void> | null = null;
+
+  constructor() {
+    this.embedder = new EmbeddingService();
+  }
+
+  private async initialize(): Promise<void> {
+    if (this.db && this.table) return;
+    if (this.initPromise) return this.initPromise;
+
+    this.initPromise = (async () => {
+      try {
+        if (!existsSync(CONFIG.storagePath)) {
+          mkdirSync(CONFIG.storagePath, { recursive: true });
+        }
+
+        this.db = await connect(CONFIG.storagePath);
+        
+        const tableNames = await this.db.tableNames();
+        if (tableNames.includes("memories")) {
+          this.table = await this.db.openTable("memories");
+        } else {
+          const schema = [
+            { name: "id", type: "string" },
+            { name: "content", type: "string" },
+            { name: "vector", type: "float32[]" },
+            { name: "containerTag", type: "string" },
+            { name: "type", type: "string" },
+            { name: "createdAt", type: "int64" },
+            { name: "updatedAt", type: "int64" },
+            { name: "metadata", type: "string" },
+          ];
+          this.table = await this.db.createTable("memories", [], { schema });
+        }
+
+        log("LanceDB initialized", { path: CONFIG.storagePath });
+      } catch (error) {
+        log("Failed to initialize LanceDB", { error: String(error) });
+        throw error;
+      }
+    })();
+
+    return this.initPromise;
   }
 
   async searchMemories(query: string, containerTag: string) {
     log("searchMemories: start", { containerTag });
     try {
-      const result = await withTimeout(
-        this.getClient().search.memories({
-          q: query,
-          containerTag,
-          threshold: CONFIG.similarityThreshold,
-          limit: CONFIG.maxMemories,
-          searchMode: "hybrid"
-        }),
+      await this.initialize();
+      
+      const queryVector = await withTimeout(
+        this.embedder.embed(query),
         TIMEOUT_MS
       );
-      log("searchMemories: success", { count: result.results?.length || 0 });
-      return { success: true as const, ...result };
+
+      const results = await this.table!
+        .search(queryVector)
+        .where(`containerTag = '${containerTag}'`)
+        .limit(CONFIG.maxMemories)
+        .execute();
+
+      const mapped: SearchResult[] = results.map((r: any) => ({
+        id: r.id,
+        memory: r.content,
+        similarity: 1 - (r._distance || 0),
+        metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
+      })).filter((r: SearchResult) => r.similarity >= CONFIG.similarityThreshold);
+
+      log("searchMemories: success", { count: mapped.length });
+      return { success: true as const, results: mapped, total: mapped.length, timing: 0 };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log("searchMemories: error", { error: errorMessage });
@@ -62,15 +181,32 @@ export class SupermemoryClient {
   async getProfile(containerTag: string, query?: string) {
     log("getProfile: start", { containerTag });
     try {
-      const result = await withTimeout(
-        this.getClient().profile({
-          containerTag,
-          q: query,
-        }),
-        TIMEOUT_MS
-      );
-      log("getProfile: success", { hasProfile: !!result?.profile });
-      return { success: true as const, ...result };
+      await this.initialize();
+
+      const results = await this.table!
+        .filter(`containerTag = '${containerTag}'`)
+        .limit(CONFIG.maxProfileItems * 2)
+        .execute();
+
+      const staticFacts: string[] = [];
+      const dynamicFacts: string[] = [];
+
+      for (const r of results) {
+        const content = r.content;
+        if (r.type === "preference") {
+          staticFacts.push(content);
+        } else {
+          dynamicFacts.push(content);
+        }
+      }
+
+      const profile: ProfileData = {
+        static: staticFacts.slice(0, CONFIG.maxProfileItems),
+        dynamic: dynamicFacts.slice(0, CONFIG.maxProfileItems),
+      };
+
+      log("getProfile: success", { hasProfile: true });
+      return { success: true as const, profile };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log("getProfile: error", { error: errorMessage });
@@ -85,16 +221,31 @@ export class SupermemoryClient {
   ) {
     log("addMemory: start", { containerTag, contentLength: content.length });
     try {
-      const result = await withTimeout(
-        this.getClient().memories.add({
-          content,
-          containerTag,
-          metadata: metadata as Record<string, string | number | boolean | string[]>,
-        }),
+      await this.initialize();
+
+      const vector = await withTimeout(
+        this.embedder.embed(content),
         TIMEOUT_MS
       );
-      log("addMemory: success", { id: result.id });
-      return { success: true as const, ...result };
+
+      const id = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const now = Date.now();
+
+      const record: MemoryRecord = {
+        id,
+        content,
+        vector,
+        containerTag,
+        type: metadata?.type,
+        createdAt: now,
+        updatedAt: now,
+        metadata: metadata ? JSON.stringify(metadata) : undefined,
+      };
+
+      await this.table!.add([record]);
+
+      log("addMemory: success", { id });
+      return { success: true as const, id };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log("addMemory: error", { error: errorMessage });
@@ -105,10 +256,10 @@ export class SupermemoryClient {
   async deleteMemory(memoryId: string) {
     log("deleteMemory: start", { memoryId });
     try {
-      await withTimeout(
-        this.getClient().memories.delete(memoryId),
-        TIMEOUT_MS
-      );
+      await this.initialize();
+
+      await this.table!.delete(`id = '${memoryId}'`);
+
       log("deleteMemory: success", { memoryId });
       return { success: true };
     } catch (error) {
@@ -121,64 +272,37 @@ export class SupermemoryClient {
   async listMemories(containerTag: string, limit = 20) {
     log("listMemories: start", { containerTag, limit });
     try {
-      const result = await withTimeout(
-        this.getClient().memories.list({
-          containerTags: [containerTag],
-          limit,
-          order: "desc",
-          sort: "createdAt",
-        }),
-        TIMEOUT_MS
-      );
-      log("listMemories: success", { count: result.memories?.length || 0 });
-      return { success: true as const, ...result };
+      await this.initialize();
+
+      const results = await this.table!
+        .filter(`containerTag = '${containerTag}'`)
+        .limit(limit)
+        .execute();
+
+      const memories = results.map((r: any) => ({
+        id: r.id,
+        summary: r.content,
+        createdAt: new Date(r.createdAt).toISOString(),
+        metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
+      }));
+
+      log("listMemories: success", { count: memories.length });
+      return { 
+        success: true as const, 
+        memories, 
+        pagination: { currentPage: 1, totalItems: memories.length, totalPages: 1 } 
+      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log("listMemories: error", { error: errorMessage });
-      return { success: false as const, error: errorMessage, memories: [], pagination: { currentPage: 1, totalItems: 0, totalPages: 0 } };
-    }
-  }
-
-  async ingestConversation(
-    conversationId: string,
-    messages: ConversationMessage[],
-    containerTags: string[],
-    metadata?: Record<string, string | number | boolean>
-  ) {
-    log("ingestConversation: start", { conversationId, messageCount: messages.length });
-    try {
-      const response = await withTimeout(
-        fetch(`${SUPERMEMORY_API_URL}/conversations`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${SUPERMEMORY_API_KEY}`,
-          },
-          body: JSON.stringify({
-            conversationId,
-            messages,
-            containerTags,
-            metadata,
-          }),
-        }),
-        TIMEOUT_MS
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        log("ingestConversation: error response", { status: response.status, error: errorText });
-        return { success: false as const, error: `HTTP ${response.status}: ${errorText}` };
-      }
-
-      const result = await response.json() as ConversationIngestResponse;
-      log("ingestConversation: success", { conversationId, status: result.status });
-      return { success: true as const, ...result };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      log("ingestConversation: error", { error: errorMessage });
-      return { success: false as const, error: errorMessage };
+      return { 
+        success: false as const, 
+        error: errorMessage, 
+        memories: [], 
+        pagination: { currentPage: 1, totalItems: 0, totalPages: 0 } 
+      };
     }
   }
 }
 
-export const supermemoryClient = new SupermemoryClient();
+export const memoryClient = new LocalMemoryClient();

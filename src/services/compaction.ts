@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { supermemoryClient } from "./client.js";
+import { memoryClient } from "./client.js";
 import { log } from "./logger.js";
 import { CONFIG } from "../config.js";
 
@@ -59,7 +59,7 @@ export interface CompactionOptions {
 function createCompactionPrompt(projectMemories: string[]): string {
   const memoriesSection = projectMemories.length > 0 
     ? `
-## Project Knowledge (from Supermemory)
+## Project Knowledge (from Memory System)
 The following project-specific knowledge should be preserved and referenced in the summary:
 ${projectMemories.map(m => `- ${m}`).join('\n')}
 `
@@ -267,7 +267,7 @@ export function createCompactionHook(
 
   async function fetchProjectMemoriesForCompaction(): Promise<string[]> {
     try {
-      const result = await supermemoryClient.listMemories(tags.project, CONFIG.maxProjectMemories);
+      const result = await memoryClient.listMemories(tags.project, CONFIG.maxProjectMemories);
       const memories = result.memories || [];
       return memories.map((m: any) => m.summary || m.content || "").filter(Boolean);
     } catch (err) {
@@ -303,7 +303,7 @@ export function createCompactionHook(
     }
 
     try {
-      const result = await supermemoryClient.addMemory(
+      const result = await memoryClient.addMemory(
         `[Session Summary]\n${summaryContent}`,
         tags.project,
         { type: "conversation" }
@@ -375,14 +375,14 @@ export function createCompactionHook(
       return;
     }
 
-    await ctx.client.tui.showToast({
-      body: {
-        title: "Preemptive Compaction",
-        message: `Context at ${(usageRatio * 100).toFixed(0)}% - compacting with Supermemory context...`,
-        variant: "warning",
-        duration: 3000,
-      },
-    }).catch(() => {});
+      await ctx.client.tui.showToast({
+        body: {
+          title: "Preemptive Compaction",
+          message: `Context at ${(usageRatio * 100).toFixed(0)}% - compacting with memory context...`,
+          variant: "warning",
+          duration: 3000,
+        },
+      }).catch(() => {});
 
     log("[compaction] triggering compaction", { sessionID, usageRatio });
 
@@ -407,7 +407,7 @@ export function createCompactionHook(
       await ctx.client.tui.showToast({
         body: {
           title: "Compaction Complete",
-          message: "Session compacted with Supermemory context. Resuming...",
+          message: "Session compacted with memory context. Resuming...",
           variant: "success",
           duration: 2000,
         },

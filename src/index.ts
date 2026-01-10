@@ -2,7 +2,7 @@ import type { Plugin, PluginInput } from "@opencode-ai/plugin";
 import type { Part } from "@opencode-ai/sdk";
 import { tool } from "@opencode-ai/plugin";
 
-import { supermemoryClient } from "./services/client.js";
+import { memoryClient } from "./services/client.js";
 import { formatContextForPrompt } from "./services/context.js";
 import { getTags } from "./services/tags.js";
 import { stripPrivateContent, isFullyPrivate } from "./services/privacy.js";
@@ -18,7 +18,7 @@ const INLINE_CODE_PATTERN = /`[^`]+`/g;
 const MEMORY_KEYWORD_PATTERN = new RegExp(`\\b(${CONFIG.keywordPatterns.join("|")})\\b`, "i");
 
 const MEMORY_NUDGE_MESSAGE = `[MEMORY TRIGGER DETECTED]
-The user wants you to remember something. You MUST use the \`supermemory\` tool with \`mode: "add"\` to save this information.
+The user wants you to remember something. You MUST use the \`memory\` tool with \`mode: "add"\` to save this information.
 
 Extract the key information the user wants remembered and save it as a concise, searchable memory.
 - Use \`scope: "project"\` for project-specific preferences (e.g., "run lint with tests")
@@ -36,14 +36,14 @@ function detectMemoryKeyword(text: string): boolean {
   return MEMORY_KEYWORD_PATTERN.test(textWithoutCode);
 }
 
-export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
+export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   const { directory } = ctx;
   const tags = getTags(directory);
   const injectedSessions = new Set<string>();
   log("Plugin init", { directory, tags, configured: isConfigured() });
 
   if (!isConfigured()) {
-    log("Plugin disabled - SUPERMEMORY_API_KEY not set");
+    log("Plugin disabled - memory system not configured");
   }
 
   const compactionHook = isConfigured() && ctx.client
@@ -98,9 +98,9 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
           injectedSessions.add(input.sessionID);
 
           const [profileResult, userMemoriesResult, projectMemoriesListResult] = await Promise.all([
-            supermemoryClient.getProfile(tags.user, userMessage),
-            supermemoryClient.searchMemories(userMessage, tags.user),
-            supermemoryClient.listMemories(tags.project, CONFIG.maxProjectMemories),
+            memoryClient.getProfile(tags.user, userMessage),
+            memoryClient.searchMemories(userMessage, tags.user),
+            memoryClient.listMemories(tags.project, CONFIG.maxProjectMemories),
           ]);
 
           const profile = profileResult.success ? profileResult : null;
@@ -151,9 +151,9 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
     },
 
     tool: {
-      supermemory: tool({
+      memory: tool({
         description:
-          "Manage and query the Supermemory persistent memory system. Use 'search' to find relevant memories, 'add' to store new knowledge, 'profile' to view user profile, 'list' to see recent memories, 'forget' to remove a memory.",
+          "Manage and query the local persistent memory system. Use 'search' to find relevant memories, 'add' to store new knowledge, 'profile' to view user profile, 'list' to see recent memories, 'forget' to remove a memory.",
         args: {
           mode: tool.schema
             .enum(["add", "search", "profile", "list", "forget", "help"])
@@ -186,8 +186,7 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
           if (!isConfigured()) {
             return JSON.stringify({
               success: false,
-              error:
-                "SUPERMEMORY_API_KEY not set. Set it in your environment to use Supermemory.",
+              error: "Memory system not configured properly.",
             });
           }
 
@@ -198,7 +197,7 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
               case "help": {
                 return JSON.stringify({
                   success: true,
-                  message: "Supermemory Usage Guide",
+                  message: "Memory System Usage Guide",
                   commands: [
                     {
                       command: "add",
@@ -261,7 +260,7 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
                 const containerTag =
                   scope === "user" ? tags.user : tags.project;
 
-                const result = await supermemoryClient.addMemory(
+                const result = await memoryClient.addMemory(
                   sanitizedContent,
                   containerTag,
                   { type: args.type }
@@ -294,7 +293,7 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
                 const scope = args.scope;
 
                 if (scope === "user") {
-                  const result = await supermemoryClient.searchMemories(
+                  const result = await memoryClient.searchMemories(
                     args.query,
                     tags.user
                   );
@@ -308,7 +307,7 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
                 }
 
                 if (scope === "project") {
-                  const result = await supermemoryClient.searchMemories(
+                  const result = await memoryClient.searchMemories(
                     args.query,
                     tags.project
                   );
@@ -322,8 +321,8 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
                 }
 
                 const [userResult, projectResult] = await Promise.all([
-                  supermemoryClient.searchMemories(args.query, tags.user),
-                  supermemoryClient.searchMemories(args.query, tags.project),
+                  memoryClient.searchMemories(args.query, tags.user),
+                  memoryClient.searchMemories(args.query, tags.project),
                 ]);
 
                 if (!userResult.success || !projectResult.success) {
@@ -334,11 +333,11 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
                 }
 
                 const combined = [
-                  ...(userResult.results || []).map((r) => ({
+                  ...(userResult.results || []).map((r: any) => ({
                     ...r,
                     scope: "user" as const,
                   })),
-                  ...(projectResult.results || []).map((r) => ({
+                  ...(projectResult.results || []).map((r: any) => ({
                     ...r,
                     scope: "project" as const,
                   })),
@@ -358,7 +357,7 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
               }
 
               case "profile": {
-                const result = await supermemoryClient.getProfile(
+                const result = await memoryClient.getProfile(
                   tags.user,
                   args.query
                 );
@@ -385,7 +384,7 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
                 const containerTag =
                   scope === "user" ? tags.user : tags.project;
 
-                const result = await supermemoryClient.listMemories(
+                const result = await memoryClient.listMemories(
                   containerTag,
                   limit
                 );
@@ -402,7 +401,7 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
                   success: true,
                   scope,
                   count: memories.length,
-                  memories: memories.map((m) => ({
+                  memories: memories.map((m: any) => ({
                     id: m.id,
                     content: m.summary,
                     createdAt: m.createdAt,
@@ -421,7 +420,7 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
 
                 const scope = args.scope || "project";
 
-                const result = await supermemoryClient.deleteMemory(
+                const result = await memoryClient.deleteMemory(
                   args.memoryId
                 );
 

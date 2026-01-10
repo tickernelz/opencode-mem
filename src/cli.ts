@@ -8,13 +8,13 @@ import { stripJsoncComments } from "./services/jsonc.js";
 const OPENCODE_CONFIG_DIR = join(homedir(), ".config", "opencode");
 const OPENCODE_COMMAND_DIR = join(OPENCODE_CONFIG_DIR, "command");
 const OH_MY_OPENCODE_CONFIG = join(OPENCODE_CONFIG_DIR, "oh-my-opencode.json");
-const PLUGIN_NAME = "opencode-supermemory@latest";
+const PLUGIN_NAME = "opencode-mem@latest";
 
-const SUPERMEMORY_INIT_COMMAND = `---
-description: Initialize Supermemory with comprehensive codebase knowledge
+const MEM_INIT_COMMAND = `---
+description: Initialize memory system with comprehensive codebase knowledge
 ---
 
-# Initializing Supermemory
+# Initializing Memory System
 
 You are initializing persistent memory for this codebase. This is not just data collection - you're building context that will make you significantly more effective across all future sessions.
 
@@ -111,10 +111,10 @@ Good (thorough):
 
 ## Saving Memories
 
-Use the \`supermemory\` tool for each distinct insight:
+Use the \`memory\` tool for each distinct insight:
 
 \`\`\`
-supermemory(mode: "add", content: "...", type: "...", scope: "project")
+memory(mode: "add", content: "...", type: "...", scope: "project")
 \`\`\`
 
 **Types:**
@@ -155,7 +155,7 @@ Then ask: "I've initialized memory with X insights. Want me to continue refining
 ## Your Task
 
 1. Ask upfront questions (research depth, rules, preferences)
-2. Check existing memories: \`supermemory(mode: "list", scope: "project")\`
+2. Check existing memories: \`memory(mode: "list", scope: "project")\`
 3. Research based on chosen depth
 4. Save memories incrementally as you discover insights
 5. Reflect and verify completeness
@@ -196,7 +196,7 @@ function addPluginToConfig(configPath: string): boolean {
   try {
     const content = readFileSync(configPath, "utf-8");
     
-    if (content.includes("opencode-supermemory")) {
+    if (content.includes("opencode-mem")) {
       console.log("✓ Plugin already registered in config");
       return true;
     }
@@ -263,10 +263,10 @@ function createNewConfig(): boolean {
 
 function createCommand(): boolean {
   mkdirSync(OPENCODE_COMMAND_DIR, { recursive: true });
-  const commandPath = join(OPENCODE_COMMAND_DIR, "supermemory-init.md");
+  const commandPath = join(OPENCODE_COMMAND_DIR, "mem-init.md");
 
-  writeFileSync(commandPath, SUPERMEMORY_INIT_COMMAND);
-  console.log(`✓ Created /supermemory-init command`);
+  writeFileSync(commandPath, MEM_INIT_COMMAND);
+  console.log(`✓ Created /mem-init command`);
   return true;
 }
 
@@ -325,11 +325,10 @@ interface InstallOptions {
 }
 
 async function install(options: InstallOptions): Promise<number> {
-  console.log("\n🧠 opencode-supermemory installer\n");
+  console.log("\n🧠 opencode-mem installer\n");
 
   const rl = options.tui ? createReadline() : null;
 
-  // Step 1: Register plugin in config
   console.log("Step 1: Register plugin in OpenCode config");
   const configPath = findOpencodeConfig();
   
@@ -357,10 +356,9 @@ async function install(options: InstallOptions): Promise<number> {
     }
   }
 
-  // Step 2: Create /supermemory-init command
-  console.log("\nStep 2: Create /supermemory-init command");
+  console.log("\nStep 2: Create /mem-init command");
   if (options.tui) {
-    const shouldCreate = await confirm(rl!, "Add /supermemory-init command?");
+    const shouldCreate = await confirm(rl!, "Add /mem-init command?");
     if (!shouldCreate) {
       console.log("Skipped.");
     } else {
@@ -370,17 +368,16 @@ async function install(options: InstallOptions): Promise<number> {
     createCommand();
   }
 
-  // Step 3: Configure Oh My OpenCode (if installed)
   if (isOhMyOpencodeInstalled()) {
     console.log("\nStep 3: Configure Oh My OpenCode");
     console.log("Detected Oh My OpenCode plugin.");
-    console.log("Supermemory handles context compaction, so the built-in context-window-limit-recovery hook should be disabled.");
+    console.log("Memory system handles context compaction, so the built-in context-window-limit-recovery hook should be disabled.");
     
     if (isAutoCompactAlreadyDisabled()) {
       console.log("✓ anthropic-context-window-limit-recovery hook already disabled");
     } else {
       if (options.tui) {
-        const shouldDisable = await confirm(rl!, "Disable anthropic-context-window-limit-recovery hook to let Supermemory handle context?");
+        const shouldDisable = await confirm(rl!, "Disable anthropic-context-window-limit-recovery hook to let memory system handle context?");
         if (!shouldDisable) {
           console.log("Skipped.");
         } else {
@@ -394,16 +391,12 @@ async function install(options: InstallOptions): Promise<number> {
     }
   }
 
-  // Step 4: API key instructions
-  console.log("\n" + "─".repeat(50));
-  console.log("\n🔑 Final step: Set your API key\n");
-  console.log("Get your API key from: https://console.supermemory.ai");
-  console.log("\nThen add to your shell profile:\n");
-  console.log('  export SUPERMEMORY_API_KEY="sm_..."');
-  console.log("\nOr create ~/.config/opencode/supermemory.jsonc:\n");
-  console.log('  { "apiKey": "sm_..." }');
   console.log("\n" + "─".repeat(50));
   console.log("\n✓ Setup complete! Restart OpenCode to activate.\n");
+  console.log("The memory system runs locally with no API keys required.");
+  console.log("Data is stored in: ~/.opencode-mem/data\n");
+  console.log("Optional: Configure custom embedding model in ~/.config/opencode/opencode-mem.jsonc");
+  console.log("\n" + "─".repeat(50) + "\n");
 
   if (rl) rl.close();
   return 0;
@@ -411,7 +404,7 @@ async function install(options: InstallOptions): Promise<number> {
 
 function printHelp(): void {
   console.log(`
-opencode-supermemory - Persistent memory for OpenCode agents
+opencode-mem - Local persistent memory for OpenCode agents
 
 Commands:
   install                    Install and configure the plugin
@@ -419,9 +412,9 @@ Commands:
     --disable-context-recovery   Disable Oh My OpenCode's context-window-limit-recovery hook (use with --no-tui)
 
 Examples:
-  bunx opencode-supermemory@latest install
-  bunx opencode-supermemory@latest install --no-tui
-  bunx opencode-supermemory@latest install --no-tui --disable-context-recovery
+  bunx opencode-mem@latest install
+  bunx opencode-mem@latest install --no-tui
+  bunx opencode-mem@latest install --no-tui --disable-context-recovery
 `);
 }
 
@@ -437,7 +430,6 @@ if (args[0] === "install") {
   const disableAutoCompact = args.includes("--disable-context-recovery");
   install({ tui: !noTui, disableAutoCompact }).then((code) => process.exit(code));
 } else if (args[0] === "setup") {
-  // Backwards compatibility
   console.log("Note: 'setup' is deprecated. Use 'install' instead.\n");
   const noTui = args.includes("--no-tui");
   const disableAutoCompact = args.includes("--disable-context-recovery");

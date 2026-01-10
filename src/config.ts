@@ -4,13 +4,17 @@ import { homedir } from "node:os";
 import { stripJsoncComments } from "./services/jsonc.js";
 
 const CONFIG_DIR = join(homedir(), ".config", "opencode");
+const DATA_DIR = join(homedir(), ".opencode-mem");
 const CONFIG_FILES = [
-  join(CONFIG_DIR, "supermemory.jsonc"),
-  join(CONFIG_DIR, "supermemory.json"),
+  join(CONFIG_DIR, "opencode-mem.jsonc"),
+  join(CONFIG_DIR, "opencode-mem.json"),
 ];
 
-interface SupermemoryConfig {
-  apiKey?: string;
+interface OpenCodeMemConfig {
+  storagePath?: string;
+  embeddingModel?: string;
+  embeddingApiUrl?: string;
+  embeddingApiKey?: string;
   similarityThreshold?: number;
   maxMemories?: number;
   maxProjectMemories?: number;
@@ -40,7 +44,9 @@ const DEFAULT_KEYWORD_PATTERNS = [
   "always\\s+remember",
 ];
 
-const DEFAULTS: Required<Omit<SupermemoryConfig, "apiKey">> = {
+const DEFAULTS: Required<Omit<OpenCodeMemConfig, "embeddingApiUrl" | "embeddingApiKey">> & { embeddingApiUrl?: string; embeddingApiKey?: string } = {
+  storagePath: join(DATA_DIR, "data"),
+  embeddingModel: "Xenova/all-MiniLM-L6-v2",
   similarityThreshold: 0.6,
   maxMemories: 5,
   maxProjectMemories: 10,
@@ -60,15 +66,14 @@ function isValidRegex(pattern: string): boolean {
   }
 }
 
-function loadConfig(): SupermemoryConfig {
+function loadConfig(): OpenCodeMemConfig {
   for (const path of CONFIG_FILES) {
     if (existsSync(path)) {
       try {
         const content = readFileSync(path, "utf-8");
         const json = stripJsoncComments(content);
-        return JSON.parse(json) as SupermemoryConfig;
+        return JSON.parse(json) as OpenCodeMemConfig;
       } catch {
-        // Invalid config, use defaults
       }
     }
   }
@@ -77,9 +82,11 @@ function loadConfig(): SupermemoryConfig {
 
 const fileConfig = loadConfig();
 
-export const SUPERMEMORY_API_KEY = fileConfig.apiKey ?? process.env.SUPERMEMORY_API_KEY;
-
 export const CONFIG = {
+  storagePath: fileConfig.storagePath ?? DEFAULTS.storagePath,
+  embeddingModel: fileConfig.embeddingModel ?? DEFAULTS.embeddingModel,
+  embeddingApiUrl: fileConfig.embeddingApiUrl,
+  embeddingApiKey: fileConfig.embeddingApiKey ?? process.env.OPENAI_API_KEY,
   similarityThreshold: fileConfig.similarityThreshold ?? DEFAULTS.similarityThreshold,
   maxMemories: fileConfig.maxMemories ?? DEFAULTS.maxMemories,
   maxProjectMemories: fileConfig.maxProjectMemories ?? DEFAULTS.maxProjectMemories,
@@ -94,5 +101,5 @@ export const CONFIG = {
 };
 
 export function isConfigured(): boolean {
-  return !!SUPERMEMORY_API_KEY;
+  return true;
 }
