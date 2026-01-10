@@ -150,8 +150,8 @@ const CONFIG_TEMPLATE = `{
   //   "memoryApiKey": "gsk_..."
   
   // Token thresholds
-  "autoCaptureTokenThreshold": 10000,
-  "autoCaptureMinTokens": 5000,
+  "autoCaptureTokenThreshold": 15000,
+  "autoCaptureMinTokens": 20000,
   "autoCaptureMaxMemories": 10,
   "autoCaptureContextWindow": 3,
   
