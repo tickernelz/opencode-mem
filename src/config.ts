@@ -35,7 +35,6 @@ interface OpenCodeMemConfig {
   autoCaptureTokenThreshold?: number;
   autoCaptureMinTokens?: number;
   autoCaptureMaxMemories?: number;
-  autoCaptureSkipAfterCompaction?: number;
   autoCaptureSummaryMaxLength?: number;
   memoryModel?: string;
   memoryApiUrl?: string;
@@ -76,7 +75,6 @@ const DEFAULTS: Required<Omit<OpenCodeMemConfig, "embeddingApiUrl" | "embeddingA
   autoCaptureTokenThreshold: 10000,
   autoCaptureMinTokens: 5000,
   autoCaptureMaxMemories: 10,
-  autoCaptureSkipAfterCompaction: 5,
   autoCaptureSummaryMaxLength: 0,
 };
 
@@ -153,7 +151,6 @@ const CONFIG_TEMPLATE = `{
   "autoCaptureTokenThreshold": 10000,
   "autoCaptureMinTokens": 5000,
   "autoCaptureMaxMemories": 10,
-  "autoCaptureSkipAfterCompaction": 5,
   
   // Summary length: 0 = AI decides optimal length, >0 = character limit
   "autoCaptureSummaryMaxLength": 0,
@@ -210,7 +207,6 @@ export const CONFIG = {
   autoCaptureTokenThreshold: fileConfig.autoCaptureTokenThreshold ?? DEFAULTS.autoCaptureTokenThreshold,
   autoCaptureMinTokens: fileConfig.autoCaptureMinTokens ?? DEFAULTS.autoCaptureMinTokens,
   autoCaptureMaxMemories: fileConfig.autoCaptureMaxMemories ?? DEFAULTS.autoCaptureMaxMemories,
-  autoCaptureSkipAfterCompaction: fileConfig.autoCaptureSkipAfterCompaction ?? DEFAULTS.autoCaptureSkipAfterCompaction,
   autoCaptureSummaryMaxLength: fileConfig.autoCaptureSummaryMaxLength ?? DEFAULTS.autoCaptureSummaryMaxLength,
   memoryModel: fileConfig.memoryModel,
   memoryApiUrl: fileConfig.memoryApiUrl,

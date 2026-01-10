@@ -6,7 +6,6 @@ import { memoryClient } from "./services/client.js";
 import { formatContextForPrompt } from "./services/context.js";
 import { getTags } from "./services/tags.js";
 import { stripPrivateContent, isFullyPrivate } from "./services/privacy.js";
-import { createCompactionHook, type CompactionContext } from "./services/compaction.js";
 import { AutoCaptureService, performAutoCapture } from "./services/auto-capture.js";
 
 import { isConfigured, CONFIG } from "./config.js";
@@ -54,10 +53,6 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     log("Plugin disabled - memory system not configured");
   }
 
-  const compactionHook = isConfigured() && ctx.client
-    ? createCompactionHook(ctx as CompactionContext, tags)
-    : null;
-
   return {
     "chat.message": async (input, output) => {
       if (!isConfigured()) return;
@@ -69,26 +64,13 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           (p): p is Part & { type: "text"; text: string } => p.type === "text"
         );
 
-        if (textParts.length === 0) {
-          log("chat.message: no text parts found");
-          return;
-        }
+        if (textParts.length === 0) return;
 
         const userMessage = textParts.map((p) => p.text).join("\n");
 
-        if (!userMessage.trim()) {
-          log("chat.message: empty message, skipping");
-          return;
-        }
-
-        log("chat.message: processing", {
-          messagePreview: userMessage.slice(0, 100),
-          partsCount: output.parts.length,
-          textPartsCount: textParts.length,
-        });
+        if (!userMessage.trim()) return;
 
         if (detectMemoryKeyword(userMessage)) {
-          log("chat.message: memory keyword detected");
           const nudgePart: Part = {
             id: `memory-nudge-${Date.now()}`,
             sessionID: input.sessionID,
@@ -120,18 +102,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
             }
 
             try {
-              await memoryClient.warmup((progress) => {
-                if (progress?.status === 'progress') {
-                  log("Model download progress", {
-                    file: progress.file,
-                    loaded: progress.loaded,
-                    total: progress.total,
-                    progress: progress.progress
-                  });
-                } else if (progress?.status === 'done') {
-                  log("Model file downloaded", { file: progress.file });
-                }
-              });
+              await memoryClient.warmup();
 
               if (ctx.client?.tui) {
                 const autoCaptureStatus = autoCaptureService.isEnabled() 
@@ -204,12 +175,6 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
             };
 
             output.parts.unshift(contextPart);
-
-            const duration = Date.now() - start;
-            log("chat.message: context injected", {
-              duration,
-              contextLength: memoryContext.length,
-            });
           }
         }
 
@@ -581,10 +546,6 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     },
 
     event: async (input: { event: { type: string; properties?: any } }) => {
-      if (compactionHook) {
-        await compactionHook.event(input);
-      }
-
       if (!autoCaptureService.isEnabled()) return;
 
       const event = input.event;
@@ -607,48 +568,14 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
         const shouldCapture = autoCaptureService.checkTokenThreshold(sessionID, totalUsed);
 
         if (shouldCapture) {
-          const lastCompaction = compactionHook?.compactionTracker?.get(sessionID) || 0;
-          const timeSinceCompaction = Date.now() - lastCompaction;
-          const skipThreshold = CONFIG.autoCaptureSkipAfterCompaction * 60 * 1000;
-
-          if (timeSinceCompaction < skipThreshold) {
-            log("Auto-capture: skipped (recent compaction)", { sessionID });
-            autoCaptureService.clearBuffer(sessionID);
-            return;
-          }
-
           performAutoCapture(ctx, autoCaptureService, sessionID, directory).catch(
             (err) => log("Auto-capture failed", { error: String(err) })
           );
         }
       }
 
-      if (event.type === "message.part.updated" && event.properties?.part) {
-        const part = event.properties.part;
-        if (part.type === "text" && part.text && event.properties.sessionID) {
-          const role = part.role || "assistant";
-          autoCaptureService.addMessage(event.properties.sessionID, role, part.text);
-        }
-      }
-
-      if (event.type === "tool.execute" && event.properties?.name) {
-        const sessionID = event.properties.sessionID;
-        if (sessionID) {
-          autoCaptureService.addTool(
-            sessionID,
-            event.properties.name,
-            event.properties.input,
-            String(event.properties.output || "")
-          );
-        }
-      }
-
-      if (event.type === "file.edited" && event.properties?.sessionID) {
-        autoCaptureService.onFileEdit(event.properties.sessionID);
-      }
-
-      if (event.type === "session.deleted" && event.properties?.sessionID) {
-        autoCaptureService.cleanup(event.properties.sessionID);
+      if (event.type === "session.deleted" && props?.sessionID) {
+        autoCaptureService.cleanup(props.sessionID as string);
       }
     },
   };

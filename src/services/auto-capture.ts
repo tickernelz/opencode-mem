@@ -260,27 +260,19 @@ export async function performAutoCapture(
       throw new Error("Client not available");
     }
 
-    log("Auto-capture: Fetching messages from session", { sessionID });
-
     const response = await ctx.client.session.messages({ 
       path: { id: sessionID }
     });
 
     if (!response.data) {
-      log("Auto-capture: no data in response", { sessionID, error: response.error });
+      log("Auto-capture failed: no data in response", { sessionID });
       service.clearBuffer(sessionID);
       return;
     }
 
     const allMessages = response.data;
 
-    log("Auto-capture: Messages fetched", {
-      sessionID,
-      totalMessages: allMessages.length
-    });
-
     if (allMessages.length === 0) {
-      log("Auto-capture: no messages in session", { sessionID });
       service.clearBuffer(sessionID);
       return;
     }
@@ -289,11 +281,6 @@ export async function performAutoCapture(
     const assistantMessages = allMessages.filter((m: any) => m.info?.role === "assistant");
 
     if (userMessages.length === 0 || assistantMessages.length === 0) {
-      log("Auto-capture: missing user or assistant messages", {
-        sessionID,
-        userCount: userMessages.length,
-        assistantCount: assistantMessages.length
-      });
       service.clearBuffer(sessionID);
       return;
     }
@@ -309,11 +296,6 @@ export async function performAutoCapture(
     }
 
     if (!hasCompletePair) {
-      log("Auto-capture: no complete user-assistant pairs", {
-        sessionID,
-        userCount: userMessages.length,
-        assistantCount: assistantMessages.length
-      });
       service.clearBuffer(sessionID);
       return;
     }
@@ -343,7 +325,6 @@ export async function performAutoCapture(
     }
 
     if (conversationParts.length === 0) {
-      log("Auto-capture: no text content in messages", { sessionID });
       service.clearBuffer(sessionID);
       return;
     }
@@ -364,19 +345,11 @@ ${conversationBody}
 
 === END OF CONVERSATION ===`;
 
-    log("Auto-capture: Conversation text built", {
-      sessionID,
-      conversationLength: conversationText.length,
-      userMessages: userMessages.length,
-      assistantMessages: assistantMessages.length
-    });
-
     const systemPrompt = service.getSystemPrompt();
     
     const captureResponse = await summarizeWithAI(ctx, sessionID, systemPrompt, conversationText);
     
     if (!captureResponse || !captureResponse.memories || captureResponse.memories.length === 0) {
-      log("Auto-capture: no memories extracted", { sessionID });
       service.clearBuffer(sessionID);
       return;
     }
@@ -385,10 +358,7 @@ ${conversationBody}
     const results: Array<{ scope: string; id: string }> = [];
 
     for (const memory of captureResponse.memories.slice(0, CONFIG.autoCaptureMaxMemories)) {
-      if (!memory.summary || !memory.scope || !memory.type) {
-        log("Auto-capture: invalid memory entry", { memory });
-        continue;
-      }
+      if (!memory.summary || !memory.scope || !memory.type) continue;
 
       const containerTag = memory.scope === "user" ? tags.user : tags.project;
 
@@ -406,16 +376,10 @@ ${conversationBody}
 
       if (result.success) {
         results.push({ scope: memory.scope, id: result.id });
-        log("Auto-capture: memory saved", {
-          scope: memory.scope,
-          type: memory.type,
-          id: result.id,
-        });
       }
     }
 
     if (results.length === 0) {
-      log("Auto-capture: no memories captured", { sessionID });
       service.clearBuffer(sessionID);
       return;
     }
@@ -441,7 +405,7 @@ ${conversationBody}
 
     service.clearBuffer(sessionID);
   } catch (error) {
-    log("Auto-capture: error", { sessior: String(error) });
+    log("Auto-capture error", { sessionID, error: String(error) });
 
     await ctx.client?.tui.showToast({
       body: {
@@ -538,15 +502,6 @@ async function callExternalAPIWithToolCalling(systemPrompt: string, conversation
       temperature: 0.3,
     };
     
-    log("Auto-capture: API request", {
-      url: `${CONFIG.memoryApiUrl}/chat/completions`,
-      model: CONFIG.memoryModel,
-      toolChoice: JSON.stringify(requestBody.tool_choice),
-      messagesCount: requestBody.messages.length,
-      systemPromptLength: systemPrompt.length,
-      conversationPromptLength: conversationPrompt.length
-    });
-    
     const response = await fetch(`${CONFIG.memoryApiUrl}/chat/completions`, {
       method: "POST",
       headers: {
@@ -557,15 +512,9 @@ async function callExternalAPIWithToolCalling(systemPrompt: string, conversation
       signal: controller.signal,
     });
 
-    log("Auto-capture: API response status", {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok
-    });
-
     if (!response.ok) {
       const errorText = await response.text().catch(() => response.statusText);
-      log("Auto-capture: API error", { 
+      log("Auto-capture API error", { 
         status: response.status, 
         error: errorText 
       });
@@ -574,58 +523,26 @@ async function callExternalAPIWithToolCalling(systemPrompt: string, conversation
 
     const data = await response.json() as ToolCallResponse;
     
-    log("Auto-capture: Full response", {
-      response: JSON.stringify(data, null, 2)
-    });
-    
     if (!data.choices || !data.choices[0]) {
-      log("Auto-capture: Invalid response structure", {
-        hasChoices: !!data.choices,
-        choicesLength: data.choices?.length || 0
-      });
       throw new Error("Invalid API response format");
     }
 
     const choice = data.choices[0];
     
-    log("Auto-capture: Choice details", {
-      hasMessage: !!choice.message,
-      messageContent: choice.message?.content,
-      hasToolCalls: !!choice.message?.tool_calls,
-      toolCallsCount: choice.message?.tool_calls?.length || 0,
-      finishReason: choice.finish_reason
-    });
-    
     if (!choice.message.tool_calls || choice.message.tool_calls.length === 0) {
-      log("Auto-capture: No tool calls", {
-        messageContent: choice.message.content,
-        finishReason: choice.finish_reason,
-        fullMessage: JSON.stringify(choice.message, null, 2)
+      log("Auto-capture: tool calling not used", {
+        finishReason: choice.finish_reason
       });
       throw new Error("Tool calling not supported or not used by provider");
     }
     
     const toolCall = choice.message.tool_calls[0];
     
-    log("Auto-capture: Tool call details", {
-      functionName: toolCall?.function?.name,
-      hasArguments: !!toolCall?.function?.arguments,
-      argumentsLength: toolCall?.function?.arguments?.length || 0,
-      arguments: toolCall?.function?.arguments
-    });
-    
     if (!toolCall || toolCall.function.name !== "save_memories") {
-      log("Auto-capture: Invalid tool call", {
-        expected: "save_memories",
-        actual: toolCall?.function?.name
-      });
       throw new Error("Invalid tool call response");
     }
     
     const parsed = JSON.parse(toolCall.function.arguments);
-    log("Auto-capture: Parsed arguments", {
-      memoriesCount: parsed?.memories?.length || 0
-    });
     
     return validateCaptureResponse(parsed);
     
@@ -633,11 +550,6 @@ async function callExternalAPIWithToolCalling(systemPrompt: string, conversation
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error("API request timeout (30s)");
     }
-    log("Auto-capture: Exception", {
-      errorType: error instanceof Error ? error.name : typeof error,
-      errorMessage: error instanceof Error ? error.message : String(error),
-      errorStack: error instanceof Error ? error.stack : undefined
-    });
     throw error;
   } finally {
     clearTimeout(timeout);

@@ -371,13 +371,12 @@ async function install(options: InstallOptions): Promise<number> {
   if (isOhMyOpencodeInstalled()) {
     console.log("\nStep 3: Configure Oh My OpenCode");
     console.log("Detected Oh My OpenCode plugin.");
-    console.log("Memory system handles context compaction, so the built-in context-window-limit-recovery hook should be disabled.");
     
     if (isAutoCompactAlreadyDisabled()) {
       console.log("✓ anthropic-context-window-limit-recovery hook already disabled");
     } else {
       if (options.tui) {
-        const shouldDisable = await confirm(rl!, "Disable anthropic-context-window-limit-recovery hook to let memory system handle context?");
+        const shouldDisable = await confirm(rl!, "Disable anthropic-context-window-limit-recovery hook?");
         if (!shouldDisable) {
           console.log("Skipped.");
         } else {
