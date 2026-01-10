@@ -1,8 +1,13 @@
-import { appendFileSync, writeFileSync } from "fs";
+import { appendFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { homedir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
 
-const LOG_FILE = join(homedir(), ".opencode-supermemory.log");
+const LOG_DIR = join(homedir(), ".opencode-mem");
+const LOG_FILE = join(LOG_DIR, "opencode-mem.log");
+
+if (!existsSync(LOG_DIR)) {
+  mkdirSync(LOG_DIR, { recursive: true });
+}
 
 writeFileSync(LOG_FILE, `\n--- Session started: ${new Date().toISOString()} ---\n`, { flag: "a" });
 

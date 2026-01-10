@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { stripJsoncComments } from "./services/jsonc.js";
@@ -9,6 +9,14 @@ const CONFIG_FILES = [
   join(CONFIG_DIR, "opencode-mem.jsonc"),
   join(CONFIG_DIR, "opencode-mem.json"),
 ];
+
+if (!existsSync(CONFIG_DIR)) {
+  mkdirSync(CONFIG_DIR, { recursive: true });
+}
+
+if (!existsSync(DATA_DIR)) {
+  mkdirSync(DATA_DIR, { recursive: true });
+}
 
 interface OpenCodeMemConfig {
   storagePath?: string;

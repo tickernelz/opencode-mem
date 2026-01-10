@@ -40,7 +40,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   const { directory } = ctx;
   const tags = getTags(directory);
   const injectedSessions = new Set<string>();
-  log("Plugin init", { directory, tags, configured: isConfigured() });
+  log("Plugin loaded", { directory, tags, configured: isConfigured() });
 
   if (!isConfigured()) {
     log("Plugin disabled - memory system not configured");
@@ -82,7 +82,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
         if (detectMemoryKeyword(userMessage)) {
           log("chat.message: memory keyword detected");
           const nudgePart: Part = {
-            id: `supermemory-nudge-${Date.now()}`,
+            id: `memory-nudge-${Date.now()}`,
             sessionID: input.sessionID,
             messageID: output.message.id,
             type: "text",
@@ -96,6 +96,62 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
         if (isFirstMessage) {
           injectedSessions.add(input.sessionID);
+
+          const needsWarmup = !(await memoryClient.isReady());
+
+          if (needsWarmup) {
+            if (ctx.client?.tui) {
+              await ctx.client.tui.showToast({
+                body: {
+                  title: "Memory System",
+                  message: "Initializing (first time: 30-60s)...",
+                  variant: "info",
+                  duration: 5000,
+                },
+              }).catch(() => {});
+            }
+
+            try {
+              await memoryClient.warmup((progress) => {
+                if (progress?.status === 'progress') {
+                  log("Model download progress", {
+                    file: progress.file,
+                    loaded: progress.loaded,
+                    total: progress.total,
+                    progress: progress.progress
+                  });
+                } else if (progress?.status === 'done') {
+                  log("Model file downloaded", { file: progress.file });
+                }
+              });
+
+              if (ctx.client?.tui) {
+                await ctx.client.tui.showToast({
+                  body: {
+                    title: "Memory System",
+                    message: "Ready!",
+                    variant: "success",
+                    duration: 2000,
+                  },
+                }).catch(() => {});
+              }
+            } catch (warmupError) {
+              log("Warmup failed", { error: String(warmupError) });
+              
+              if (ctx.client?.tui) {
+                await ctx.client.tui.showToast({
+                  body: {
+                    title: "Memory System Error",
+                    message: `Failed to initialize: ${String(warmupError)}`,
+                    variant: "error",
+                    duration: 10000,
+                  },
+                }).catch(() => {});
+              }
+              
+              return;
+            }
+          }
 
           const [profileResult, userMemoriesResult, projectMemoriesListResult] = await Promise.all([
             memoryClient.getProfile(tags.user, userMessage),
@@ -127,7 +183,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
           if (memoryContext) {
             const contextPart: Part = {
-              id: `supermemory-context-${Date.now()}`,
+              id: `memory-context-${Date.now()}`,
               sessionID: input.sessionID,
               messageID: output.message.id,
               type: "text",
@@ -147,6 +203,17 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
       } catch (error) {
         log("chat.message: ERROR", { error: String(error) });
+        
+        if (ctx.client?.tui) {
+          await ctx.client.tui.showToast({
+            body: {
+              title: "Memory System Error",
+              message: String(error),
+              variant: "error",
+              duration: 5000,
+            },
+          }).catch(() => {});
+        }
       }
     },
 
@@ -187,6 +254,14 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
             return JSON.stringify({
               success: false,
               error: "Memory system not configured properly.",
+            });
+          }
+
+          const needsWarmup = !(await memoryClient.isReady());
+          if (needsWarmup) {
+            return JSON.stringify({
+              success: false,
+              error: "Memory system is initializing. Please wait a moment and try again.",
             });
           }
 
