@@ -64,45 +64,60 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       });
       
       const url = webServer.getUrl();
-      log("Web server started", { url });
+      log("Web server initialized", { url });
       
       if (ctx.client?.tui) {
         await ctx.client.tui.showToast({
           body: {
             title: "Memory Explorer",
-            message: `Web UI available at ${url}`,
+            message: `Web UI at ${url}`,
             variant: "success",
             duration: 5000,
           },
         }).catch(() => {});
       }
     } catch (error) {
-      log("Web server failed to start", { error: String(error) });
+      const errorMsg = String(error);
       
-      if (ctx.client?.tui) {
-        await ctx.client.tui.showToast({
-          body: {
-            title: "Memory Explorer Error",
-            message: `Failed to start web server: ${String(error)}`,
-            variant: "error",
-            duration: 5000,
-          },
-        }).catch(() => {});
+      if (errorMsg.includes("already running")) {
+        log("Web server already running on another instance");
+        
+        if (ctx.client?.tui) {
+          await ctx.client.tui.showToast({
+            body: {
+              title: "Memory Explorer",
+              message: `Web UI already running at http://${CONFIG.webServerHost}:${CONFIG.webServerPort}`,
+              variant: "info",
+              duration: 3000,
+            },
+          }).catch(() => {});
+        }
+      } else {
+        log("Web server failed to start", { error: errorMsg });
+        
+        if (ctx.client?.tui) {
+          await ctx.client.tui.showToast({
+            body: {
+              title: "Memory Explorer Error",
+              message: `Failed to start: ${errorMsg}`,
+              variant: "error",
+              duration: 5000,
+            },
+          }).catch(() => {});
+        }
       }
     }
   }
 
-  process.on('SIGINT', async () => {
+  const shutdownHandler = async () => {
     if (webServer) {
       await webServer.stop();
     }
-  });
+  };
 
-  process.on('SIGTERM', async () => {
-    if (webServer) {
-      await webServer.stop();
-    }
-  });
+  process.on('SIGINT', shutdownHandler);
+  process.on('SIGTERM', shutdownHandler);
+  process.on('exit', shutdownHandler);
 
   return {
     "chat.message": async (input, output) => {

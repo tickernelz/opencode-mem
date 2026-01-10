@@ -76,8 +76,8 @@ const DEFAULTS: Required<Omit<OpenCodeMemConfig, "embeddingApiUrl" | "embeddingA
   filterPrompt: "You are a stateful coding agent. Remember all the information, including but not limited to user's coding preferences, tech stack, behaviours, workflows, and any other relevant details.",
   keywordPatterns: [],
   autoCaptureEnabled: true,
-  autoCaptureTokenThreshold: 10000,
-  autoCaptureMinTokens: 5000,
+  autoCaptureTokenThreshold: 15000,
+  autoCaptureMinTokens: 20000,
   autoCaptureMaxMemories: 10,
   autoCaptureSummaryMaxLength: 0,
   autoCaptureContextWindow: 3,
@@ -93,6 +93,16 @@ function isValidRegex(pattern: string): boolean {
   } catch {
     return false;
   }
+}
+
+function expandPath(path: string): string {
+  if (path.startsWith("~/")) {
+    return join(homedir(), path.slice(2));
+  }
+  if (path === "~") {
+    return homedir();
+  }
+  return path;
 }
 
 function loadConfig(): OpenCodeMemConfig {
@@ -205,7 +215,7 @@ function ensureConfigExists(): void {
 ensureConfigExists();
 
 export const CONFIG = {
-  storagePath: fileConfig.storagePath ?? DEFAULTS.storagePath,
+  storagePath: expandPath(fileConfig.storagePath ?? DEFAULTS.storagePath),
   embeddingModel: fileConfig.embeddingModel ?? DEFAULTS.embeddingModel,
   embeddingApiUrl: fileConfig.embeddingApiUrl,
   embeddingApiKey: fileConfig.embeddingApiKey ?? process.env.OPENAI_API_KEY,

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "./logger.js";
+import { WebServerLock } from "./web-server-lock.js";
 import {
   handleListTags,
   handleListMemories,
@@ -25,9 +26,12 @@ interface WebServerConfig {
 export class WebServer {
   private server: any = null;
   private config: WebServerConfig;
+  private lock: WebServerLock;
+  private isOwner: boolean = false;
 
   constructor(config: WebServerConfig) {
     this.config = config;
+    this.lock = new WebServerLock();
   }
 
   async start(): Promise<void> {
@@ -37,6 +41,13 @@ export class WebServer {
     }
 
     try {
+      this.isOwner = await this.lock.acquire(this.config.port, this.config.host);
+
+      if (!this.isOwner) {
+        log("Web server already running, joined existing instance");
+        return;
+      }
+
       this.server = Bun.serve({
         port: this.config.port,
         hostname: this.config.host,
@@ -53,10 +64,14 @@ export class WebServer {
   }
 
   async stop(): Promise<void> {
-    if (this.server) {
+    const shouldStop = await this.lock.release();
+
+    if (shouldStop && this.server) {
       this.server.stop();
       this.server = null;
-      log("Web server stopped");
+      log("Web server stopped (last instance)");
+    } else if (!shouldStop) {
+      log("Web server kept alive (other instances running)");
     }
   }
 
