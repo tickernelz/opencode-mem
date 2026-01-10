@@ -56,18 +56,17 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   }
 
   if (CONFIG.webServerEnabled) {
-    try {
-      webServer = await startWebServer({
-        port: CONFIG.webServerPort,
-        host: CONFIG.webServerHost,
-        enabled: CONFIG.webServerEnabled,
-      });
-      
+    startWebServer({
+      port: CONFIG.webServerPort,
+      host: CONFIG.webServerHost,
+      enabled: CONFIG.webServerEnabled,
+    }).then((server) => {
+      webServer = server;
       const url = webServer.getUrl();
       log("Web server initialized", { url });
       
       if (ctx.client?.tui) {
-        await ctx.client.tui.showToast({
+        ctx.client.tui.showToast({
           body: {
             title: "Memory Explorer",
             message: `Web UI at ${url}`,
@@ -76,14 +75,14 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           },
         }).catch(() => {});
       }
-    } catch (error) {
+    }).catch((error) => {
       const errorMsg = String(error);
       
       if (errorMsg.includes("already running")) {
         log("Web server already running on another instance");
         
         if (ctx.client?.tui) {
-          await ctx.client.tui.showToast({
+          ctx.client.tui.showToast({
             body: {
               title: "Memory Explorer",
               message: `Web UI already running at http://${CONFIG.webServerHost}:${CONFIG.webServerPort}`,
@@ -96,7 +95,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
         log("Web server failed to start", { error: errorMsg });
         
         if (ctx.client?.tui) {
-          await ctx.client.tui.showToast({
+          ctx.client.tui.showToast({
             body: {
               title: "Memory Explorer Error",
               message: `Failed to start: ${errorMsg}`,
@@ -106,7 +105,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           }).catch(() => {});
         }
       }
-    }
+    });
   }
 
   const shutdownHandler = async () => {
