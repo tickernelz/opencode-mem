@@ -204,16 +204,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
             .optional(),
           content: tool.schema.string().optional(),
           query: tool.schema.string().optional(),
-          type: tool.schema
-            .enum([
-              "project-config",
-              "architecture",
-              "error-solution",
-              "preference",
-              "learned-pattern",
-              "conversation",
-            ])
-            .optional(),
+          type: tool.schema.string().optional(),
           scope: tool.schema.enum(["user", "project"]).optional(),
           memoryId: tool.schema.string().optional(),
           limit: tool.schema.number().optional(),
@@ -276,19 +267,27 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                       description: "Remove a memory",
                       args: ["memoryId", "scope?"],
                     },
+                    {
+                      command: "capture-now",
+                      description: "Manually trigger memory capture for current session",
+                      args: [],
+                    },
+                    {
+                      command: "auto-capture-toggle",
+                      description: "Enable/disable automatic memory capture",
+                      args: [],
+                    },
+                    {
+                      command: "auto-capture-stats",
+                      description: "View auto-capture statistics for current session",
+                      args: [],
+                    },
                   ],
                   scopes: {
-                    user: "Cross-project preferences and knowledge",
-                    project: "Project-specific knowledge (default)",
+                    user: "Cross-project user behaviors, preferences, patterns, requests",
+                    project: "Project-specific knowledge, decisions, architecture, context",
                   },
-                  types: [
-                    "project-config",
-                    "architecture",
-                    "error-solution",
-                    "preference",
-                    "learned-pattern",
-                    "conversation",
-                  ],
+                  typeGuidance: "Choose appropriate type: preference, architecture, workflow, bug-fix, configuration, pattern, request, context, etc. Be specific and descriptive with categories.",
                 });
               }
 
@@ -518,9 +517,6 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                   success: true,
                   stats: {
                     lastCaptureTokens: stats.lastCaptureTokens,
-                    messages: stats.messages,
-                    tools: stats.tools,
-                    fileEdits: stats.fileEdits,
                     minutesSinceCapture: Math.floor(stats.timeSinceCapture / 60000),
                     tokenThreshold: CONFIG.autoCaptureTokenThreshold,
                     minTokens: CONFIG.autoCaptureMinTokens,

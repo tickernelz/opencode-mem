@@ -5,26 +5,10 @@ import { log } from "./logger.js";
 import { CONFIG } from "../config.js";
 import type { MemoryType } from "../types/index.js";
 
-interface MessageEntry {
-  role: "user" | "assistant";
-  content: string;
-  timestamp: number;
-}
-
-interface ToolEntry {
-  name: string;
-  args: unknown;
-  result: string;
-  timestamp: number;
-}
-
 interface CaptureBuffer {
   sessionID: string;
   lastCaptureTokens: number;
-  messages: MessageEntry[];
-  tools: ToolEntry[];
   lastCaptureTime: number;
-  fileEdits: number;
 }
 
 interface MemoryEntry {
@@ -102,10 +86,7 @@ export class AutoCaptureService {
       this.buffers.set(sessionID, {
         sessionID,
         lastCaptureTokens: 0,
-        messages: [],
-        tools: [],
         lastCaptureTime: Date.now(),
-        fileEdits: 0,
       });
     }
     return this.buffers.get(sessionID)!;
@@ -127,39 +108,6 @@ export class AutoCaptureService {
     }
 
     return false;
-  }
-
-  addMessage(sessionID: string, role: "user" | "assistant", content: string) {
-    if (!this.enabled) return;
-    const buffer = this.getOrCreateBuffer(sessionID);
-    buffer.messages.push({ role, content, timestamp: Date.now() });
-  }
-
-  addTool(sessionID: string, name: string, args: unknown, result: string) {
-    if (!this.enabled) return;
-    const buffer = this.getOrCreateBuffer(sessionID);
-    buffer.tools.push({ name, args, result, timestamp: Date.now() });
-  }
-
-  onFileEdit(sessionID: string) {
-    if (!this.enabled) return;
-    const buffer = this.getOrCreateBuffer(sessionID);
-    buffer.fileEdits++;
-  }
-
-  getSummaryPrompt(sessionID: string): string {
-    const buffer = this.buffers.get(sessionID);
-    if (!buffer) return "";
-
-    const conversationText = buffer.messages
-      .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
-      .join("\n\n");
-
-    const toolsText = buffer.tools.length > 0
-      ? `\n\nTools executed:\n${buffer.tools.map((t) => `- ${t.name}`).join("\n")}`
-      : "";
-
-    return `${conversationText}${toolsText}`;
   }
 
   getSystemPrompt(): string {
@@ -210,10 +158,7 @@ Use the save_memories function to save extracted memories.`;
       this.buffers.set(sessionID, {
         sessionID,
         lastCaptureTokens: buffer.lastCaptureTokens,
-        messages: [],
-        tools: [],
         lastCaptureTime: Date.now(),
-        fileEdits: 0,
       });
     }
     this.capturing.delete(sessionID);
@@ -225,9 +170,6 @@ Use the save_memories function to save extracted memories.`;
 
     return {
       lastCaptureTokens: buffer.lastCaptureTokens,
-      messages: buffer.messages.length,
-      tools: buffer.tools.length,
-      fileEdits: buffer.fileEdits,
       timeSinceCapture: Date.now() - buffer.lastCaptureTime,
     };
   }
