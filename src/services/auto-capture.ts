@@ -426,7 +426,36 @@ async function summarizeWithAI(
     );
   }
 
-  return await callExternalAPIWithToolCalling(systemPrompt, conversationPrompt);
+  const { AIProviderFactory } = await import("./ai/ai-provider-factory.js");
+
+  if (CONFIG.aiSessionEnabled) {
+    AIProviderFactory.initializeSessionStore(CONFIG.storagePath, CONFIG.aiSessionRetentionDays);
+  }
+
+  const providerConfig = {
+    model: CONFIG.memoryModel,
+    apiUrl: CONFIG.memoryApiUrl,
+    apiKey: CONFIG.memoryApiKey,
+    maxIterations: CONFIG.autoCaptureMaxIterations,
+    iterationTimeout: CONFIG.autoCaptureIterationTimeout,
+  };
+
+  const provider = AIProviderFactory.createProvider(CONFIG.memoryProvider, providerConfig);
+
+  const toolSchema = createToolCallSchema();
+  const result = await provider.executeToolCall(systemPrompt, conversationPrompt, toolSchema, sessionID);
+
+  if (!result.success) {
+    throw new Error(result.error || "Tool call failed");
+  }
+
+  log("Auto-capture: AI execution completed", {
+    sessionID,
+    provider: provider.getProviderName(),
+    iterations: result.iterations,
+  });
+
+  return result.data;
 }
 
 function createToolCallSchema() {
@@ -477,106 +506,4 @@ function createToolCallSchema() {
       },
     },
   };
-}
-
-async function callExternalAPIWithToolCalling(
-  systemPrompt: string,
-  conversationPrompt: string
-): Promise<CaptureResponse> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
-
-  try {
-    const tools = [createToolCallSchema()];
-
-    const requestBody = {
-      model: CONFIG.memoryModel,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: conversationPrompt },
-      ],
-      tools: tools,
-      tool_choice: { type: "function", name: "save_memories" },
-      temperature: 0.3,
-    };
-
-    const response = await fetch(`${CONFIG.memoryApiUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${CONFIG.memoryApiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => response.statusText);
-      log("Auto-capture API error", {
-        status: response.status,
-        error: errorText,
-      });
-      throw new Error(`API error: ${response.status} - ${errorText}`);
-    }
-
-    const data = (await response.json()) as ToolCallResponse;
-
-    if (!data.choices || !data.choices[0]) {
-      throw new Error("Invalid API response format");
-    }
-
-    const choice = data.choices[0];
-
-    if (!choice.message.tool_calls || choice.message.tool_calls.length === 0) {
-      log("Auto-capture: tool calling not used", {
-        finishReason: choice.finish_reason,
-      });
-      throw new Error("Tool calling not supported or not used by provider");
-    }
-
-    const toolCall = choice.message.tool_calls[0];
-
-    if (!toolCall || toolCall.function.name !== "save_memories") {
-      throw new Error("Invalid tool call response");
-    }
-
-    const parsed = JSON.parse(toolCall.function.arguments);
-
-    return validateCaptureResponse(parsed);
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("API request timeout (30s)");
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function validateCaptureResponse(data: any): CaptureResponse {
-  if (!data || typeof data !== "object") {
-    throw new Error("Response is not an object");
-  }
-
-  if (!Array.isArray(data.memories)) {
-    throw new Error("memories field is not an array");
-  }
-
-  const validMemories = data.memories.filter((m: any) => {
-    return (
-      m &&
-      typeof m === "object" &&
-      typeof m.summary === "string" &&
-      m.summary.trim().length > 0 &&
-      (m.scope === "user" || m.scope === "project") &&
-      typeof m.type === "string" &&
-      m.type.trim().length > 0
-    );
-  });
-
-  if (validMemories.length === 0) {
-    throw new Error("No valid memories in response");
-  }
-
-  return { memories: validMemories };
 }

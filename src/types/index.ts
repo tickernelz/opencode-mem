@@ -46,3 +46,5 @@ export interface MemoryMetadata {
   gitRepoUrl?: string;
   [key: string]: unknown;
 }
+
+export type AIProviderType = "openai-chat" | "openai-responses" | "anthropic";

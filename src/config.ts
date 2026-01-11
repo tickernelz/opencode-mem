@@ -37,9 +37,14 @@ interface OpenCodeMemConfig {
   autoCaptureMaxMemories?: number;
   autoCaptureSummaryMaxLength?: number;
   autoCaptureContextWindow?: number;
+  autoCaptureMaxIterations?: number;
+  autoCaptureIterationTimeout?: number;
+  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic";
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
+  aiSessionEnabled?: boolean;
+  aiSessionRetentionDays?: number;
   webServerEnabled?: boolean;
   webServerPort?: number;
   webServerHost?: string;
@@ -72,7 +77,7 @@ const DEFAULT_KEYWORD_PATTERNS = [
 const DEFAULTS: Required<
   Omit<
     OpenCodeMemConfig,
-    "embeddingApiUrl" | "embeddingApiKey" | "memoryModel" | "memoryApiUrl" | "memoryApiKey"
+    "embeddingApiUrl" | "embeddingApiKey" | "memoryModel" | "memoryApiUrl" | "memoryApiKey" | "memoryProvider"
   >
 > & {
   embeddingApiUrl?: string;
@@ -80,6 +85,7 @@ const DEFAULTS: Required<
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
+  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic";
 } = {
   storagePath: join(DATA_DIR, "data"),
   embeddingModel: "Xenova/nomic-embed-text-v1",
@@ -97,6 +103,10 @@ const DEFAULTS: Required<
   autoCaptureMaxMemories: 10,
   autoCaptureSummaryMaxLength: 0,
   autoCaptureContextWindow: 3,
+  autoCaptureMaxIterations: 5,
+  autoCaptureIterationTimeout: 30000,
+  aiSessionEnabled: true,
+  aiSessionRetentionDays: 7,
   webServerEnabled: true,
   webServerPort: 4747,
   webServerHost: "127.0.0.1",
@@ -197,17 +207,35 @@ const CONFIG_TEMPLATE = `{
   
   "autoCaptureEnabled": true,
   
+  // Provider type: "openai-chat" | "openai-responses" | "anthropic"
+  "memoryProvider": "openai-chat",
+  
   // REQUIRED for auto-capture (all 3 must be set):
   "memoryModel": "gpt-4o-mini",
   "memoryApiUrl": "https://api.openai.com/v1",
   "memoryApiKey": "sk-...",
   
-  // Examples for other providers:
-  // Anthropic: 
-  //   "memoryModel": "claude-3-5-haiku-20241022"
+  // Examples for different providers:
+  // OpenAI Chat Completion (default, backward compatible):
+  //   "memoryProvider": "openai-chat"
+  //   "memoryModel": "gpt-4o-mini"
+  //   "memoryApiUrl": "https://api.openai.com/v1"
+  //   "memoryApiKey": "sk-..."
+  
+  // OpenAI Responses API (recommended, with session support):
+  //   "memoryProvider": "openai-responses"
+  //   "memoryModel": "gpt-4o"
+  //   "memoryApiUrl": "https://api.openai.com/v1"
+  //   "memoryApiKey": "sk-..."
+  
+  // Anthropic (with session support):
+  //   "memoryProvider": "anthropic"
+  //  yModel": "claude-3-5-haiku-20241022"
   //   "memoryApiUrl": "https://api.anthropic.com/v1"
   //   "memoryApiKey": "sk-ant-..."
-  // Groq (fast & cheap): 
+  
+  // Groq (OpenAI-compatible, use openai-chat provider):
+  //   "memoryProvider": "openai-chat"
   //   "memoryModel": "llama-3.3-70b-versatile"
   //   "memoryApiUrl": "https://api.groq.com/openai/v1"
   //   "memoryApiKey": "gsk_..."
@@ -218,8 +246,16 @@ const CONFIG_TEMPLATE = `{
   "autoCaptureMaxMemories": 10,
   "autoCaptureContextWindow": 3,
   
+  // Multi-iteration settings (for openai-responses and anthropic)
+  "autoCaptureMaxIterations": 5,
+  "autoCaptureIterationTimeout": 30000,
+  
   // Summary length: 0 = AI decides optimal length, >0 = character limit
   "autoCaptureSummaryMaxLength": 0,
+  
+  // Session management (for openai-responses and anthropic)
+  "aiSessionEnabled": true,
+  "aiSessionRetentionDays": 7,
   
   // ============================================
   // Search Settings
@@ -300,9 +336,16 @@ export const CONFIG = {
     fileConfig.autoCaptureSummaryMaxLength ?? DEFAULTS.autoCaptureSummaryMaxLength,
   autoCaptureContextWindow:
     fileConfig.autoCaptureContextWindow ?? DEFAULTS.autoCaptureContextWindow,
+  autoCaptureMaxIterations:
+    fileConfig.autoCaptureMaxIterations ?? DEFAULTS.autoCaptureMaxIterations,
+  autoCaptureIterationTimeout:
+    fileConfig.autoCaptureIterationTimeout ?? DEFAULTS.autoCaptureIterationTimeout,
+  memoryProvider: (fileConfig.memoryProvider ?? "openai-chat") as "openai-chat" | "openai-responses" | "anthropic",
   memoryModel: fileConfig.memoryModel,
   memoryApiUrl: fileConfig.memoryApiUrl,
   memoryApiKey: fileConfig.memoryApiKey,
+  aiSessionEnabled: fileConfig.aiSessionEnabled ?? DEFAULTS.aiSessionEnabled,
+  aiSessionRetentionDays: fileConfig.aiSessionRetentionDays ?? DEFAULTS.aiSessionRetentionDays,
   webServerEnabled: fileConfig.webServerEnabled ?? DEFAULTS.webServerEnabled,
   webServerPort: fileConfig.webServerPort ?? DEFAULTS.webServerPort,
   webServerHost: fileConfig.webServerHost ?? DEFAULTS.webServerHost,
