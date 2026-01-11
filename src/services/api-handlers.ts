@@ -204,7 +204,7 @@ export async function handleListMemories(
 
     let timeline: any[] = memoriesWithType;
 
-    if (includePrompts) {
+    if (includePrompts && scope === "project") {
       const prompts = userPromptManager.getCapturedPrompts(tag);
       const promptsWithType = prompts.map((p) => ({
         type: "prompt",
