@@ -92,7 +92,7 @@ const DEFAULTS: Required<
   containerTagPrefix: "opencode",
   keywordPatterns: [],
   autoCaptureEnabled: true,
-  autoCaptureTokenThreshold: 15000,
+  autoCaptureTokenThreshold: 10000,
   autoCaptureMinTokens: 20000,
   autoCaptureMaxMemories: 10,
   autoCaptureSummaryMaxLength: 0,
@@ -213,7 +213,7 @@ const CONFIG_TEMPLATE = `{
   //   "memoryApiKey": "gsk_..."
   
   // Token thresholds
-  "autoCaptureTokenThreshold": 15000,
+  "autoCaptureTokenThreshold": 10000,
   "autoCaptureMinTokens": 20000,
   "autoCaptureMaxMemories": 10,
   "autoCaptureContextWindow": 3,
