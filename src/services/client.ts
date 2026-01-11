@@ -1,10 +1,11 @@
-import { connect } from "@lancedb/lancedb";
-import { pipeline, env } from "@xenova/transformers";
-import { existsSync, mkdirSync } from "node:fs";
-import * as arrow from "apache-arrow";
+import { embeddingService } from "./embedding.js";
+import { shardManager } from "./sqlite/shard-manager.js";
+import { vectorSearch } from "./sqlite/vector-search.js";
+import { connectionManager } from "./sqlite/connection-manager.js";
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
 import type { MemoryType } from "../types/index.js";
+import type { MemoryRecord, SearchResult } from "./sqlite/types.js";
 
 function safeToISOString(timestamp: any): string {
   try {
@@ -36,40 +37,14 @@ function safeJSONParse(jsonString: any): any {
   }
 }
 
-env.allowLocalModels = true;
-env.allowRemoteModels = true;
-env.cacheDir = CONFIG.storagePath + "/.cache";
-
-const TIMEOUT_MS = 30000;
-
-interface MemoryRecord {
-  id: string;
-  content: string;
-  vector: number[];
-  containerTag: string;
-  type?: string;
-  createdAt: number;
-  updatedAt: number;
-  metadata?: string;
-  displayName?: string;
-  userName?: string;
-  userEmail?: string;
-  projectPath?: string;
-  projectName?: string;
-  gitRepoUrl?: string;
-}
-
-interface SearchResult {
-  id: string;
-  memory: string;
-  similarity: number;
-  metadata?: Record<string, unknown>;
-  displayName?: string;
-  userName?: string;
-  userEmail?: string;
-  projectPath?: string;
-  projectName?: string;
-  gitRepoUrl?: string;
+function extractScopeFromContainerTag(containerTag: string): { scope: 'user' | 'project', hash: string } {
+  const parts = containerTag.split('_');
+  if (parts.length >= 3) {
+    const scope = parts[1] as 'user' | 'project';
+    const hash = parts.slice(2).join('_');
+    return { scope, hash };
+  }
+  return { scope: 'user', hash: containerTag };
 }
 
 interface ProfileData {
@@ -77,138 +52,23 @@ interface ProfileData {
   dynamic: string[];
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms)
-    ),
-  ]);
-}
-
-class EmbeddingService {
-  private pipe: any = null;
-  private initPromise: Promise<void> | null = null;
-  public isWarmedUp: boolean = false;
-
-  async warmup(progressCallback?: (progress: any) => void): Promise<void> {
-    if (this.isWarmedUp) return;
-    if (this.initPromise) return this.initPromise;
-
-    this.initPromise = (async () => {
-      try {
-        if (CONFIG.embeddingApiUrl && CONFIG.embeddingApiKey) {
-          log("Using OpenAI-compatible API for embeddings");
-          this.isWarmedUp = true;
-          return;
-        }
-
-        log("Downloading embedding model", { model: CONFIG.embeddingModel });
-
-        this.pipe = await pipeline(
-          "feature-extraction",
-          CONFIG.embeddingModel,
-          { progress_callback: progressCallback }
-        );
-
-        this.isWarmedUp = true;
-        log("Embedding model ready");
-      } catch (error) {
-        this.initPromise = null;
-        log("Failed to initialize embedding model", { error: String(error) });
-        throw error;
-      }
-    })();
-
-    return this.initPromise;
-  }
-
-  async embed(text: string): Promise<number[]> {
-    if (!this.isWarmedUp && !this.initPromise) {
-      await this.warmup();
-    }
-
-    if (this.initPromise) {
-      await this.initPromise;
-    }
-
-    if (CONFIG.embeddingApiUrl && CONFIG.embeddingApiKey) {
-      const response = await fetch(`${CONFIG.embeddingApiUrl}/embeddings`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${CONFIG.embeddingApiKey}`,
-        },
-        body: JSON.stringify({
-          input: text,
-          model: CONFIG.embeddingModel,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`API embedding failed: ${response.statusText}`);
-      }
-
-      const data: any = await response.json();
-      return data.data[0].embedding;
-    }
-
-    const output = await this.pipe(text, { pooling: "mean", normalize: true });
-    return Array.from(output.data);
-  }
-}
-
 export class LocalMemoryClient {
-  private db: any = null;
-  private table: any = null;
-  private embedder: EmbeddingService;
   private initPromise: Promise<void> | null = null;
-  private isConnected: boolean = false;
+  private isInitialized: boolean = false;
 
-  constructor() {
-    this.embedder = new EmbeddingService();
-  }
+  constructor() {}
 
   private async initialize(): Promise<void> {
-    if (this.isConnected) return;
+    if (this.isInitialized) return;
     if (this.initPromise) return this.initPromise;
 
     this.initPromise = (async () => {
       try {
-        if (!existsSync(CONFIG.storagePath)) {
-          mkdirSync(CONFIG.storagePath, { recursive: true });
-        }
-
-        this.db = await connect(CONFIG.storagePath);
-
-        const tableNames = await this.db.tableNames();
-        if (tableNames.includes("memories")) {
-          this.table = await this.db.openTable("memories");
-        } else {
-          const schema = new arrow.Schema([
-            new arrow.Field("id", new arrow.Utf8(), false),
-            new arrow.Field("content", new arrow.Utf8(), false),
-            new arrow.Field("vector", new arrow.FixedSizeList(384, new arrow.Field("item", new arrow.Float32(), true)), false),
-            new arrow.Field("containerTag", new arrow.Utf8(), false),
-            new arrow.Field("type", new arrow.Utf8(), true),
-            new arrow.Field("createdAt", new arrow.Int64(), false),
-            new arrow.Field("updatedAt", new arrow.Int64(), false),
-            new arrow.Field("metadata", new arrow.Utf8(), true),
-            new arrow.Field("displayName", new arrow.Utf8(), true),
-            new arrow.Field("userName", new arrow.Utf8(), true),
-            new arrow.Field("userEmail", new arrow.Utf8(), true),
-            new arrow.Field("projectPath", new arrow.Utf8(), true),
-            new arrow.Field("projectName", new arrow.Utf8(), true),
-            new arrow.Field("gitRepoUrl", new arrow.Utf8(), true),
-          ]);
-          this.table = await this.db.createEmptyTable("memories", schema);
-        }
-
-        this.isConnected = true;
-        log("LanceDB connected", { path: CONFIG.storagePath });
+        this.isInitialized = true;
+        log("SQLite memory client initialized");
       } catch (error) {
         this.initPromise = null;
-        log("LanceDB connection failed", { error: String(error) });
+        log("SQLite initialization failed", { error: String(error) });
         throw error;
       }
     })();
@@ -218,11 +78,11 @@ export class LocalMemoryClient {
 
   async warmup(progressCallback?: (progress: any) => void): Promise<void> {
     await this.initialize();
-    await this.embedder.warmup(progressCallback);
+    await embeddingService.warmup(progressCallback);
   }
 
   async isReady(): Promise<boolean> {
-    return this.isConnected && this.embedder.isWarmedUp;
+    return this.isInitialized && embeddingService.isWarmedUp;
   }
 
   getStatus(): {
@@ -231,59 +91,36 @@ export class LocalMemoryClient {
     ready: boolean;
   } {
     return {
-      dbConnected: this.isConnected,
-      modelLoaded: this.embedder.isWarmedUp,
-      ready: this.isConnected && this.embedder.isWarmedUp,
+      dbConnected: this.isInitialized,
+      modelLoaded: embeddingService.isWarmedUp,
+      ready: this.isInitialized && embeddingService.isWarmedUp,
     };
-  }
-
-  async refreshTable(): Promise<void> {
-    if (!this.db) {
-      log("refreshTable: db not initialized");
-      return;
-    }
-    
-    try {
-      this.table = await this.db.openTable("memories");
-    } catch (error) {
-      log("refreshTable: error", { error: String(error) });
-      throw error;
-    }
   }
 
   async searchMemories(query: string, containerTag: string) {
     log("searchMemories: start", { containerTag });
     try {
       await this.initialize();
-      await this.refreshTable();
 
-      const queryVector = await withTimeout(
-        this.embedder.embed(query),
-        TIMEOUT_MS
+      const queryVector = await embeddingService.embedWithTimeout(query);
+      const { scope, hash } = extractScopeFromContainerTag(containerTag);
+      const shards = shardManager.getAllShards(scope, hash);
+
+      if (shards.length === 0) {
+     log("searchMemories: no shards found", { containerTag });
+        return { success: true as const, results: [], total: 0, timing: 0 };
+      }
+
+      const results = await vectorSearch.searchAcrossShards(
+        shards,
+        queryVector,
+        containerTag,
+        CONFIG.maxMemories,
+        CONFIG.similarityThreshold
       );
 
-      const results = await this.table
-        .query()
-        .nearestTo(queryVector)
-        .where(`\`containerTag\` = '${containerTag}'`)
-        .limit(CONFIG.maxMemories)
-        .toArray();
-
-      const mapped: SearchResult[] = results.map((r: any) => ({
-        id: r.id,
-        memory: r.content,
-        similarity: 1 - (r._distance || 0),
-        metadata: safeJSONParse(r.metadata),
-        displayName: r.displayName,
-        userName: r.userName,
-        userEmail: r.userEmail,
-        projectPath: r.projectPath,
-        projectName: r.projectName,
-        gitRepoUrl: r.gitRepoUrl,
-      })).filter((r: SearchResult) => r.similarity >= CONFIG.similarityThreshold);
-
-      log("searchMemories: success", { count: mapped.length });
-      return { success: true as const, results: mapped, total: mapped.length, timing: 0 };
+      log("searchMemories: success", { count: results.length });
+      return { success: true as const, results, total: results.length, timing: 0 };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log("searchMemories: error", { error: errorMessage });
@@ -295,23 +132,28 @@ export class LocalMemoryClient {
     log("getProfile: start", { containerTag });
     try {
       await this.initialize();
-      await this.refreshTable();
 
-      const results = await this.table
-        .query()
-        .where(`\`containerTag\` = '${containerTag}'`)
-        .limit(CONFIG.maxProfileItems * 2)
-        .toArray();
+      const { scope, hash } = extractScopeFromContainerTag(containerTag);
+      const shards = shardManager.getAllShards(scope, hash);
+
+      if (shards.length === 0) {
+        log("getProfile: no shards found", { containerTag });
+        return { success: true as const, profile: { static: [], dynamic: [] } };
+      }
 
       const staticFacts: string[] = [];
       const dynamicFacts: string[] = [];
 
-      for (const r of results) {
-        const content = r.content;
-        if (r.type === "preference") {
-          staticFacts.push(content);
-        } else {
-          dynamicFacts.push(content);
+      for (const shard of shards) {
+        const db = connectionManager.getConnection(shard.dbPath);
+        const memories = vectorSearch.listMemories(db, containerTag, CONFIG.maxProfileItems * 2);
+
+        for (const m of memories) {
+          if (m.type === "preference") {
+            staticFacts.push(m.content);
+          } else {
+            dynamicFacts.push(m.content);
+          }
         }
       }
 
@@ -348,10 +190,9 @@ export class LocalMemoryClient {
     try {
       await this.initialize();
 
-      const vector = await withTimeout(
-        this.embedder.embed(content),
-        TIMEOUT_MS
-      );
+      const vector = await embeddingService.embedWithTimeout(content);
+      const { scope, hash } = extractScopeFromContainerTag(containerTag);
+      const shard = shardManager.getWriteShard(scope, hash);
 
       const id = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       const now = Date.now();
@@ -373,10 +214,11 @@ export class LocalMemoryClient {
         gitRepoUrl: metadata?.gitRepoUrl,
       };
 
-      await this.table.add([record]);
-      await this.refreshTable();
+      const db = connectionManager.getConnection(shard.dbPath);
+      vectorSearch.insertVector(db, record);
+      shardManager.incrementVectorCount(shard.id);
 
-      log("addMemory: success", { id });
+      log("addMemory: success", { id, shardId: shard.id });
       return { success: true as const, id };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -390,11 +232,23 @@ export class LocalMemoryClient {
     try {
       await this.initialize();
 
-      await this.table.delete(`\`id\` = '${memoryId}'`);
-      await this.refreshTable();
+      const { scope, hash } = extractScopeFromContainerTag(memoryId);
+      const shards = shardManager.getAllShards(scope, hash);
 
-      log("deleteMemory: success", { memoryId });
-      return { success: true };
+      for (const shard of shards) {
+        const db = connectionManager.getConnection(shard.dbPath);
+        const memory = vectorSearch.getMemoryById(db, memoryId);
+
+        if (memory) {
+          vectorSearch.deleteVector(db, memoryId);
+          shardManager.decrementVectorCount(shard.id);
+          log("deleteMemory: success", { memoryId, shardId: shard.id });
+          return { success: true };
+        }
+      }
+
+      log("deleteMemory: not found", { memoryId });
+      return { success: false, error: "Memory not found" };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log("deleteMemory: error", { memoryId, error: errorMessage });
@@ -406,28 +260,41 @@ export class LocalMemoryClient {
     log("listMemories: start", { containerTag, limit });
     try {
       await this.initialize();
-      await this.refreshTable();
 
-      const results = await this.table
-        .query()
-        .where(`\`containerTag\` = '${containerTag}'`)
-        .limit(limit)
-        .toArray();
+      const { scope, hash } = extractScopeFromContainerTag(containerTag);
+      const shards = shardManager.getAllShards(scope, hash);
 
-      const memories = results
-        .sort((a: any, b: any) => Number(b.createdAt) - Number(a.createdAt))
-        .map((r: any) => ({
-          id: r.id,
-          summary: r.content,
-          createdAt: safeToISOString(r.createdAt),
-          metadata: safeJSONParse(r.metadata),
-          displayName: r.displayName,
-          userName: r.userName,
-          userEmail: r.userEmail,
-          projectPath: r.projectPath,
-          projectName: r.projectName,
-          gitRepoUrl: r.gitRepoUrl,
-        }));
+      if (shards.length === 0) {
+        log("listMemories: no shards found", { containerTag });
+        return {
+          success: true as const,
+          memories: [],
+          pagination: { currentPage: 1, totalItems: 0, totalPages: 0 }
+        };
+      }
+
+      const allMemories: any[] = [];
+
+      for (const shard of shards) {
+        const db = connectionManager.getConnection(shard.dbPath);
+        const memories = vectorSearch.listMemories(db, containerTag, limit);
+        allMemories.push(...memories);
+      }
+
+      allMemories.sort((a, b) => Number(b.created_at) - Number(a.created_at));
+
+      const memories = allMemories.slice(0, limit).map((r: any) => ({
+        id: r.id,
+        summary: r.content,
+        createdAt: safeToISOString(r.created_at),
+        metadata: safeJSONParse(r.metadata),
+        displayName: r.display_name,
+        userName: r.user_name,
+        userEmail: r.user_email,
+        projectPath: r.project_path,
+        projectName: r.project_name,
+        gitRepoUrl: r.git_repo_url,
+      }));
 
       log("listMemories: success", { count: memories.length });
       return {
