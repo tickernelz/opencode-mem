@@ -54,6 +54,10 @@ async function handleRequest(req: Request): Promise<Response> {
       return serveStaticFile("app.js", "application/javascript");
     }
 
+    if (path === "/favicon.ico") {
+      return serveStaticFile("favicon.ico", "image/x-icon");
+    }
+
     if (path === "/api/tags" && method === "GET") {
       const result = await handleListTags();
       return jsonResponse(result);
@@ -176,6 +180,17 @@ function serveStaticFile(filename: string, contentType: string): Response {
   try {
     const webDir = join(__dirname, "..", "web");
     const filePath = join(webDir, filename);
+    
+    if (contentType.startsWith("image/")) {
+      const content = readFileSync(filePath);
+      return new Response(content, {
+        headers: {
+          "Content-Type": contentType,
+          "Cache-Control": "public, max-age=86400",
+        },
+      });
+    }
+    
     const content = readFileSync(filePath, "utf-8");
 
     return new Response(content, {
