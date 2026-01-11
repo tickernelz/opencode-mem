@@ -1,24 +1,7 @@
 import { Database } from "bun:sqlite";
 import { connectionManager } from "./connection-manager.js";
-import { shardManager } from "./shard-manager.js";
 import { log } from "../logger.js";
 import type { MemoryRecord, SearchResult, ShardInfo } from "./types.js";
-
-function cosineSimilarity(a: Float32Array, b: Float32Array): number {
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-  
-  for (let i = 0; i < a.length; i++) {
-    const aVal = a[i] || 0;
-    const bVal = b[i] || 0;
-    dotProduct += aVal * bVal;
-    normA += aVal * aVal;
-    normB += bVal * bVal;
-  }
-  
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-}
 
 export class VectorSearch {
   insertVector(db: Database, record: MemoryRecord): void {
@@ -65,8 +48,7 @@ export class VectorSearch {
 
     const stmt = db.prepare(`
       SELECT 
-        v.memory_id,
-        v.distance,
+        m.id,
         m.content,
         m.metadata,
         m.display_name,
@@ -74,20 +56,21 @@ export class VectorSearch {
         m.user_email,
         m.project_path,
         m.project_name,
-        m.git_repo_url
+        m.git_repo_url,
+        v.distance
       FROM vec_memories v
       INNER JOIN memories m ON v.memory_id = m.id
-      WHERE m.container_tag = ?
-        AND v.embedding MATCH ?
-        AND k = ?
-      ORDER BY distance
+      WHERE v.embedding MATCH ?
+        AND v.k = ?
+        AND m.container_tag = ?
+      ORDER BY v.distance
     `);
 
     const queryBuffer = new Uint8Array(queryVector.buffer);
-    const rows = stmt.all(containerTag, queryBuffer, limit * 2) as any[];
+    const rows = stmt.all(queryBuffer, limit * 2, containerTag) as any[];
 
     return rows.map((row: any) => ({
-      id: row.memory_id,
+      id: row.id,
       memory: row.content,
       similarity: 1 - row.distance,
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
@@ -144,6 +127,11 @@ export class VectorSearch {
     return stmt.all(containerTag, limit) as any[];
   }
 
+  getAllMemories(db: Database): any[] {
+    const stmt = db.prepare(`SELECT * FROM memories ORDER BY created_at DESC`);
+    return stmt.all() as any[];
+  }
+
   getMemoryById(db: Database, memoryId: string): any | null {
     const stmt = db.prepare(`SELECT * FROM memories WHERE id = ?`);
     return stmt.get(memoryId) as any;
@@ -153,6 +141,27 @@ export class VectorSearch {
     const stmt = db.prepare(`SELECT COUNT(*) as count FROM memories WHERE container_tag = ?`);
     const result = stmt.get(containerTag) as any;
     return result.count;
+  }
+
+  countAllVectors(db: Database): number {
+    const stmt = db.prepare(`SELECT COUNT(*) as count FROM memories`);
+    const result = stmt.get() as any;
+    return result.count;
+  }
+
+  getDistinctTags(db: Database): any[] {
+    const stmt = db.prepare(`
+      SELECT DISTINCT 
+        container_tag,
+        display_name,
+        user_name,
+        user_email,
+        project_path,
+        project_name,
+        git_repo_url
+      FROM memories
+    `);
+    return stmt.all() as any[];
   }
 }
 

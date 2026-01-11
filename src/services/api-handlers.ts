@@ -1,4 +1,7 @@
-import { memoryClient } from "./client.js";
+import { embeddingService } from "./embedding.js";
+import { shardManager } from "./sqlite/shard-manager.js";
+import { vectorSearch } from "./sqlite/vector-search.js";
+import { connectionManager } from "./sqlite/connection-manager.js";
 import { log } from "./logger.js";
 import type { MemoryType } from "../types/index.js";
 
@@ -41,63 +44,6 @@ interface PaginatedResponse<T> {
   totalPages: number;
 }
 
-export async function handleListTags(): Promise<ApiResponse<{ user: TagInfo[]; project: TagInfo[] }>> {
-  try {
-    await memoryClient.warmup();
-    await (memoryClient as any).refreshTable();
-    
-    const table = (memoryClient as any).table;
-    if (!table) {
-      return { success: false, error: "Database not initialized" };
-    }
-
-    const results = await table.query().select([
-      "containerTag", 
-      "displayName", 
-      "userName", 
-      "userEmail", 
-      "projectPath", 
-      "projectName", 
-      "gitRepoUrl"
-    ]).toArray();
-    
-    const tagsMap = new Map<string, TagInfo>();
-    
-    for (const r of results) {
-      if (r.containerTag && !tagsMap.has(r.containerTag)) {
-        tagsMap.set(r.containerTag, {
-          tag: r.containerTag,
-          displayName: r.displayName,
-          userName: r.userName,
-          userEmail: r.userEmail,
-          projectPath: r.projectPath,
-          projectName: r.projectName,
-          gitRepoUrl: r.gitRepoUrl,
-        });
-      }
-    }
-
-    const userTags: TagInfo[] = [];
-    const projectTags: TagInfo[] = [];
-
-    for (const tagInfo of tagsMap.values()) {
-      if (tagInfo.tag.includes("_user_")) {
-        userTags.push(tagInfo);
-      } else if (tagInfo.tag.includes("_project_")) {
-        projectTags.push(tagInfo);
-      }
-    }
-
-    return {
-      success: true,
-      data: { user: userTags, project: projectTags }
-    };
-  } catch (error) {
-    log("handleListTags: error", { error: String(error) });
-    return { success: false, error: String(error) };
-  }
-}
-
 function safeToISOString(timestamp: any): string {
   try {
     if (timestamp === null || timestamp === undefined) {
@@ -128,30 +74,99 @@ function safeJSONParse(jsonString: any): any {
   }
 }
 
+function extractScopeFromTag(tag: string): { scope: 'user' | 'project', hash: string } {
+  const parts = tag.split('_');
+  if (parts.length >= 3) {
+    const scope = parts[1] as 'user' | 'project';
+    const hash = parts.slice(2).join('_');
+    return { scope, hash };
+  }
+  return { scope: 'user', hash: tag };
+}
+
+export async function handleListTags(): Promise<ApiResponse<{ user: TagInfo[]; project: TagInfo[] }>> {
+  try {
+    await embeddingService.warmup();
+
+    const userShards = shardManager.getAllShards('user', '');
+    const projectShards = shardManager.getAllShards('project', '');
+    const allShards = [...userShards, ...projectShards];
+
+    const tagsMap = new Map<string, TagInfo>();
+
+    for (const shard of allShards) {
+      const db = connectionManager.getConnection(shard.dbPath);
+      const tags = vectorSearch.getDistinctTags(db);
+
+      for (const t of tags) {
+        if (t.container_tag && !tagsMap.has(t.container_tag)) {
+          tagsMap.set(t.container_tag, {
+            tag: t.container_tag,
+            displayName: t.display_name,
+            userName: t.user_name,
+            userEmail: t.user_email,
+            projectPath: t.project_path,
+            projectName: t.project_name,
+            gitRepoUrl: t.git_repo_url,
+          });
+        }
+      }
+    }
+
+    const userTags: TagInfo[] = [];
+    const projectTags: TagInfo[] = [];
+
+    for (const tagInfo of tagsMap.values()) {
+      if (tagInfo.tag.includes("_user_")) {
+        userTags.push(tagInfo);
+      } else if (tagInfo.tag.includes("_project_")) {
+        projectTags.push(tagInfo);
+      }
+    }
+
+    return {
+      success: true,
+      data: { user: userTags, project: projectTags }
+    };
+  } catch (error) {
+    log("handleListTags: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
 export async function handleListMemories(
   tag?: string,
   page: number = 1,
   pageSize: number = 20
 ): Promise<ApiResponse<PaginatedResponse<Memory>>> {
   try {
-    await memoryClient.warmup();
-    await (memoryClient as any).refreshTable();
+    await embeddingService.warmup();
 
-    const table = (memoryClient as any).table;
-    if (!table) {
-      return { success: false, error: "Database not initialized" };
-    }
+    let allResults: any[] = [];
 
-    let query = table.query();
-    
     if (tag) {
-      query = query.where(`\`containerTag\` = '${tag}'`);
+      const { scope, hash } = extractScopeFromTag(tag);
+      const shards = shardManager.getAllShards(scope, hash);
+
+      for (const shard of shards) {
+        const db = connectionManager.getConnection(shard.dbPath);
+        const memories = vectorSearch.listMemories(db, tag, 10000);
+        allResults.push(...memories);
+      }
+    } else {
+      const userShards = shardManager.getAllShards('user', '');
+      const projectShards = shardManager.getAllShards('project', '');
+      const allShards = [...userShards, ...projectShards];
+
+      for (const shard of allShards) {
+        const db = connectionManager.getConnection(shard.dbPath);
+        const memories = vectorSearch.getAllMemories(db);
+        allResults.push(...memories);
+      }
     }
 
-    const allResults = await query.toArray();
-    
     const sortedResults = allResults.sort((a: any, b: any) => 
-      Number(b.createdAt) - Number(a.createdAt)
+      Number(b.created_at) - Number(a.created_at)
     );
     
     const total = sortedResults.length;
@@ -164,15 +179,15 @@ export async function handleListMemories(
       id: r.id,
       content: r.content,
       type: r.type,
-      scope: r.containerTag?.includes("_user_") ? "user" : "project",
-      createdAt: safeToISOString(r.createdAt),
+      scope: r.container_tag?.includes("_user_") ? "user" : "project",
+      createdAt: safeToISOString(r.created_at),
       metadata: safeJSONParse(r.metadata),
-      displayName: r.displayName,
-      userName: r.userName,
-      userEmail: r.userEmail,
-      projectPath: r.projectPath,
-      projectName: r.projectName,
-      gitRepoUrl: r.gitRepoUrl,
+      displayName: r.display_name,
+      userName: r.user_name,
+      userEmail: r.user_email,
+      projectPath: r.project_path,
+      projectName: r.project_name,
+      gitRepoUrl: r.git_repo_url,
     }));
 
     return {
@@ -207,10 +222,24 @@ export async function handleAddMemory(data: {
       return { success: false, error: "content and containerTag are required" };
     }
 
-    const result = await memoryClient.addMemory(
-      data.content,
-      data.containerTag,
-      { 
+    await embeddingService.warmup();
+
+    const vector = await embeddingService.embedWithTimeout(data.content);
+    const { scope, hash } = extractScopeFromTag(data.containerTag);
+    const shard = shardManager.getWriteShard(scope, hash);
+
+    const id = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const now = Date.now();
+
+    const record = {
+      id,
+      content: data.content,
+      vector,
+      containerTag: data.containerTag,
+      type: data.type,
+      createdAt: now,
+      updatedAt: now,
+      metadata: JSON.stringify({
         type: data.type,
         displayName: data.displayName,
         userName: data.userName,
@@ -218,14 +247,20 @@ export async function handleAddMemory(data: {
         projectPath: data.projectPath,
         projectName: data.projectName,
         gitRepoUrl: data.gitRepoUrl,
-      }
-    );
+      }),
+      displayName: data.displayName,
+      userName: data.userName,
+      userEmail: data.userEmail,
+      projectPath: data.projectPath,
+      projectName: data.projectName,
+      gitRepoUrl: data.gitRepoUrl,
+    };
 
-    if (!result.success) {
-      return { success: false, error: result.error || "Failed to add memory" };
-    }
+    const db = connectionManager.getConnection(shard.dbPath);
+    vectorSearch.insertVector(db, record);
+    shardManager.incrementVectorCount(shard.id);
 
-    return { success: true, data: { id: result.id } };
+    return { success: true, data: { id } };
   } catch (error) {
     log("handleAddMemory: error", { error: String(error) });
     return { success: false, error: String(error) };
@@ -238,13 +273,22 @@ export async function handleDeleteMemory(id: string): Promise<ApiResponse<void>>
       return { success: false, error: "id is required" };
     }
 
-    const result = await memoryClient.deleteMemory(id);
+    const userShards = shardManager.getAllShards('user', '');
+    const projectShards = shardManager.getAllShards('project', '');
+    const allShards = [...userShards, ...projectShards];
 
-    if (!result.success) {
-      return { success: false, error: result.error || "Failed to delete memory" };
+    for (const shard of allShards) {
+      const db = connectionManager.getConnection(shard.dbPath);
+      const memory = vectorSearch.getMemoryById(db, id);
+
+      if (memory) {
+        vectorSearch.deleteVector(db, id);
+        shardManager.decrementVectorCount(shard.id);
+        return { success: true };
+      }
     }
 
-    return { success: true };
+    return { success: false, error: "Memory not found" };
   } catch (error) {
     log("handleDeleteMemory: error", { error: String(error) });
     return { success: false, error: String(error) };
@@ -259,7 +303,7 @@ export async function handleBulkDelete(ids: string[]): Promise<ApiResponse<{ del
 
     let deleted = 0;
     for (const id of ids) {
-      const result = await memoryClient.deleteMemory(id);
+      const result = await handleDeleteMemory(id);
       if (result.success) {
         deleted++;
       }
@@ -281,46 +325,56 @@ export async function handleUpdateMemory(
       return { success: false, error: "id is required" };
     }
 
-    await memoryClient.warmup();
-    await (memoryClient as any).refreshTable();
+    await embeddingService.warmup();
 
-    const table = (memoryClient as any).table;
-    if (!table) {
-      return { success: false, error: "Database not initialized" };
+    const userShards = shardManager.getAllShards('user', '');
+    const projectShards = shardManager.getAllShards('project', '');
+    const allShards = [...userShards, ...projectShards];
+
+    let foundShard = null;
+    let existingMemory = null;
+
+    for (const shard of allShards) {
+      const db = connectionManager.getConnection(shard.dbPath);
+      const memory = vectorSearch.getMemoryById(db, id);
+
+      if (memory) {
+        foundShard = shard;
+        existingMemory = memory;
+        break;
+      }
     }
 
-    const existing = await table.query().where(`\`id\` = '${id}'`).toArray();
-    
-    if (existing.length === 0) {
+    if (!foundShard || !existingMemory) {
       return { success: false, error: "Memory not found" };
     }
 
-    const memory = existing[0];
-    
-    await memoryClient.deleteMemory(id);
+    const db = connectionManager.getConnection(foundShard.dbPath);
+    vectorSearch.deleteVector(db, id);
+    shardManager.decrementVectorCount(foundShard.id);
 
-    const embedder = (memoryClient as any).embedder;
-    const vector = await embedder.embed(data.content || memory.content);
+    const newContent = data.content || existingMemory.content;
+    const vector = await embeddingService.embedWithTimeout(newContent);
 
-    const updatedMemory = {
+    const updatedRecord = {
       id,
-      content: data.content || memory.content,
+      content: newContent,
       vector,
-      containerTag: memory.containerTag,
-      type: data.type || memory.type,
-      createdAt: memory.createdAt,
+      containerTag: existingMemory.container_tag,
+      type: data.type || existingMemory.type,
+      createdAt: existingMemory.created_at,
       updatedAt: Date.now(),
-      metadata: memory.metadata,
-      displayName: memory.displayName,
-      userName: memory.userName,
-      userEmail: memory.userEmail,
-      projectPath: memory.projectPath,
-      projectName: memory.projectName,
-      gitRepoUrl: memory.gitRepoUrl,
+      metadata: existingMemory.metadata,
+      displayName: existingMemory.display_name,
+      userName: existingMemory.user_name,
+      userEmail: existingMemory.user_email,
+      projectPath: existingMemory.project_path,
+      projectName: existingMemory.project_name,
+      gitRepoUrl: existingMemory.git_repo_url,
     };
 
-    await table.add([updatedMemory]);
-    await (memoryClient as any).refreshTable();
+    vectorSearch.insertVector(db, updatedRecord);
+    shardManager.incrementVectorCount(foundShard.id);
 
     return { success: true };
   } catch (error) {
@@ -340,27 +394,56 @@ export async function handleSearch(
       return { success: false, error: "query is required" };
     }
 
-    await memoryClient.warmup();
-    await (memoryClient as any).refreshTable();
+    await embeddingService.warmup();
 
-    const table = (memoryClient as any).table;
-    if (!table) {
-      return { success: false, error: "Database not initialized" };
-    }
+    const queryVector = await embeddingService.embedWithTimeout(query);
+    let allResults: any[] = [];
 
-    const embedder = (memoryClient as any).embedder;
-    const queryVector = await embedder.embed(query);
-
-    let dbQuery = table.query().nearestTo(queryVector);
-    
     if (tag) {
-      dbQuery = dbQuery.where(`\`containerTag\` = '${tag}'`);
+      const { scope, hash } = extractScopeFromTag(tag);
+      const shards = shardManager.getAllShards(scope, hash);
+
+      for (const shard of shards) {
+        try {
+          const results = vectorSearch.searchInShard(shard, queryVector, tag, pageSize * 2);
+          allResults.push(...results);
+        } catch (error) {
+          log("Shard search error", { shardId: shard.id, error: String(error) });
+        }
+      }
+    } else {
+      const userShards = shardManager.getAllShards('user', '');
+      const projectShards = shardManager.getAllShards('project', '');
+      const allShards = [...userShards, ...projectShards];
+
+      const uniqueTags = new Set<string>();
+      for (const shard of allShards) {
+        const db = connectionManager.getConnection(shard.dbPath);
+        const tags = vectorSearch.getDistinctTags(db);
+        for (const t of tags) {
+          if (t.container_tag) {
+            uniqueTags.add(t.container_tag);
+          }
+        }
+      }
+
+      for (const containerTag of uniqueTags) {
+        const { scope, hash } = extractScopeFromTag(containerTag);
+        const shards = shardManager.getAllShards(scope, hash);
+
+        for (const shard of shards) {
+          try {
+            const results = vectorSearch.searchInShard(shard, queryVector, containerTag, pageSize);
+            allResults.push(...results);
+          } catch (error) {
+            log("Shard search error", { shardId: shard.id, error: String(error) });
+          }
+        }
+      }
     }
 
-    const allResults = await dbQuery.limit(1000).toArray();
-    
     const sortedResults = allResults.sort((a: any, b: any) => 
-      Number(b.createdAt) - Number(a.createdAt)
+      b.similarity - a.similarity
     );
 
     const total = sortedResults.length;
@@ -371,12 +454,12 @@ export async function handleSearch(
 
     const memories = paginatedResults.map((r: any) => ({
       id: r.id,
-      content: r.content,
-      type: r.type,
-      scope: r.containerTag?.includes("_user_") ? "user" : "project",
-      createdAt: safeToISOString(r.createdAt),
-      similarity: Math.round((1 - (r._distance || 0)) * 100),
-      metadata: safeJSONParse(r.metadata),
+      content: r.memory,
+      type: r.metadata?.type,
+      scope: r.metadata?.containerTag?.includes("_user_") ? "user" : "project",
+      createdAt: safeToISOString(r.metadata?.createdAt),
+      similarity: Math.round(r.similarity * 100),
+      metadata: r.metadata,
       displayName: r.displayName,
       userName: r.userName,
       userEmail: r.userEmail,
@@ -407,36 +490,37 @@ export async function handleStats(): Promise<ApiResponse<{
   byType: Record<string, number>;
 }>> {
   try {
-    await memoryClient.warmup();
-    await (memoryClient as any).refreshTable();
+    await embeddingService.warmup();
 
-    const table = (memoryClient as any).table;
-    if (!table) {
-      return { success: false, error: "Database not initialized" };
-    }
-
-    const results = await table.query().toArray();
+    const userShards = shardManager.getAllShards('user', '');
+    const projectShards = shardManager.getAllShards('project', '');
+    const allShards = [...userShards, ...projectShards];
 
     let userCount = 0;
     let projectCount = 0;
     const typeCount: Record<string, number> = {};
 
-    for (const r of results) {
-      if (r.containerTag?.includes("_user_")) {
-        userCount++;
-      } else if (r.containerTag?.includes("_project_")) {
-        projectCount++;
-      }
+    for (const shard of allShards) {
+      const db = connectionManager.getConnection(shard.dbPath);
+      const memories = vectorSearch.getAllMemories(db);
 
-      if (r.type) {
-        typeCount[r.type] = (typeCount[r.type] || 0) + 1;
+      for (const r of memories) {
+        if (r.container_tag?.includes("_user_")) {
+          userCount++;
+        } else if (r.container_tag?.includes("_project_")) {
+          projectCount++;
+        }
+
+        if (r.type) {
+          typeCount[r.type] = (typeCount[r.type] || 0) + 1;
+        }
       }
     }
 
     return {
       success: true,
       data: {
-        total: results.length,
+        total: userCount + projectCount,
         byScope: { user: userCount, project: projectCount },
         byType: typeCount
       }

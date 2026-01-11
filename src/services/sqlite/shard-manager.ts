@@ -19,7 +19,7 @@ export class ShardManager {
   }
 
   private initMetadataDb(): void {
-    this.metadataDb.exec(`
+    this.metadataDb.run(`
       CREATE TABLE IF NOT EXISTS shards (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         scope TEXT NOT NULL,
@@ -33,7 +33,7 @@ export class ShardManager {
       )
     `);
 
-    this.metadataDb.exec(`
+    this.metadataDb.run(`
       CREATE INDEX IF NOT EXISTS idx_active_shards 
       ON shards(scope, scope_hash, is_active)
     `);
@@ -67,13 +67,25 @@ export class ShardManager {
   }
 
   getAllShards(scope: 'user' | 'project', scopeHash: string): ShardInfo[] {
-    const stmt = this.metadataDb.prepare(`
-      SELECT * FROM shards 
-      WHERE scope = ? AND scope_hash = ?
-      ORDER BY shard_index ASC
-    `);
+    let stmt;
+    let rows;
     
-    const rows = stmt.all(scope, scopeHash) as any[];
+    if (scopeHash === '') {
+      stmt = this.metadataDb.prepare(`
+        SELECT * FROM shards 
+        WHERE scope = ?
+        ORDER BY shard_index ASC
+      `);
+      rows = stmt.all(scope) as any[];
+    } else {
+      stmt = this.metadataDb.prepare(`
+        SELECT * FROM shards 
+        WHERE scope = ? AND scope_hash = ?
+        ORDER BY shard_index ASC
+      `);
+      rows = stmt.all(scope, scopeHash) as any[];
+    }
+    
     return rows.map((row: any) => ({
       id: row.id,
       scope: row.scope,
@@ -115,7 +127,7 @@ export class ShardManager {
   }
 
   private initShardDb(db: Database): void {
-    db.exec(`
+    db.run(`
       CREATE TABLE IF NOT EXISTS memories (
         id TEXT PRIMARY KEY,
         content TEXT NOT NULL,
@@ -134,16 +146,16 @@ export class ShardManager {
       )
     `);
 
-    db.exec(`
+    db.run(`
       CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories USING vec0(
         memory_id TEXT PRIMARY KEY,
         embedding FLOAT[384]
       )
     `);
 
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_container_tag ON memories(container_tag)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_type ON memories(type)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_created_at ON memories(created_at DESC)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_container_tag ON memories(container_tag)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_type ON memories(type)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_created_at ON memories(created_at DESC)`);
   }
 
   getWriteShard(scope: 'user' | 'project', scopeHash: string): ShardInfo {
