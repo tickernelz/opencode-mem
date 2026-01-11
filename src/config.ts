@@ -22,7 +22,6 @@ interface OpenCodeMemConfig {
   storagePath?: string;
   embeddingModel?: string;
   embeddingDimensions?: number;
-  embeddingPrefix?: string;
   embeddingApiUrl?: string;
   embeddingApiKey?: string;
   similarityThreshold?: number;
@@ -31,7 +30,6 @@ interface OpenCodeMemConfig {
   maxProfileItems?: number;
   injectProfile?: boolean;
   containerTagPrefix?: string;
-  filterPrompt?: string;
   keywordPatterns?: string[];
   autoCaptureEnabled?: boolean;
   autoCaptureTokenThreshold?: number;
@@ -71,7 +69,7 @@ const DEFAULT_KEYWORD_PATTERNS = [
   "always\\s+remember",
 ];
 
-const DEFAULTS: Required<Omit<OpenCodeMemConfig, "embeddingApiUrl" | "embeddingApiKey" | "memoryModel" | "memoryApiUrl" | "memoryApiKey" | "embeddingPrefix">> & { embeddingApiUrl?: string; embeddingApiKey?: string; memoryModel?: string; memoryApiUrl?: string; memoryApiKey?: string; embeddingPrefix?: string } = {
+const DEFAULTS: Required<Omit<OpenCodeMemConfig, "embeddingApiUrl" | "embeddingApiKey" | "memoryModel" | "memoryApiUrl" | "memoryApiKey">> & { embeddingApiUrl?: string; embeddingApiKey?: string; memoryModel?: string; memoryApiUrl?: string; memoryApiKey?: string } = {
   storagePath: join(DATA_DIR, "data"),
   embeddingModel: "Xenova/nomic-embed-text-v1",
   embeddingDimensions: 768,
@@ -81,7 +79,6 @@ const DEFAULTS: Required<Omit<OpenCodeMemConfig, "embeddingApiUrl" | "embeddingA
   maxProfileItems: 5,
   injectProfile: true,
   containerTagPrefix: "opencode",
-  filterPrompt: "You are a stateful coding agent. Remember all the information, including but not limited to user's coding preferences, tech stack, behaviours, workflows, and any other relevant details.",
   keywordPatterns: [],
   autoCaptureEnabled: true,
   autoCaptureTokenThreshold: 15000,
@@ -267,15 +264,10 @@ function getEmbeddingDimensions(model: string): number {
   return dimensionMap[model] || 768;
 }
 
-function getEmbeddingPrefix(model: string): string | undefined {
-  return undefined;
-}
-
 export const CONFIG = {
   storagePath: expandPath(fileConfig.storagePath ?? DEFAULTS.storagePath),
   embeddingModel: fileConfig.embeddingModel ?? DEFAULTS.embeddingModel,
   embeddingDimensions: fileConfig.embeddingDimensions ?? getEmbeddingDimensions(fileConfig.embeddingModel ?? DEFAULTS.embeddingModel),
-  embeddingPrefix: fileConfig.embeddingPrefix ?? getEmbeddingPrefix(fileConfig.embeddingModel ?? DEFAULTS.embeddingModel),
   embeddingApiUrl: fileConfig.embeddingApiUrl,
   embeddingApiKey: fileConfig.embeddingApiKey ?? process.env.OPENAI_API_KEY,
   similarityThreshold: fileConfig.similarityThreshold ?? DEFAULTS.similarityThreshold,
@@ -284,7 +276,6 @@ export const CONFIG = {
   maxProfileItems: fileConfig.maxProfileItems ?? DEFAULTS.maxProfileItems,
   injectProfile: fileConfig.injectProfile ?? DEFAULTS.injectProfile,
   containerTagPrefix: fileConfig.containerTagPrefix ?? DEFAULTS.containerTagPrefix,
-  filterPrompt: fileConfig.filterPrompt ?? DEFAULTS.filterPrompt,
   keywordPatterns: [
     ...DEFAULT_KEYWORD_PATTERNS,
     ...(fileConfig.keywordPatterns ?? []).filter(isValidRegex),
