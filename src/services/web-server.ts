@@ -1,7 +1,6 @@
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "./logger.js";
-import { WebServerLock } from "./web-server-lock.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -28,13 +27,11 @@ interface WorkerResponse {
 export class WebServer {
   private worker: Worker | null = null;
   private config: WebServerConfig;
-  private lock: WebServerLock;
   private isOwner: boolean = false;
   private startPromise: Promise<void> | null = null;
 
   constructor(config: WebServerConfig) {
     this.config = config;
-    this.lock = new WebServerLock();
   }
 
   async start(): Promise<void> {
@@ -53,13 +50,6 @@ export class WebServer {
     }
 
     try {
-      this.isOwner = await this.lock.acquire(this.config.port, this.config.host);
-
-      if (!this.isOwner) {
-        log("Web server already running, joined existing instance");
-        return;
-      }
-
       const workerPath = join(__dirname, "web-server-worker.js");
       this.worker = new Worker(workerPath);
 
@@ -73,11 +63,20 @@ export class WebServer {
           const response = event.data;
 
           if (response.type === "started") {
-            log("Web server started in worker", { url: response.url });
+            this.isOwner = true;
+            log("Web server started (owner)", { url: response.url });
             resolve();
           } else if (response.type === "error") {
-            log("Web server worker error", { error: response.error });
-            reject(new Error(response.error));
+            const errorMsg = response.error || "Unknown error";
+            
+            if (errorMsg.includes("EADDRINUSE") || errorMsg.includes("address already in use")) {
+              this.isOwner = false;
+              log("Web server already running (port in use)");
+              resolve();
+            } else {
+              log("Web server worker error", { error: errorMsg });
+              reject(new Error(errorMsg));
+            }
           }
         };
 
@@ -102,51 +101,69 @@ export class WebServer {
         this.worker.terminate();
         this.worker = null;
       }
-      await this.lock.release();
       log("Web server failed to start", { error: String(error) });
       throw error;
     }
   }
 
   async stop(): Promise<void> {
-    const shouldStop = await this.lock.release();
+    if (!this.isOwner || !this.worker) {
+      log("Web server stop skipped (not owner or no worker)");
+      return;
+    }
 
-    if (shouldStop && this.worker) {
-      return new Promise<void>((resolve) => {
-        const timeout = setTimeout(() => {
+    return new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        if (this.worker) {
+          this.worker.terminate();
+          this.worker = null;
+        }
+        log("Web server stopped (timeout, forced termination)");
+        resolve();
+      }, 5000);
+
+      this.worker!.onmessage = (event: MessageEvent<WorkerResponse>) => {
+        clearTimeout(timeout);
+        const response = event.data;
+
+        if (response.type === "stopped") {
           if (this.worker) {
             this.worker.terminate();
             this.worker = null;
           }
-          log("Web server stopped (timeout, forced termination)");
+          log("Web server stopped (owner exiting)");
           resolve();
-        }, 5000);
+        }
+      };
 
-        this.worker!.onmessage = (event: MessageEvent<WorkerResponse>) => {
-          clearTimeout(timeout);
-          const response = event.data;
+      this.worker!.postMessage({
+        type: "stop",
+      } as WorkerMessage);
+    });
+  }
 
-          if (response.type === "stopped") {
-            if (this.worker) {
-              this.worker.terminate();
-              this.worker = null;
-            }
-            log("Web server stopped (last instance)");
-            resolve();
-          }
-        };
+  isRunning(): boolean {
+    return this.worker !== null;
+  }
 
-        this.worker!.postMessage({
-          type: "stop",
-        } as WorkerMessage);
-      });
-    } else if (!shouldStop) {
-      log("Web server kept alive (other instances running)");
-    }
+  isServerOwner(): boolean {
+    return this.isOwner;
   }
 
   getUrl(): string {
     return `http://${this.config.host}:${this.config.port}`;
+  }
+
+  async checkServerAvailable(): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.getUrl()}/api/stats`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(2000),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
   }
 }
 

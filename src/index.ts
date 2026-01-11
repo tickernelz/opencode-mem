@@ -63,47 +63,46 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     }).then((server) => {
       webServer = server;
       const url = webServer.getUrl();
-      log("Web server initialized", { url });
       
-      if (ctx.client?.tui) {
-        ctx.client.tui.showToast({
-          body: {
-            title: "Memory Explorer",
-            message: `Web UI at ${url}`,
-            variant: "success",
-            duration: 5000,
-          },
-        }).catch(() => {});
-      }
-    }).catch((error) => {
-      const errorMsg = String(error);
-      
-      if (errorMsg.includes("already running")) {
-        log("Web server already running on another instance");
+      if (webServer.isServerOwner()) {
+        log("Web server started (owner)", { url });
         
         if (ctx.client?.tui) {
           ctx.client.tui.showToast({
             body: {
               title: "Memory Explorer",
-              message: `Web UI already running at http://${CONFIG.webServerHost}:${CONFIG.webServerPort}`,
+              message: `Web UI started at ${url}`,
+              variant: "success",
+              duration: 5000,
+            },
+          }).catch(() => {});
+        }
+      } else {
+        log("Web server already running (joined)", { url });
+        
+        if (ctx.client?.tui) {
+          ctx.client.tui.showToast({
+            body: {
+              title: "Memory Explorer",
+              message: `Web UI available at ${url}`,
               variant: "info",
               duration: 3000,
             },
           }).catch(() => {});
         }
-      } else {
-        log("Web server failed to start", { error: errorMsg });
-        
-        if (ctx.client?.tui) {
-          ctx.client.tui.showToast({
-            body: {
-              title: "Memory Explorer Error",
-              message: `Failed to start: ${errorMsg}`,
-              variant: "error",
-              duration: 5000,
-            },
-          }).catch(() => {});
-        }
+      }
+    }).catch((error) => {
+      log("Web server failed to start", { error: String(error) });
+      
+      if (ctx.client?.tui) {
+        ctx.client.tui.showToast({
+          body: {
+            title: "Memory Explorer Error",
+            message: `Failed to start: ${String(error)}`,
+            variant: "error",
+            duration: 5000,
+          },
+        }).catch(() => {});
       }
     });
   }
