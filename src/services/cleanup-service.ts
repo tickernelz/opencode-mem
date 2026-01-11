@@ -3,11 +3,13 @@ import { vectorSearch } from "./sqlite/vector-search.js";
 import { connectionManager } from "./sqlite/connection-manager.js";
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
+import { userPromptManager } from "./user-prompt/user-prompt-manager.js";
 
 interface CleanupResult {
   deletedCount: number;
   userCount: number;
   projectCount: number;
+  promptsDeleted: number;
 }
 
 export class CleanupService {
@@ -40,6 +42,8 @@ export class CleanupService {
       log("Cleanup: starting", { retentionDays: CONFIG.autoCleanupRetentionDays });
 
       const cutoffTime = Date.now() - CONFIG.autoCleanupRetentionDays * 24 * 60 * 60 * 1000;
+
+      const promptsDeleted = userPromptManager.deleteOldPrompts(cutoffTime);
 
       const userShards = shardManager.getAllShards("user", "");
       const projectShards = shardManager.getAllShards("project", "");
@@ -84,6 +88,7 @@ export class CleanupService {
         totalDeleted,
         userDeleted,
         projectDeleted,
+        promptsDeleted,
         cutoffTime: new Date(cutoffTime).toISOString(),
       });
 
@@ -91,6 +96,7 @@ export class CleanupService {
         deletedCount: totalDeleted,
         userCount: userDeleted,
         projectCount: projectDeleted,
+        promptsDeleted,
       };
     } finally {
       this.isRunning = false;

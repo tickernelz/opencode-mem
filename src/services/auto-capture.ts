@@ -56,7 +56,10 @@ export async function performAutoCapture(
       return;
     }
 
-    const context = buildMarkdownContext(prompt.content, textResponses, toolCalls);
+    const tags = getTags(directory);
+    const latestMemory = await getLatestProjectMemory(tags.project.tag);
+
+    const context = buildMarkdownContext(prompt.content, textResponses, toolCalls, latestMemory);
 
     const summary = await generateSummary(ctx, context, sessionID);
 
@@ -65,7 +68,6 @@ export async function performAutoCapture(
       return;
     }
 
-    const tags = getTags(directory);
     const result = await memoryClient.addMemory(summary, tags.project.tag, {
       source: "auto-capture" as any,
       sessionID,
@@ -158,12 +160,41 @@ function extractAIContent(messages: any[]): {
   return { textResponses, toolCalls };
 }
 
+async function getLatestProjectMemory(containerTag: string): Promise<string | null> {
+  try {
+    const result = await memoryClient.searchMemories("", containerTag);
+    if (!result.success || result.results.length === 0) {
+      return null;
+    }
+
+    const latest = result.results[0];
+    if (!latest) {
+      return null;
+    }
+
+    const content = latest.memory;
+
+    if (content.length <= 500) {
+      return content;
+    }
+
+    return content.substring(0, 500) + "...";
+  } catch {
+    return null;
+  }
+}
+
 function buildMarkdownContext(
   userPrompt: string,
   textResponses: string[],
-  toolCalls: ToolCallInfo[]
+  toolCalls: ToolCallInfo[],
+  latestMemory: string | null
 ): string {
   const sections: string[] = [];
+
+  if (latestMemory) {
+    sections.push(`## Previous Memory Context\n${latestMemory}\n`);
+  }
 
   sections.push(`## User Request\n${userPrompt}\n`);
 
@@ -203,22 +234,32 @@ async function generateSummary(ctx: PluginInput, context: string, sessionID: str
 
   const provider = AIProviderFactory.createProvider(CONFIG.memoryProvider, providerConfig);
 
-  const systemPrompt = `You are a conversation summarizer for a coding assistant.
+  const systemPrompt = `You are a professional conversation summarizer for a coding assistant.
 
 Your task is to analyze the conversation and save it as a memory using the save_memory tool.
 
-The memory should:
-- Be in markdown format
-- Capture what the user requested
-- Summarize what actions were taken
-- Note the outcome or result
-- Be concise but informative
+The conversation may include a "Previous Memory Context" section showing the most recent memory from this project. Use this context to understand continuity and avoid redundancy.
+
+The summary MUST follow this exact markdown structure:
+
+## Request
+[What the user asked - 2-3 sentences maximum]
+
+## Outcome
+[What was accomplished and the result - 2-3 sentences maximum]
+
+Requirements:
+- Use professional technical language
+- Be concise and factual
+- NO emojis or decorative elements
+- Focus on technical details and results
+- Consider previous context to maintain continuity
 
 Use the save_memory tool to save the summary.`;
 
   const userPrompt = `${context}
 
-Analyze this conversation and save it as a project memory using the save_memory tool.`;
+Analyze this conversation and create a professional summary following the exact markdown template provided. Use the save_memory tool to save it.`;
 
   const toolSchema = {
     type: "function" as const,

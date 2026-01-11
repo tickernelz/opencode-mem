@@ -107,6 +107,12 @@ export class UserPromptManager {
     stmt.run(...promptIds);
   }
 
+  deleteOldPrompts(cutoffTime: number): number {
+    const stmt = this.db.prepare(`DELETE FROM user_prompts WHERE created_at < ?`);
+    const result = stmt.run(cutoffTime);
+    return result.changes;
+  }
+
   private rowToPrompt(row: any): UserPrompt {
     return {
       id: row.id,
