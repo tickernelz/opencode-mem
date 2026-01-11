@@ -25,12 +25,42 @@ margin-bottom: 20px;
 background: #111;
 }
 
+.header-top {
+display: flex;
+justify-content: space-between;
+align-items: center;
+margin-bottom: 10px;
+}
+
 .title {
 color: #00ff00;
 font-size: 18px;
 font-weight: normal;
-margin-bottom: 10px;
 letter-spacing: 1px;
+margin: 0;
+}
+
+.github-link {
+display: inline-flex;
+align-items: center;
+justify-content: center;
+padding: 8px;
+border: 1px solid #333;
+background: #0a0a0a;
+color: #00ff00;
+text-decoration: none;
+transition: all 0.2s;
+}
+
+.github-link:hover {
+background: #00ff00;
+color: #0a0a0a;
+border-color: #00ff00;
+}
+
+.github-link .icon {
+width: 20px;
+height: 20px;
 }
 
 .stats-bar {
@@ -762,6 +792,25 @@ margin-right: 0;
 body {
 padding: 10px;
 font-size: 12px;
+}
+
+.header-top {
+flex-direction: row;
+justify-content: space-between;
+align-items: center;
+}
+
+.title {
+font-size: 14px;
+}
+
+.github-link {
+padding: 6px;
+}
+
+.github-link .icon {
+width: 18px;
+height: 18px;
 }
 
 .controls {
