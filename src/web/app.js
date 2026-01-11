@@ -117,13 +117,13 @@ function renderMemories() {
     }
     
     const pinButton = isPinned 
-      ? `<button class="btn-pin pinned" onclick="unpinMemory('${memory.id}')" title="Unpin">📌</button>`
-      : `<button class="btn-pin" onclick="pinMemory('${memory.id}')" title="Pin">📍</button>`;
+      ? `<button class="btn-pin pinned" onclick="unpinMemory('${memory.id}')" title="Unpin"><i data-lucide="pin" class="icon icon-filled"></i></button>`
+      : `<button class="btn-pin" onclick="pinMemory('${memory.id}')" title="Pin"><i data-lucide="pin" class="icon"></i></button>`;
     
     return `
       <div class="memory-card ${isSelected ? 'selected' : ''} ${isPinned ? 'pinned' : ''}" data-id="${memory.id}">
         <div class="memory-header">
-          <div class="memory-meta">
+          <div class="meta">
             <input type="checkbox" class="memory-checkbox" data-id="${memory.id}" ${isSelected ? 'checked' : ''} />
             <span class="badge badge-${memory.scope}">${memory.scope}</span>
             ${memory.type ? `<span class="badge badge-type">${memory.type}</span>` : ''}
@@ -134,8 +134,8 @@ function renderMemories() {
           </div>
           <div class="memory-actions">
             ${pinButton}
-            <button class="btn-edit" onclick="editMemory('${memory.id}')">Edit</button>
-            <button class="btn-delete" onclick="deleteMemory('${memory.id}')">Delete</button>
+            <button class="btn-edit" onclick="editMemory('${memory.id}')"><i data-lucide="edit-3" class="icon"></i></button>
+            <button class="btn-delete" onclick="deleteMemory('${memory.id}')"><i data-lucide="trash-2" class="icon"></i></button>
           </div>
         </div>
         <div class="memory-content">${escapeHtml(memory.content)}</div>
@@ -150,6 +150,8 @@ function renderMemories() {
   document.querySelectorAll('.memory-checkbox').forEach(checkbox => {
     checkbox.addEventListener('change', handleCheckboxChange);
   });
+  
+  lucide.createIcons();
 }
 
 function handleCheckboxChange(e) {
@@ -528,17 +530,6 @@ function startAutoRefresh() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  document.getElementById('add-form').addEventListener('submit', addMemory);
-  document.getElementById('edit-form').addEventListener('submit', saveEdit);
-  document.getElementById('modal-close').addEventListener('click', closeModal);
-  document.getElementById('cancel-edit').addEventListener('click', closeModal);
-  
-  document.getElementById('search-btn').addEventListener('click', performSearch);
-  document.getElementById('clear-search-btn').addEventListener('click', clearSearch);
-  document.getElementById('search-input').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') performSearch();
-  });
-  
   document.getElementById('scope-filter').addEventListener('change', handleFilterChange);
   document.getElementById('tag-filter').addEventListener('change', () => {
     state.selectedTag = document.getElementById('tag-filter').value;
@@ -547,6 +538,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   
   document.getElementById('add-scope').addEventListener('change', handleAddScopeChange);
+  
+  document.getElementById('search-btn').addEventListener('click', performSearch);
+  document.getElementById('clear-search-btn').addEventListener('click', clearSearch);
+  document.getElementById('search-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') performSearch();
+  });
+  
+  document.getElementById('add-form').addEventListener('submit', addMemory);
+  document.getElementById('edit-form').addEventListener('submit', saveEdit);
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('cancel-edit').addEventListener('click', closeModal);
   
   document.getElementById('prev-page-top').addEventListener('click', () => changePage(-1));
   document.getElementById('next-page-top').addEventListener('click', () => changePage(1));
@@ -568,4 +570,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadStats();
   
   startAutoRefresh();
+  
+  lucide.createIcons();
 });

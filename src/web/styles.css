@@ -234,6 +234,10 @@ text-align: center;
 .pagination button {
 padding: 4px 12px;
 font-size: 12px;
+display: inline-flex;
+align-items: center;
+justify-content: center;
+min-width: 36px;
 }
 
 #pagination-bottom {
@@ -377,6 +381,10 @@ gap: 5px;
 .memory-actions button {
 padding: 4px 10px;
 font-size: 11px;
+display: inline-flex;
+align-items: center;
+justify-content: center;
+gap: 4px;
 }
 
 .btn-edit {
@@ -404,6 +412,10 @@ border-color: #ff00ff;
 color: #ff00ff;
 font-size: 14px;
 padding: 4px 8px;
+min-width: 32px;
+display: inline-flex;
+align-items: center;
+justify-content: center;
 }
 
 .btn-pin:hover {
@@ -414,6 +426,19 @@ color: #0a0a0a;
 .btn-pin.pinned {
 background: #ff00ff;
 color: #0a0a0a;
+}
+
+.btn-pin.pinned .icon {
+fill: #0a0a0a;
+}
+
+.btn-edit,
+.btn-delete {
+min-width: 32px;
+display: inline-flex;
+align-items: center;
+justify-content: center;
+gap: 4px;
 }
 
 .similarity-score {
@@ -519,6 +544,14 @@ padding: 0;
 width: 30px;
 height: 30px;
 cursor: pointer;
+display: inline-flex;
+align-items: center;
+justify-content: center;
+}
+
+.modal-close .icon {
+width: 18px;
+height: 18px;
 }
 
 .modal-close:hover {
@@ -585,6 +618,56 @@ transform: rotate(0deg);
 to {
 transform: rotate(360deg);
 }
+}
+
+.icon {
+width: 16px;
+height: 16px;
+stroke: currentColor;
+stroke-width: 2;
+stroke-linecap: round;
+stroke-linejoin: round;
+fill: none;
+vertical-align: middle;
+display: inline-block;
+}
+
+.icon-sm {
+width: 14px;
+height: 14px;
+}
+
+.icon-md {
+width: 16px;
+height: 16px;
+}
+
+.icon-lg {
+width: 20px;
+height: 20px;
+}
+
+.icon-spin {
+animation: spin 1s linear infinite;
+}
+
+.icon-filled {
+fill: currentColor;
+}
+
+button .icon {
+margin-right: 4px;
+}
+
+button:only-child .icon,
+.btn-pin .icon,
+.btn-edit .icon,
+.btn-delete .icon,
+.modal-close .icon,
+#search-btn .icon,
+#clear-search-btn .icon,
+.pagination button .icon {
+margin-right: 0;
 }
 
 @media (max-width: 768px) {

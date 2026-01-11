@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OpenCode Memory Explorer</title>
 <link rel="stylesheet" href="/styles.css">
+<script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
 <div class="container">
@@ -14,7 +15,7 @@
 <span id="stats-total">Total: 0</span>
 <span id="stats-user">User: 0</span>
 <span id="stats-project">Project: 0</span>
-<span id="refresh-indicator" class="hidden">⟳</span>
+<span id="refresh-indicator" class="hidden"><i data-lucide="rotate-cw" class="icon icon-spin"></i></span>
 </div>
 </header>
 
@@ -37,19 +38,19 @@
 
 <div class="search-group">
 <input type="text" id="search-input" placeholder="Search memories..." />
-<button id="search-btn">🔍</button>
-<button id="clear-search-btn" class="hidden">✕</button>
+<button id="search-btn"><i data-lucide="search" class="icon"></i></button>
+<button id="clear-search-btn" class="hidden"><i data-lucide="x" class="icon"></i></button>
 </div>
 
 <div class="maintenance-actions">
-<button id="cleanup-btn" class="btn-maintenance">🧹 Cleanup</button>
-<button id="deduplicate-btn" class="btn-maintenance">🔄 Deduplicate</button>
+<button id="cleanup-btn" class="btn-maintenance"><i data-lucide="trash" class="icon"></i> Cleanup</button>
+<button id="deduplicate-btn" class="btn-maintenance"><i data-lucide="refresh-cw" class="icon"></i> Deduplicate</button>
 </div>
 
 <div class="bulk-actions hidden" id="bulk-actions">
 <span id="selected-count">0 selected</span>
-<button id="bulk-delete-btn">Delete Selected</button>
-<button id="deselect-all-btn">Deselect All</button>
+<button id="bulk-delete-btn"><i data-lucide="trash-2" class="icon"></i> Delete Selected</button>
+<button id="deselect-all-btn"><i data-lucide="x" class="icon"></i> Deselect All</button>
 </div>
 </div>
 
@@ -57,9 +58,9 @@
 <div class="section-header">
 <h2 id="section-title">└─ MEMORIES (0) ──</h2>
 <div class="pagination" id="pagination-top">
-<button id="prev-page-top" disabled>◀</button>
+<button id="prev-page-top" disabled><i data-lucide="chevron-left" class="icon"></i></button>
 <span id="page-info-top">Page 1 of 1</span>
-<button id="next-page-top" disabled>▶</button>
+<button id="next-page-top" disabled><i data-lucide="chevron-right" class="icon"></i></button>
 </div>
 </div>
 
@@ -68,9 +69,9 @@
 </div>
 
 <div class="pagination" id="pagination-bottom">
-<button id="prev-page-bottom" disabled>◀</button>
+<button id="prev-page-bottom" disabled><i data-lucide="chevron-left" class="icon"></i></button>
 <span id="page-info-bottom">Page 1 of 1</span>
-<button id="next-page-bottom" disabled>▶</button>
+<button id="next-page-bottom" disabled><i data-lucide="chevron-right" class="icon"></i></button>
 </div>
 </div>
 
@@ -105,7 +106,7 @@
 <textarea id="add-content" rows="4" placeholder="Enter memory content..." required></textarea>
 </div>
 
-<button type="submit" class="btn-primary">Add Memory</button>
+<button type="submit" class="btn-primary"><i data-lucide="plus" class="icon"></i> Add Memory</button>
 </form>
 </div>
 </div>
@@ -114,7 +115,7 @@
 <div class="modal-content">
 <div class="modal-header">
 <h3>Edit Memory</h3>
-<button class="modal-close" id="modal-close">✕</button>
+<button class="modal-close" id="modal-close"><i data-lucide="x" class="icon"></i></button>
 </div>
 <form id="edit-form">
 <input type="hidden" id="edit-id" />
@@ -127,8 +128,8 @@
 <textarea id="edit-content" rows="6" required></textarea>
 </div>
 <div class="modal-actions">
-<button type="button" class="btn-secondary" id="cancel-edit">Cancel</button>
-<button type="submit" class="btn-primary">Save Changes</button>
+<button type="button" class="btn-secondary" id="cancel-edit"><i data-lucide="x" class="icon"></i> Cancel</button>
+<button type="submit" class="btn-primary"><i data-lucide="check" class="icon"></i> Save Changes</button>
 </div>
 </form>
 </div>
