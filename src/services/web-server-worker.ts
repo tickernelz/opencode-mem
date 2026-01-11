@@ -16,6 +16,8 @@ import {
   handleRunDeduplication,
   handleDetectMigration,
   handleRunMigration,
+  handleDeletePrompt,
+  handleBulkDeletePrompts,
 } from "./api-handlers.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -67,7 +69,9 @@ async function handleRequest(req: Request): Promise<Response> {
       const tag = url.searchParams.get("tag") || undefined;
       const page = parseInt(url.searchParams.get("page") || "1");
       const pageSize = parseInt(url.searchParams.get("pageSize") || "20");
-      const result = await handleListMemories(tag, page, pageSize);
+      const scope = url.searchParams.get("scope") as "user" | "project" | undefined;
+      const includePrompts = url.searchParams.get("includePrompts") !== "false";
+      const result = await handleListMemories(tag, page, pageSize, scope, includePrompts);
       return jsonResponse(result);
     }
 
@@ -78,11 +82,13 @@ async function handleRequest(req: Request): Promise<Response> {
     }
 
     if (path.startsWith("/api/memories/") && method === "DELETE") {
-      const id = path.split("/").pop();
-      if (!id) {
+      const parts = path.split("/");
+      const id = parts[3];
+      if (!id || id === "bulk-delete") {
         return jsonResponse({ success: false, error: "Invalid ID" });
       }
-      const result = await handleDeleteMemory(id);
+      const cascade = url.searchParams.get("cascade") === "true";
+      const result = await handleDeleteMemory(id, cascade);
       return jsonResponse(result);
     }
 
@@ -98,7 +104,8 @@ async function handleRequest(req: Request): Promise<Response> {
 
     if (path === "/api/memories/bulk-delete" && method === "POST") {
       const body = (await req.json()) as any;
-      const result = await handleBulkDelete(body.ids || []);
+      const cascade = body.cascade !== false;
+      const result = await handleBulkDelete(body.ids || [], cascade);
       return jsonResponse(result);
     }
 
@@ -161,6 +168,24 @@ async function handleRequest(req: Request): Promise<Response> {
         return jsonResponse({ success: false, error: "Invalid strategy" });
       }
       const result = await handleRunMigration(strategy);
+      return jsonResponse(result);
+    }
+
+    if (path.startsWith("/api/prompts/") && method === "DELETE") {
+      const parts = path.split("/");
+      const id = parts[3];
+      if (!id || id === "bulk-delete") {
+        return jsonResponse({ success: false, error: "Invalid ID" });
+      }
+      const cascade = url.searchParams.get("cascade") === "true";
+      const result = await handleDeletePrompt(id, cascade);
+      return jsonResponse(result);
+    }
+
+    if (path === "/api/prompts/bulk-delete" && method === "POST") {
+      const body = (await req.json()) as any;
+      const cascade = body.cascade !== false;
+      const result = await handleBulkDeletePrompts(body.ids || [], cascade);
       return jsonResponse(result);
     }
 

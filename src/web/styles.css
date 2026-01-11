@@ -291,7 +291,7 @@ button:disabled {
   border-radius: 4px;
   display: flex;
   align-items: center;
-  justent: center;
+  justify-content: center;
   gap: 8px;
   font-size: 13px;
   font-weight: bold;
@@ -849,3 +849,328 @@ button:only-child .icon,
     align-items: flex-start;
   }
 }
+
+.scope-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 20px;
+  border: 1px solid #333;
+  background: #111;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 15px 20px;
+  background: #0a0a0a;
+  border: none;
+  border-right: 1px solid #333;
+  color: #666;
+  font-size: 13px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.tab-btn:last-child {
+  border-right: none;
+}
+
+.tab-btn:hover {
+  background: #111;
+  color: #888;
+}
+
+.tab-btn.active {
+  background: #00ff00;
+  color: #0a0a0a;
+  border-color: #00ff00;
+}
+
+.tab-btn .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.badge-linked {
+  color: #ff00ff;
+  border-color: #ff00ff;
+  font-weight: bold;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.link-indicator {
+  text-align: center;
+  padding: 8px;
+  margin-top: 10px;
+  border-top: 1px dashed #ff00ff;
+  color: #ff00ff;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.prompt-card {
+  border: 1px solid #333;
+  border-left: 3px solid #00ccff;
+  padding: 15px;
+  background: rgba(0, 204, 255, 0.03);
+  transition: all 0.2s;
+  position: relative;
+}
+
+.prompt-card:hover {
+  border-color: #00ccff;
+  background: rgba(0, 204, 255, 0.08);
+}
+
+.prompt-card.selected {
+  border-color: #00ccff;
+  background: rgba(0, 204, 255, 0.1);
+}
+
+.prompt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 204, 255, 0.2);
+}
+
+.prompt-header .meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.badge-prompt {
+  color: #00ccff;
+  border-color: #00ccff;
+  font-weight: bold;
+  font-size: 10px;
+}
+
+.prompt-content {
+  color: #ccc;
+  font-style: italic;
+  line-height: 1.6;
+  padding: 10px 0;
+  font-size: 13px;
+  word-wrap: break-word;
+}
+
+.prompt-date {
+  font-size: 11px;
+  color: #666;
+}
+
+.prompt-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.prompt-actions button {
+  padding: 4px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.memory-card {
+  border-left: 3px solid #00ff00;
+}
+
+.markdown-content {
+  line-height: 1.8;
+  color: #e0e0e0;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+  color: #00ff00;
+  font-weight: bold;
+  margin: 16px 0 8px 0;
+  border-bottom: 1px solid #333;
+  padding-bottom: 4px;
+}
+
+.markdown-content h1 { font-size: 18px; }
+.markdown-content h2 { font-size: 16px; }
+.markdown-content h3 { font-size: 14px; }
+
+.markdown-content p {
+  margin: 8px 0;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.markdown-content li {
+  margin: 4px 0;
+}
+
+.markdown-content code {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #00ccff;
+}
+
+.markdown-content pre {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  padding: 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.markdown-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #e0e0e0;
+}
+
+.markdown-content blockquote {
+  border-left: 3px solid #00ff00;
+  padding-left: 12px;
+  margin: 12px 0;
+  color: #888;
+  font-style: italic;
+}
+
+.markdown-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid #333;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.markdown-content th {
+  background: #1a1a1a;
+  color: #00ff00;
+  font-weight: bold;
+}
+
+.markdown-content a {
+  color: #00ccff;
+  text-decoration: none;
+  border-bottom: 1px dotted #00ccff;
+}
+
+.markdown-content a:hover {
+  color: #00ff00;
+  border-bottom-color: #00ff00;
+}
+
+.markdown-content strong {
+  color: #00ff00;
+  font-weight: bold;
+}
+
+.markdown-content em {
+  color: #ffaa00;
+  font-style: italic;
+}
+
+.markdown-content del {
+  color: #666;
+  text-decoration: line-through;
+}
+
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid #333;
+  margin: 16px 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #00ff00;
+  outline-offset: 2px;
+}
+
+.memory-card::before,
+.prompt-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 255, 0, 0.05),
+    transparent
+  );
+  transition: left 0.5s;
+}
+
+.memory-card:hover::before {
+  left: 100%;
+}
+
+.prompt-card::before {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 204, 255, 0.05),
+    transparent
+  );
+}
+
+.prompt-card:hover::before {
+  left: 100%;
+}
+
+.toast {
+  animation: slideInBounce 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes slideInBounce {
+  0% {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  60% {
+    transform: translateX(-20px);
+    opacity: 1;
+  }
+  80% {
+    transform: translateX(10px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+

@@ -13,6 +13,7 @@ export interface UserPrompt {
   content: string;
   createdAt: number;
   captured: boolean;
+  linkedMemoryId: string | null;
 }
 
 export class UserPromptManager {
@@ -34,7 +35,8 @@ export class UserPromptManager {
         project_path TEXT,
         content TEXT NOT NULL,
         created_at INTEGER NOT NULL,
-        captured BOOLEAN DEFAULT 0
+        captured BOOLEAN DEFAULT 0,
+        linked_memory_id TEXT
       )
     `);
 
@@ -42,6 +44,7 @@ export class UserPromptManager {
     this.db.run("CREATE INDEX IF NOT EXISTS idx_user_prompts_captured ON user_prompts(captured)");
     this.db.run("CREATE INDEX IF NOT EXISTS idx_user_prompts_created ON user_prompts(created_at DESC)");
     this.db.run("CREATE INDEX IF NOT EXISTS idx_user_prompts_project ON user_prompts(project_path)");
+    this.db.run("CREATE INDEX IF NOT EXISTS idx_user_prompts_linked ON user_prompts(linked_memory_id)");
   }
 
   savePrompt(sessionId: string, messageId: string, projectPath: string, content: string): string {
@@ -113,6 +116,34 @@ export class UserPromptManager {
     return result.changes;
   }
 
+  linkMemoryToPrompt(promptId: string, memoryId: string): void {
+    const stmt = this.db.prepare(`UPDATE user_prompts SET linked_memory_id = ? WHERE id = ?`);
+    stmt.run(memoryId, promptId);
+  }
+
+  getPromptById(promptId: string): UserPrompt | null {
+    const stmt = this.db.prepare(`SELECT * FROM user_prompts WHERE id = ?`);
+    const row = stmt.get(promptId) as any;
+    if (!row) return null;
+    return this.rowToPrompt(row);
+  }
+
+  getCapturedPrompts(projectPath?: string): UserPrompt[] {
+    let query = `SELECT * FROM user_prompts WHERE captured = 1`;
+    const params: any[] = [];
+
+    if (projectPath) {
+      query += ` AND project_path = ?`;
+      params.push(projectPath);
+    }
+
+    query += ` ORDER BY created_at DESC`;
+
+    const stmt = this.db.prepare(query);
+    const rows = stmt.all(...params) as any[];
+    return rows.map((row) => this.rowToPrompt(row));
+  }
+
   private rowToPrompt(row: any): UserPrompt {
     return {
       id: row.id,
@@ -122,6 +153,7 @@ export class UserPromptManager {
       content: row.content,
       createdAt: row.created_at,
       captured: row.captured === 1,
+      linkedMemoryId: row.linked_memory_id,
     };
   }
 }

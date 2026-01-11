@@ -82,6 +82,7 @@ export async function performAutoCapture(
     });
 
     if (result.success) {
+      userPromptManager.linkMemoryToPrompt(prompt.id, result.id);
       userPromptManager.markAsCaptured(prompt.id);
 
       await ctx.client?.tui

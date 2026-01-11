@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="/styles.css" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@17.0.1/lib/marked.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.2/dist/purify.min.js"></script>
   </head>
   <body>
     <div class="container">
@@ -33,16 +35,18 @@
         </div>
       </header>
 
-      <div class="controls">
-        <div class="filter-group">
-          <label>Scope:</label>
-          <select id="scope-filter">
-            <option value="">All</option>
-            <option value="user">User</option>
-            <option value="project">Project</option>
-          </select>
-        </div>
+      <div class="scope-tabs">
+        <button id="tab-project" class="tab-btn active">
+          <i data-lucide="folder" class="icon"></i>
+          PROJECT TIMELINE
+        </button>
+        <button id="tab-user" class="tab-btn">
+          <i data-lucide="user" class="icon"></i>
+          USER TIMELINE
+        </button>
+      </div>
 
+      <div class="controls">
         <div class="filter-group">
           <label>Tag:</label>
           <select id="tag-filter">
@@ -60,7 +64,7 @@
           <button id="cleanup-btn" class="btn-maintenance">
             <i data-lucide="trash" class="icon"></i> Cleanup
           </button>
-          <button id="deduplicate-btn" class="btn-maintenance">
+    ton id="deduplicate-btn" class="btn-maintenance">
             <i data-lucide="refresh-cw" class="icon"></i> Deduplicate
           </button>
         </div>
@@ -86,8 +90,7 @@
           </label>
         </div>
         <div class="migration-actions">
-          <button id="migration-fresh-btn" class="btn-migration" disabled>
-            <i data-lucide="trash" class="icon"></i> Fresh Start (Delete All)
+          <button id="migration-fresh-btn" class="btn-migration" disa       <i data-lucide="trash" class="icon"></i> Fresh Start (Delete All)
           </button>
           <button id="migration-reembed-btn" class="btn-migration" disabled>
             <i data-lucide="refresh-cw" class="icon"></i> Re-embed (Preserve Data)
@@ -97,7 +100,7 @@
 
       <div class="memories-section">
         <div class="section-header">
-          <h2 id="section-title">└─ MEMORIES (0) ──</h2>
+          <h2 id="section-title">└─ PROJECT MEMORIES (0) ──</h2>
           <div class="pagination" id="pagination-top">
             <button id="prev-page-top" disabled>
               <i data-lucide="chevron-left" class="icon"></i>

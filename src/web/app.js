@@ -8,12 +8,24 @@ const state = {
   totalPages: 1,
   totalItems: 0,
   selectedTag: "",
-  selectedScope: "",
+  currentScope: "project",
   searchQuery: "",
   isSearching: false,
   selectedMemories: new Set(),
   autoRefreshInterval: null,
 };
+
+marked.setOptions({
+  gfm: true,
+  breaks: true,
+  headerIds: false,
+  mangle: false,
+});
+
+function renderMarkdown(markdown) {
+  const html = marked.parse(markdown);
+  return DOMPurify.sanitize(html);
+}
 
 async function fetchAPI(endpoint, options = {}) {
   try {
@@ -41,21 +53,21 @@ function populateTagDropdowns() {
   tagFilter.innerHTML = '<option value="">All Tags</option>';
   addTag.innerHTML = '<option value="">Select tag</option>';
 
-  const allTags = [...state.tags.user, ...state.tags.project];
-  allTags.forEach((tagInfo) => {
-    const scope = tagInfo.tag.includes("_user_") ? "user" : "project";
+  const scopeTags = state.currentScope === "user" ? state.tags.user : state.tags.project;
+
+  scopeTags.forEach((tagInfo) => {
     const displayText = tagInfo.displayName || tagInfo.tag;
     const shortDisplay =
       displayText.length > 50 ? displayText.substring(0, 50) + "..." : displayText;
 
     const option1 = document.createElement("option");
     option1.value = tagInfo.tag;
-    option1.textContent = `[${scope}] ${shortDisplay}`;
+    option1.textContent = shortDisplay;
     tagFilter.appendChild(option1);
 
     const option2 = document.createElement("option");
     option2.value = tagInfo.tag;
-    option2.textContent = `[${scope}] ${shortDisplay}`;
+    option2.textContent = shortDisplay;
     addTag.appendChild(option2);
   });
 }
@@ -63,7 +75,7 @@ function populateTagDropdowns() {
 async function loadMemories() {
   showRefreshIndicator(true);
 
-  let endpoint = `/api/memories?page=${state.currentPage}&pageSize=${state.pageSize}`;
+  let endpoint = `/api/memories?page=${state.currentPage}&pageSize=${state.pageSize}&scope=${state.currentScope}&includePrompts=true`;
 
   if (state.isSearching && state.searchQuery) {
     endpoint = `/api/search?q=${encodeURIComponent(state.searchQuery)}&page=${state.currentPage}&pageSize=${state.pageSize}`;
@@ -103,66 +115,12 @@ function renderMemories() {
   }
 
   container.innerHTML = state.memories
-    .map((memory) => {
-      const isSelected = state.selectedMemories.has(memory.id);
-      const isPinned = memory.isPinned || false;
-      const similarityHtml =
-        memory.similarity !== undefined
-          ? `<span class="similarity-score">${memory.similarity}%</span>`
-          : "";
-
-      let displayInfo = memory.displayName || memory.id;
-      if (memory.scope === "project" && memory.projectPath) {
-        const pathParts = memory.projectPath.split("/");
-        displayInfo = pathParts[pathParts.length - 1] || memory.projectPath;
+    .map((item) => {
+      if (item.type === "prompt") {
+        return renderPromptCard(item);
+      } else {
+        return renderMemoryCard(item);
       }
-
-      let subtitle = "";
-      if (memory.scope === "user" && memory.userEmail) {
-        subtitle = `<span class="memory-subtitle">${escapeHtml(memory.userEmail)}</span>`;
-      } else if (memory.scope === "project" && memory.projectPath) {
-        subtitle = `<span class="memory-subtitle">${escapeHtml(memory.projectPath)}</span>`;
-      }
-
-      const pinButton = isPinned
-        ? `<button class="btn-pin pinned" onclick="unpinMemory('${memory.id}')" title="Unpin"><i data-lucide="pin" class="icon icon-filled"></i></button>`
-        : `<button class="btn-pin" onclick="pinMemory('${memory.id}')" title="Pin"><i data-lucide="pin" class="icon"></i></button>`;
-
-      const createdDate = formatDate(memory.createdAt);
-      const updatedDate =
-        memory.updatedAt && memory.updatedAt !== memory.createdAt
-          ? formatDate(memory.updatedAt)
-          : null;
-
-      const dateInfo = updatedDate
-        ? `<span>Created: ${createdDate}</span><span>Updated: ${updatedDate}</span>`
-        : `<span>Created: ${createdDate}</span>`;
-
-      return `
-      <div class="memory-card ${isSelected ? "selected" : ""} ${isPinned ? "pinned" : ""}" data-id="${memory.id}">
-        <div class="memory-header">
-          <div class="meta">
-            <input type="checkbox" class="memory-checkbox" data-id="${memory.id}" ${isSelected ? "checked" : ""} />
-            <span class="badge badge-${memory.scope}">${memory.scope}</span>
-            ${memory.type ? `<span class="badge badge-type">${memory.type}</span>` : ""}
-            ${similarityHtml}
-            ${isPinned ? '<span class="badge badge-pinned">PINNED</span>' : ""}
-            <span class="memory-display-name">${escapeHtml(displayInfo)}</span>
-            ${subtitle}
-          </div>
-          <div class="memory-actions">
-            ${pinButton}
-            <button class="btn-edit" onclick="editMemory('${memory.id}')"><i data-lucide="edit-3" class="icon"></i></button>
-            <button class="btn-delete" onclick="deleteMemory('${memory.id}')"><i data-lucide="trash-2" class="icon"></i></button>
-          </div>
-        </div>
-        <div class="memory-content">${escapeHtml(memory.content)}</div>
-        <div class="memory-footer">
-          ${dateInfo}
-          <span>ID: ${memory.id}</span>
-        </div>
-      </div>
-    `;
     })
     .join("");
 
@@ -171,6 +129,104 @@ function renderMemories() {
   });
 
   lucide.createIcons();
+}
+
+function renderPromptCard(prompt) {
+  const isLinked = !!prompt.linkedMemoryId;
+  const isSelected = state.selectedMemories.has(prompt.id);
+  const promptDate = formatDate(prompt.createdAt);
+
+  return `
+    <div class="prompt-card ${isSelected ? "selected" : ""}" data-id="${prompt.id}">
+      <div class="prompt-header">
+        <div class="meta">
+          <input type="checkbox" class="memory-checkbox" data-id="${prompt.id}" ${isSelected ? "checked" : ""} />
+          <i data-lucide="message-circle" class="icon"></i>
+          <span class="badge badge-prompt">USER PROMPT</span>
+          ${isLinked ? '<span class="badge badge-linked">🔗 LINKED</span>' : ""}
+          <span class="prompt-date">${promptDate}</span>
+        </div>
+        <div class="prompt-actions">
+          <button class="btn-delete" onclick="deletePromptWithLink('${prompt.id}', ${isLinked})">
+            <i data-lucide="trash-2" class="icon"></i>
+            ${isLinked ? "Delete Pair" : "Delete"}
+          </button>
+        </div>
+      </div>
+      <div class="prompt-content">
+        ${escapeHtml(prompt.content)}
+      </div>
+      ${isLinked ? '<div class="link-indicator">↓ Generated memory above ↑</div>' : ""}
+    </div>
+  `;
+}
+
+function renderMemoryCard(memory) {
+  const isSelected = state.selectedMemories.has(memory.id);
+  const isPinned = memory.isPinned || false;
+  const isLinked = !!memory.linkedPromptId;
+  const similarityHtml =
+    memory.similarity !== undefined
+      ? `<span class="similarity-score">${memory.similarity}%</span>`
+      : "";
+
+  let displayInfo = memory.displayName || memory.id;
+  if (memory.scope === "project" && memory.projectPath) {
+    const pathParts = memory.projectPath.split("/");
+    displayInfo = pathParts[pathParts.length - 1] || memory.projectPath;
+  }
+
+  let subtitle = "";
+  if (memory.scope === "user" && memory.userEmail) {
+    subtitle = `<span class="memory-subtitle">${escapeHtml(memory.userEmail)}</span>`;
+  } else if (memory.scope === "project" && memory.projectPath) {
+    subtitle = `<span class="memory-subtitle">${escapeHtml(memory.projectPath)}</span>`;
+  }
+
+  const pinButton = isPinned
+    ? `<button class="btn-pin pinned" onclick="unpinMemory('${memory.id}')" title="Unpin"><i data-lucide="pin" class="icon icon-filled"></i></button>`
+    : `<button class="btn-pin" onclick="pinMemory('${memory.id}')" title="Pin"><i data-lucide="pin" class="icon"></i></button>`;
+
+  const createdDate = formatDate(memory.createdAt);
+  const updatedDate =
+    memory.updatedAt && memory.updatedAt !== memory.createdAt
+      ? formatDate(memory.updatedAt)
+      : null;
+
+  const dateInfo = updatedDate
+    ? `<span>Created: ${createdDate}</span><span>Updated: ${updatedDate}</span>`
+    : `<span>Created: ${createdDate}</span>`;
+
+  return `
+    <div class="memory-card ${isSelected ? "selected" : ""} ${isPinned ? "pinned" : ""}" data-id="${memory.id}">
+      <div class="memory-header">
+        <div class="meta">
+          <input type="checkbox" class="memory-checkbox" data-id="${memory.id}" ${isSelected ? "checked" : ""} />
+          <span class="badge badge-${memory.scope}">${memory.scope}</span>
+          ${memory.memoryType ? `<span class="badge badge-type">${memory.memoryType}</span>` : ""}
+          ${isLinked ? '<span class="badge badge-linked">🔗 LINKED</span>' : ""}
+          ${similarityHtml}
+          ${isPinned ? '<span class="badge badge-pinned">PINNED</span>' : ""}
+          <span class="memory-display-name">${escapeHtml(displayInfo)}</span>
+          ${subtitle}
+        </div>
+        <div class="memory-actions">
+          ${pinButton}
+          <button class="btn-edit" onclick="editMemory('${memory.id}')"><i data-lucide="edit-3" class="icon"></i></button>
+          <button class="btn-delete" onclick="deleteMemoryWithLink('${memory.id}', ${isLinked})">
+            <i data-lucide="trash-2" class="icon"></i>
+            ${isLinked ? "Delete Pair" : "Delete"}
+          </button>
+        </div>
+      </div>
+      <div class="memory-content markdown-content">${renderMarkdown(memory.content)}</div>
+      ${isLinked ? '<div class="link-indicator">↑ From prompt below ↓</div>' : ""}
+      <div class="memory-footer">
+        ${dateInfo}
+        <span>ID: ${memory.id}</span>
+      </div>
+    </div>
+  `;
 }
 
 function handleCheckboxChange(e) {
@@ -185,7 +241,7 @@ function handleCheckboxChange(e) {
 }
 
 function updateCardSelection(id, selected) {
-  const card = document.querySelector(`.memory-card[data-id="${id}"]`);
+  const card = document.querySelector(`.memory-card[data-id="${id}"], .prompt-card[data-id="${id}"]`);
   if (card) {
     if (selected) {
       card.classList.add("selected");
@@ -222,9 +278,10 @@ function updatePagination() {
 }
 
 function updateSectionTitle() {
+  const scopeName = state.currentScope.toUpperCase();
   const title = state.isSearching
     ? `└─ SEARCH RESULTS (${state.totalItems}) ──`
-    : `└─ MEMORIES (${state.totalItems}) ──`;
+    : `└─ ${scopeName} MEMORIES (${state.totalItems}) ──`;
   document.getElementById("section-title").textContent = title;
 }
 
@@ -236,6 +293,20 @@ async function loadStats() {
     document.getElementById("stats-project").textContent =
       `Project: ${result.data.byScope.project}`;
   }
+}
+
+function switchScope(scope) {
+  state.currentScope = scope;
+  state.currentPage = 1;
+  state.selectedTag = "";
+
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.classList.remove("active");
+  });
+  document.getElementById(`tab-${scope}`).classList.add("active");
+
+  populateTagDropdowns();
+  loadMemories();
 }
 
 async function addMemory(e) {
@@ -266,58 +337,107 @@ async function addMemory(e) {
   }
 }
 
-async function deleteMemory(id) {
-  if (!confirm("Delete this memory?")) return;
+async function deleteMemoryWithLink(id, isLinked) {
+  const message = isLinked
+    ? "Delete this memory AND its linked prompt?"
+    : "Delete this memory?";
 
-  const result = await fetchAPI(`/api/memories/${id}`, { method: "DELETE" });
+  if (!confirm(message)) return;
+
+  const result = await fetchAPI(`/api/memories/${id}?cascade=true`, {
+    method: "DELETE",
+  });
 
   if (result.success) {
-    showToast("Memory deleted", "success");
+    const msg = result.data?.deletedPrompt
+      ? "Memory and linked prompt deleted"
+      : "Memory deleted";
+    showToast(msg, "success");
+
     state.selectedMemories.delete(id);
     await loadMemories();
     await loadStats();
-    updateBulkActions();
   } else {
-    showToast(result.error || "Failed to delete memory", "error");
+    showToast(result.error || "Failed to delete", "error");
+  }
+}
+
+async function deletePromptWithLink(id, isLinked) {
+  const message = isLinked
+    ? "Delete this prompt AND its linked memory summary?"
+    : "Delete this prompt?";
+
+  if (!confirm(message)) return;
+
+  const result = await fetchAPI(`/api/prompts/${id}?cascade=true`, {
+    method: "DELETE",
+  });
+
+  if (result.success) {
+    const msg = result.data?.deletedMemory
+      ? "Prompt and linked memory deleted"
+      : "Prompt deleted";
+    showToast(msg, "success");
+
+    state.selectedMemories.delete(id);
+    await loadMemories();
+    await loadStats();
+  } else {
+    showToast(result.error || "Failed to delete", "error");
   }
 }
 
 async function bulkDelete() {
   if (state.selectedMemories.size === 0) return;
 
-  if (!confirm(`Delete ${state.selectedMemories.size} selected memories?`)) return;
+  const message = `Delete ${state.selectedMemories.size} selected items (including linked pairs)?`;
+  if (!confirm(message)) return;
 
   const ids = Array.from(state.selectedMemories);
-  const result = await fetchAPI("/api/memories/bulk-delete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ids }),
-  });
 
-  if (result.success) {
-    showToast(`Deleted ${result.data.deleted} memories`, "success");
-    state.selectedMemories.clear();
-    await loadMemories();
-    await loadStats();
-    updateBulkActions();
-  } else {
-    showToast(result.error || "Failed to delete memories", "error");
+  const promptIds = ids.filter((id) => id.startsWith("prompt_"));
+  const memoryIds = ids.filter((id) => !id.startsWith("prompt_"));
+
+  let deletedCount = 0;
+
+  if (promptIds.length > 0) {
+    const result = await fetchAPI("/api/prompts/bulk-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: promptIds, cascade: true }),
+    });
+    if (result.success) deletedCount += result.data.deleted;
   }
+
+  if (memoryIds.length > 0) {
+    const result = await fetchAPI("/api/memories/bulk-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: memoryIds, cascade: true }),
+    });
+    if (result.success) deletedCount += result.data.deleted;
+  }
+
+  showToast(`Deleted ${deletedCount} items (including linked pairs)`, "success");
+  state.selectedMemories.clear();
+  await loadMemories();
+  await loadStats();
+  updateBulkActions();
 }
 
 function deselectAll() {
   state.selectedMemories.clear();
   document.querySelectorAll(".memory-checkbox").forEach((cb) => (cb.checked = false));
-  document.querySelectorAll(".memory-card").forEach((card) => card.classList.remove("selected"));
+  document.querySelectorAll(".memory-card, .prompt-card").forEach((card) => card.classList.remove("selected"));
   updateBulkActions();
 }
 
 function editMemory(id) {
-  const memory = state.memories.find((m) => m.id === id);
+  const memory = state.memories.find((m) => m.id === id && m.type === "memory");
   if (!memory) return;
 
   document.getElementById("edit-id").value = memory.id;
-  document.getElementById("edit-type").value = memory.type || "";
+  document.getElementById("edit-type").value = memory.memoryType || "";
   document.getElementById("edit-content").value = memory.content;
 
   document.getElementById("edit-modal").classList.remove("hidden");
@@ -387,34 +507,6 @@ function changePage(delta) {
   if (newPage < 1 || newPage > state.totalPages) return;
 
   state.currentPage = newPage;
-  loadMemories();
-}
-
-function handleFilterChange() {
-  const scopeFilter = document.getElementById("scope-filter").value;
-  const tagFilter = document.getElementById("tag-filter").value;
-
-  if (scopeFilter) {
-    const filteredTags = scopeFilter === "user" ? state.tags.user : state.tags.project;
-    state.selectedTag = filteredTags.length > 0 ? filteredTags[0].tag : "";
-
-    const tagDropdown = document.getElementById("tag-filter");
-    tagDropdown.innerHTML = '<option value="">All Tags</option>';
-    filteredTags.forEach((tagInfo) => {
-      const displayText = tagInfo.displayName || tagInfo.tag;
-      const shortDisplay =
-        displayText.length > 50 ? displayText.substring(0, 50) + "..." : displayText;
-      const option = document.createElement("option");
-      option.value = tagInfo.tag;
-      option.textContent = `[${scopeFilter}] ${shortDisplay}`;
-      if (tagInfo.tag === state.selectedTag) option.selected = true;
-      tagDropdown.appendChild(option);
-    });
-  } else {
-    state.selectedTag = tagFilter;
-  }
-
-  state.currentPage = 1;
   loadMemories();
 }
 
@@ -598,7 +690,7 @@ async function runMigration(strategy) {
 
   if (
     !confirm(
-      `Run ${strategyName} migration?\n\nThis operation is IRREVERSIBLE and will:\n${strategy === "fresh-start" ? "- DELETE all existing memories\n- Remove all shards" : "- Re-embed all memories with new model\n- This may take severales"}\n\nContinue?`
+      `Run ${strategyName} migration?\n\nThis operation is IRREVERSIBLE and will:\n${strategy === "fresh-start" ? "- DELETE all existing memories\n- Remove all shards" : "- Re-embed all memories with new model\n- This may take several minutes"}\n\nContinue?`
     )
   ) {
     return;
@@ -619,7 +711,7 @@ async function runMigration(strategy) {
     if (strategy === "fresh-start") {
       message += `Deleted ${data.deletedShards} shard(s). Duration: ${(data.duration / 1000).toFixed(2)}s`;
     } else {
-      message += `Re-embedded ${data.reEddedMemories} memories. Duration: ${(data.duration / 1000).toFixed(2)}s`;
+      message += `Re-embedded ${data.reEmbeddedMemories} memories. Duration: ${(data.duration / 1000).toFixed(2)}s`;
     }
 
     showToast(message, "success");
@@ -635,7 +727,9 @@ async function runMigration(strategy) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  document.getElementById("scope-filter").addEventListener("change", handleFilterChange);
+  document.getElementById("tab-project").addEventListener("click", () => switchScope("project"));
+  document.getElementById("tab-user").addEventListener("click", () => switchScope("user"));
+
   document.getElementById("tag-filter").addEventListener("change", () => {
     state.selectedTag = document.getElementById("tag-filter").value;
     state.currentPage = 1;
