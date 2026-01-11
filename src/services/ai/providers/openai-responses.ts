@@ -9,12 +9,11 @@ interface ResponsesAPIOutput {
   model: string;
   output: Array<{
     type: string;
+    id?: string;
+    call_id?: string;
+    name?: string;
+    arguments?: string;
     content?: any;
-    tool_calls?: Array<{
-      type: string;
-      name: string;
-      input: any;
-    }>;
   }>;
   conversation?: string;
   usage?: {
@@ -80,6 +79,14 @@ export class OpenAIResponsesProvider extends BaseAIProvider {
           requestBody.instructions = systemPrompt;
         }
 
+        log("OpenAI Responses API request", {
+          iteration: iterations,
+          model: this.config.model,
+          hasConversationId: !!conversationId,
+          toolName: tool.name,
+          promptLength: currentPrompt.length,
+        });
+
         const response = await fetch(`${this.config.apiUrl}/responses`, {
           method: "POST",
           headers: {
@@ -108,6 +115,27 @@ export class OpenAIResponsesProvider extends BaseAIProvider {
 
         const data = (await response.json()) as ResponsesAPIOutput;
 
+        log("OpenAI Responses API response", {
+          iteration: iterations,
+          responseId: data.id,
+          outputCount: data.output?.length || 0,
+          outputTypes: data.output?.map((item) => item.type) || [],
+          hasConversation: !!data.conversation,
+        });
+
+        data.output?.forEach((item, index) => {
+          log(`Response output item ${index}`, {
+            type: item.type,
+            hasId: !!item.id,
+            hasCallId: !!item.call_id,
+            hasName: !!item.name,
+            name: item.name,
+            hasArguments: !!item.arguments,
+            argumentsLength: item.arguments?.length || 0,
+            hasContent: !!item.content,
+          });
+        });
+
         conversationId = data.conversation || conversationId;
 
         if (iterations === 1) {
@@ -123,6 +151,13 @@ export class OpenAIResponsesProvider extends BaseAIProvider {
         const toolCall = this.extractToolCall(data, toolSchema.function.name);
 
         if (toolCall) {
+          log("Tool call extracted successfully", {
+            iteration: iterations,
+            toolName: toolSchema.function.name,
+            hasMemories: !!toolCall.memories,
+            memoriesCount: toolCall.memories?.length || 0,
+          });
+
           this.sessionStore.updateSession(sessionId, "openai-responses", {
             conversationId,
           });
@@ -133,6 +168,11 @@ export class OpenAIResponsesProvider extends BaseAIProvider {
             iterations,
           };
         }
+
+        log("No tool call found, retrying", {
+          iteration: iterations,
+          expectedTool: toolSchema.function.name,
+        });
 
         currentPrompt = this.buildRetryPrompt(data);
       } catch (error) {
@@ -161,18 +201,43 @@ export class OpenAIResponsesProvider extends BaseAIProvider {
 
   private extractToolCall(data: ResponsesAPIOutput, expectedToolName: string): any | null {
     if (!data.output || !Array.isArray(data.output)) {
+      log("Extract tool call: no output array", { hasOutput: !!data.output });
       return null;
     }
 
     for (const item of data.output) {
-      if (item.tool_calls && Array.isArray(item.tool_calls)) {
-        for (const toolCall of item.tool_calls) {
-          if (toolCall.name === expectedToolName && toolCall.input) {
-        return toolCall.input;
+      if (item.type === "function_call" && item.name === expectedToolName) {
+        if (item.arguments) {
+          try {
+            const parsed = JSON.parse(item.arguments);
+            log("Function call arguments parsed", {
+              toolName: item.name,
+              callId: item.call_id,
+              argumentsLength: item.arguments.length,
+            });
+            return parsed;
+          } catch (error) {
+            log("Failed to parse function call arguments", {
+              error: String(error),
+              toolName: item.name,
+              arguments: item.arguments,
+            });
+            return null;
           }
+        } else {
+          log("Function call found but no arguments", {
+            toolName: item.name,
+            callId: item.call_id,
+          });
         }
       }
     }
+
+    log("No matching function call found", {
+      expectedTool: expectedToolName,
+      foundTypes: data.output.map((item) => item.type),
+      foundNames: data.output.map((item) => item.name).filter(Boolean),
+    });
 
     return null;
   }
