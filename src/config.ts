@@ -43,6 +43,11 @@ interface OpenCodeMemConfig {
   webServerEnabled?: boolean;
   webServerPort?: number;
   webServerHost?: string;
+  maxVectorsPerShard?: number;
+  autoCleanupEnabled?: boolean;
+  autoCleanupRetentionDays?: number;
+  deduplicationEnabled?: boolean;
+  deduplicationSimilarityThreshold?: number;
 }
 
 const DEFAULT_KEYWORD_PATTERNS = [
@@ -84,6 +89,11 @@ const DEFAULTS: Required<Omit<OpenCodeMemConfig, "embeddingApiUrl" | "embeddingA
   webServerEnabled: true,
   webServerPort: 4747,
   webServerHost: "127.0.0.1",
+  maxVectorsPerShard: 50000,
+  autoCleanupEnabled: true,
+  autoCleanupRetentionDays: 30,
+  deduplicationEnabled: true,
+  deduplicationSimilarityThreshold: 0.90,
 };
 
 function isValidRegex(pattern: string): boolean {
@@ -242,6 +252,11 @@ export const CONFIG = {
   webServerEnabled: fileConfig.webServerEnabled ?? DEFAULTS.webServerEnabled,
   webServerPort: fileConfig.webServerPort ?? DEFAULTS.webServerPort,
   webServerHost: fileConfig.webServerHost ?? DEFAULTS.webServerHost,
+  maxVectorsPerShard: fileConfig.maxVectorsPerShard ?? DEFAULTS.maxVectorsPerShard,
+  autoCleanupEnabled: fileConfig.autoCleanupEnabled ?? DEFAULTS.autoCleanupEnabled,
+  autoCleanupRetentionDays: fileConfig.autoCleanupRetentionDays ?? DEFAULTS.autoCleanupRetentionDays,
+  deduplicationEnabled: fileConfig.deduplicationEnabled ?? DEFAULTS.deduplicationEnabled,
+  deduplicationSimilarityThreshold: fileConfig.deduplicationSimilarityThreshold ?? DEFAULTS.deduplicationSimilarityThreshold,
 };
 
 export function isConfigured(): boolean {

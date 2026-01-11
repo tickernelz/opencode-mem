@@ -15,9 +15,35 @@ interface LockData {
 
 export class WebServerLock {
   private pid: number;
+  private cleanupRegistered: boolean = false;
 
   constructor() {
     this.pid = process.pid;
+    this.registerCleanupHandlers();
+  }
+
+  private registerCleanupHandlers(): void {
+    if (this.cleanupRegistered) return;
+    this.cleanupRegistered = true;
+
+    const cleanup = () => {
+      this.release().catch(() => {});
+    };
+
+    process.on('exit', cleanup);
+    process.on('SIGTERM', () => {
+      cleanup();
+      process.exit(0);
+    });
+    process.on('SIGINT', () => {
+      cleanup();
+      process.exit(0);
+    });
+    process.on('uncaughtException', (error) => {
+      log("WebServerLock: uncaught exception", { error: String(error) });
+      cleanup();
+      process.exit(1);
+    });
   }
 
   async acquire(port: number, host: string): Promise<boolean> {

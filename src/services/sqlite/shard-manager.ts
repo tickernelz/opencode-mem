@@ -5,7 +5,6 @@ import { connectionManager } from "./connection-manager.js";
 import { log } from "../logger.js";
 import type { ShardInfo } from "./types.js";
 
-const MAX_VECTORS_PER_SHARD = 50000;
 const METADATA_DB_NAME = "metadata.db";
 
 export class ShardManager {
@@ -142,7 +141,8 @@ export class ShardManager {
         user_email TEXT,
         project_path TEXT,
         project_name TEXT,
-        git_repo_url TEXT
+        git_repo_url TEXT,
+        is_pinned INTEGER DEFAULT 0
       )
     `);
 
@@ -156,6 +156,7 @@ export class ShardManager {
     db.run(`CREATE INDEX IF NOT EXISTS idx_container_tag ON memories(container_tag)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_type ON memories(type)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_created_at ON memories(created_at DESC)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_is_pinned ON memories(is_pinned)`);
   }
 
   getWriteShard(scope: 'user' | 'project', scopeHash: string): ShardInfo {
@@ -165,7 +166,7 @@ export class ShardManager {
       return this.createShard(scope, scopeHash, 0);
     }
 
-    if (shard.vectorCount >= MAX_VECTORS_PER_SHARD) {
+    if (shard.vectorCount >= CONFIG.maxVectorsPerShard) {
       this.markShardReadOnly(shard.id);
       return this.createShard(scope, scopeHash, shard.shardIndex + 1);
     }
