@@ -428,9 +428,7 @@ async function summarizeWithAI(
 
   const { AIProviderFactory } = await import("./ai/ai-provider-factory.js");
 
-  if (CONFIG.aiSessionEnabled) {
-    AIProviderFactory.initializeSessionStore(CONFIG.storagePath, CONFIG.aiSessionRetentionDays);
-  }
+  AIProviderFactory.initializeSessionStore(CONFIG.storagePath, CONFIG.aiSessionRetentionDays);
 
   const providerConfig = {
     model: CONFIG.memoryModel,

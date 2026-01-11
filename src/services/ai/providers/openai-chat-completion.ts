@@ -1,4 +1,5 @@
 import { BaseAIProvider, type ToolCallResult } from "./base-provider.js";
+import { SessionStore } from "../session/session-store.js";
 import type { ChatCompletionTool } from "../tools/tool-schema.js";
 import { log } from "../../logger.js";
 
@@ -18,12 +19,19 @@ interface ToolCallResponse {
 }
 
 export class OpenAIChatCompletionProvider extends BaseAIProvider {
+  private sessionStore: SessionStore;
+
+  constructor(config: any, sessionStore: SessionStore) {
+    super(config);
+    this.sessionStore = sessionStore;
+  }
+
   getProviderName(): string {
     return "openai-chat";
   }
 
   supportsSession(): boolean {
-    return false;
+    return true;
   }
 
   async executeToolCall(
@@ -32,100 +40,175 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
     toolSchema: ChatCompletionTool,
     sessionId: string
   ): Promise<ToolCallResult> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.iterationTimeout);
+    let session = this.sessionStore.getSession(sessionId, "openai-chat");
+    const messageStore = this.sessionStore.getMessageStore();
 
-    try {
-      const requestBody = {
-        model: this.config.model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        tools: [toolSchema],
-        tool_choice: { type: "function", name: toolSchema.function.name },
-        temperature: 0.3,
+    if (!session) {
+      session = this.sessionStore.createSession({
+        provider: "openai-chat",
+        sessionId,
+      });
+    }
+
+    const existingMessages = messageStore.getMessages(session.id);
+    const messages: any[] = [];
+
+    for (const msg of existingMessages) {
+      const apiMsg: any = {
+        role: msg.role,
+        content: msg.content,
       };
 
-      const response = await fetch(`${this.config.apiUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.config.apiKey}`,
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
+      if (msg.toolCalls) {
+        apiMsg.tool_calls = msg.toolCalls;
+      }
+
+      if (msg.toolCallId) {
+        apiMsg.tool_call_id = msg.toolCallId;
+      }
+
+      messages.push(apiMsg);
+    }
+
+    if (messages.length === 0) {
+      const sequence = messageStore.getLastSequence(session.id) + 1;
+      messageStore.addMessage({
+        aiSessionId: session.id,
+        sequence,
+        role: "system",
+        content: systemPrompt,
       });
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => response.statusText);
-        log("OpenAI Chat Completion API error", {
-          status: response.status,
-          error: errorText,
-        });
-        return {
-          success: false,
-          error: `API error: ${response.status} - ${errorText}`,
-          iterations: 1,
-        };
-      }
-
-      const data = (await response.json()) as ToolCallResponse;
-
-      if (!data.choices || !data.choices[0]) {
-        return {
-          success: false,
-          error: "Invalid API response format",
-          iterations: 1,
-        };
-      }
-
-      const choice = data.choices[0];
-
-      if (!choice.message.tool_calls || choice.message.tool_calls.length === 0) {
-        log("OpenAI Chat Completion: tool calling not used", {
-          finishReason: choice.finish_reason,
-        });
-        return {
-          success: false,
-          error: "Tool calling not supported or not used by provider",
-          iterations: 1,
-        };
-      }
-
-      const toolCall = choice.message.tool_calls[0];
-
-      if (!toolCall || toolCall.function.name !== toolSchema.function.name) {
-        return {
-          success: false,
-          error: "Invalid tool call response",
-          iterations: 1,
-        };
-      }
-
-      const parsed = JSON.parse(toolCall.function.arguments);
-
-      return {
-        success: true,
-        data: this.validateResponse(parsed),
-        iterations: 1,
-      };
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return {
-          success: false,
-          error: `API request timeout (${this.config.iterationTimeout}ms)`,
-          iterations: 1,
-        };
-      }
-      return {
-        success: false,
-        error: String(error),
-        iterations: 1,
-      };
-    } finally {
-      clearTimeout(timeout);
+      messages.push({ role: "system", content: systemPrompt });
     }
+
+    const userSequence = messageStore.getLastSequence(session.id) + 1;
+    messageStore.addMessage({
+      aiSessionId: session.id,
+      sequence: userSequence,
+      role: "user",
+      content: userPrompt,
+    });
+
+    messages.push({ role: "user", content: userPrompt });
+
+    let iterations = 0;
+
+    while (iterations < this.config.maxIterations) {
+      iterations++;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.config.iterationTimeout);
+
+      try {
+        const requestBody = {
+          model: this.config.model,
+          messages,
+          tools: [toolSchema],
+          tool_choice: { type: "function", name: toolSchema.function.name },
+          temperature: 0.3,
+        };
+
+        const response = await fetch(`${this.config.apiUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.config.apiKey}`,
+          },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => response.statusText);
+          log("OpenAI Chat Completion API error", {
+            status: response.status,
+            error: errorText,
+            iteration: iterations,
+          });
+          return {
+            success: false,
+            error: `API error: ${response.status} - ${errorText}`,
+            iterations,
+          };
+        }
+
+        const data = (await response.json()) as ToolCallResponse;
+
+        if (!data.choices || !data.choices[0]) {
+          return {
+            success: false,
+            error: "Invalid API response format",
+            iterations,
+          };
+        }
+
+        const choice = data.choices[0];
+
+        const assistantSequence = messageStore.getLastSequence(session.id) + 1;
+        const assistantMsg: any = {
+          aiSessionId: session.id,
+          sequence: assistantSequence,
+          role: "assistant",
+          content: choice.message.content || "",
+        };
+
+        if (choice.message.tool_calls) {
+          assistantMsg.toolCalls = choice.message.tool_calls;
+        }
+
+        messageStore.addMessage(assistantMsg);
+        messages.push(choice.message);
+
+        if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
+          const toolCall = choice.message.tool_calls[0];
+
+          if (toolCall && toolCall.function.name === toolSchema.function.name) {
+            const parsed = JSON.parse(toolCall.function.arguments);
+            return {
+              success: true,
+              data: this.validateResponse(parsed),
+              iterations,
+            };
+          }
+        }
+
+        const retrySequence = messageStore.getLastSequence(session.id) + 1;
+        const retryPrompt =
+          "Please use the save_memories tool to extract and save the memories from the conversation as instructed.";
+
+        messageStore.addMessage({
+          aiSessionId: session.id,
+          sequence: retrySequence,
+          role: "user",
+          content: retryPrompt,
+        });
+
+        messages.push({ role: "user", content: retryPrompt });
+      } catch (error) {
+        clearTimeout(timeout);
+        if (error instanceof Error && error.name === "AbortError") {
+          return {
+            success: false,
+            error: `API request timeout (${this.config.iterationTimeout}ms)`,
+            iterations,
+          };
+        }
+        return {
+          success: false,
+          error: String(error),
+          iterations,
+        };
+      }
+    }
+
+    return {
+      success: false,
+      error: `Max iterations (${this.config.maxIterations}) reached without tool call`,
+      iterations,
+    };
   }
 
   private validateResponse(data: any): any {

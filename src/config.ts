@@ -43,7 +43,6 @@ interface OpenCodeMemConfig {
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
-  aiSessionEnabled?: boolean;
   aiSessionRetentionDays?: number;
   webServerEnabled?: boolean;
   webServerPort?: number;
@@ -105,7 +104,6 @@ const DEFAULTS: Required<
   autoCaptureContextWindow: 3,
   autoCaptureMaxIterations: 5,
   autoCaptureIterationTimeout: 30000,
-  aiSessionEnabled: true,
   aiSessionRetentionDays: 7,
   webServerEnabled: true,
   webServerPort: 4747,
@@ -253,8 +251,7 @@ const CONFIG_TEMPLATE = `{
   // Summary length: 0 = AI decides optimal length, >0 = character limit
   "autoCaptureSummaryMaxLength": 0,
   
-  // Session management (for openai-responses and anthropic)
-  "aiSessionEnabled": true,
+  // Session management
   "aiSessionRetentionDays": 7,
   
   // ============================================
@@ -344,7 +341,6 @@ export const CONFIG = {
   memoryModel: fileConfig.memoryModel,
   memoryApiUrl: fileConfig.memoryApiUrl,
   memoryApiKey: fileConfig.memoryApiKey,
-  aiSessionEnabled: fileConfig.aiSessionEnabled ?? DEFAULTS.aiSessionEnabled,
   aiSessionRetentionDays: fileConfig.aiSessionRetentionDays ?? DEFAULTS.aiSessionRetentionDays,
   webServerEnabled: fileConfig.webServerEnabled ?? DEFAULTS.webServerEnabled,
   webServerPort: fileConfig.webServerPort ?? DEFAULTS.webServerPort,

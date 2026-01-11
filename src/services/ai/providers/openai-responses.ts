@@ -45,8 +45,17 @@ export class OpenAIResponsesProvider extends BaseAIProvider {
     toolSchema: ChatCompletionTool,
     sessionId: string
   ): Promise<ToolCallResult> {
-    const session = this.sessionStore.getSession(sessionId, "openai-responses");
-    let conversationId = session?.conversationId;
+    let session = this.sessionStore.getSession(sessionId, "openai-responses");
+    const messageStore = this.sessionStore.getMessageStore();
+
+    if (!session) {
+      session = this.sessionStore.createSession({
+        provider: "openai-responses",
+        sessionId,
+      });
+    }
+
+    let conversationId = session.conversationId;
     let currentPrompt = userPrompt;
     let iterations = 0;
 
@@ -63,7 +72,6 @@ export class OpenAIResponsesProvider extends BaseAIProvider {
           model: this.config.model,
           input: currentPrompt,
           tools: [tool],
-          max_output_tokens: 4096,
         };
 
         if (conversationId) {
@@ -102,21 +110,22 @@ export class OpenAIResponsesProvider extends BaseAIProvider {
 
         conversationId = data.conversation || conversationId;
 
+        if (iterations === 1) {
+          const userSeq = messageStore.getLastSequence(session.id) + 1;
+          messageStore.addMessage({
+            aiSessionId: session.id,
+            sequence: userSeq,
+            role: "user",
+            content: userPrompt,
+          });
+        }
+
         const toolCall = this.extractToolCall(data, toolSchema.function.name);
 
         if (toolCall) {
-          if (!session) {
-            this.sessionStore.createSession({
-              provider: "openai-responses",
-              sessionId,
-              conversationId,
-            });
-          } else {
-            this.sessionStore.updateSession(sessionId, "openai-responses", {
-              conversationId,
-              lastResponseId: data.id,
-            });
-          }
+          this.sessionStore.updateSession(sessionId, "openai-responses", {
+            conversationId,
+          });
 
           return {
             success: true,

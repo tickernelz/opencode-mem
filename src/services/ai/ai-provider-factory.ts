@@ -15,20 +15,18 @@ export class AIProviderFactory {
   }
 
   static createProvider(providerType: AIProviderType, config: ProviderConfig): BaseAIProvider {
+    if (!this.sessionStore) {
+      throw new Error("Session store not initialized");
+    }
+
     switch (providerType) {
       case "openai-chat":
-        return new OpenAIChatCompletionProvider(config);
+        return new OpenAIChatCompletionProvider(config, this.sessionStore);
 
       case "openai-responses":
-        if (!this.sessionStore) {
-          throw new Error("Session store not initialized for openai-responses provider");
-        }
         return new OpenAIResponsesProvider(config, this.sessionStore);
 
       case "anthropic":
-        if (!this.sessionStore) {
-          throw new Error("Session store not initialized for anthropic provider");
-        }
         return new AnthropicMessagesProvider(config, this.sessionStore);
 
       default:

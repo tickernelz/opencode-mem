@@ -2,9 +2,11 @@ import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import type { AISession, SessionCreateParams, SessionUpdateParams, AIProviderType } from "./session-types.js";
+import { MessageStore } from "./message-store.js";
 
 export class SessionStore {
   private db: Database;
+  private messageStore: MessageStore;
   private readonly sessionRetentionMs: number;
 
   constructor(storagePath: string, retentionDays: number = 7) {
@@ -17,6 +19,7 @@ export class SessionStore {
     this.db = new Database(dbPath);
     this.sessionRetentionMs = retentionDays * 24 * 60 * 60 * 1000;
     this.initDatabase();
+    this.messageStore = new MessageStore(this.db);
   }
 
   private initDatabase(): void {
@@ -30,8 +33,6 @@ export class SessionStore {
         provider TEXT NOT NULL,
         session_id TEXT NOT NULL,
         conversation_id TEXT,
-        last_response_id TEXT,
-        message_history TEXT,
         metadata TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
@@ -42,6 +43,10 @@ export class SessionStore {
     this.db.run("CREATE INDEX IF NOT EXISTS idx_ai_sessions_session_id ON ai_sessions(session_id)");
     this.db.run("CREATE INDEX IF NOT EXISTS idx_ai_sessions_expires_at ON ai_sessions(expires_at)");
     this.db.run("CREATE INDEX IF NOT EXISTS idx_ai_sessions_provider ON ai_sessions(provider)");
+  }
+
+  getMessageStore(): MessageStore {
+    return this.messageStore;
   }
 
   getSession(sessionId: string, provider: AIProviderType): AISession | null {
@@ -93,16 +98,6 @@ export class SessionStore {
       values.push(updates.conversationId);
     }
 
-    if (updates.lastResponseId !== undefined) {
-      fields.push("last_response_id = ?");
-      values.push(updates.lastResponseId);
-    }
-
-    if (updates.messageHistory !== undefined) {
-      fields.push("message_history = ?");
-      values.push(JSON.stringify(updates.messageHistory));
-    }
-
     if (updates.metadata !== undefined) {
       fields.push("metadata = ?");
       values.push(JSON.stringify(updates.metadata));
@@ -143,8 +138,6 @@ export class SessionStore {
       provider: row.provider as AIProviderType,
       sessionId: row.session_id,
       conversationId: row.conversation_id,
-      lastResponseId: row.last_response_id,
-      messageHistory: row.message_history ? JSON.parse(row.message_history) : undefined,
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,

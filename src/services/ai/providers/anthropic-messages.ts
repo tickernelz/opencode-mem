@@ -49,13 +49,40 @@ export class AnthropicMessagesProvider extends BaseAIProvider {
     toolSchema: ChatCompletionTool,
     sessionId: string
   ): Promise<ToolCallResult> {
-    const session = this.sessionStore.getSession(sessionId, "anthropic");
-    const messages: AnthropicMessage[] = session?.messageHistory || [];
+    let session = this.sessionStore.getSession(sessionId, "anthropic");
+    const messageStore = this.sessionStore.getMessageStore();
 
-    messages.push({
+    if (!session) {
+      session = this.sessionStore.createSession({
+        provider: "anthropic",
+        sessionId,
+        metadata: { systemPrompt },
+      });
+    }
+
+    const storedMessages = messageStore.getMessages(session.id);
+    const messages: AnthropicMessage[] = [];
+
+    for (const msg of storedMessages) {
+      if (msg.role === "system") continue;
+
+      const anthropicMsg: AnthropicMessage = {
+        role: msg.role as "user" | "assistant",
+        content: msg.contentBlocks || msg.content,
+      };
+
+      messages.push(anthropicMsg);
+    }
+
+    const userSequence = messageStore.getLastSequence(session.id) + 1;
+    messageStore.addMessage({
+      aiSessionId: session.id,
+      sequence: userSequence,
       role: "user",
       content: userPrompt,
     });
+
+    messages.push({ role: "user", content: userPrompt });
 
     let iterations = 0;
     const maxIterations = this.config.maxIterations;
@@ -71,7 +98,6 @@ export class AnthropicMessagesProvider extends BaseAIProvider {
 
         const requestBody = {
           model: this.config.model,
-          max_tokens: 4096,
           system: systemPrompt,
           messages,
           tools: [tool],
@@ -106,6 +132,15 @@ export class AnthropicMessagesProvider extends BaseAIProvider {
 
         const data = (await response.json()) as AnthropicResponse;
 
+        const assistantSequence = messageStore.getLastSequence(session.id) + 1;
+        messageStore.addMessage({
+          aiSessionId: session.id,
+          sequence: assistantSequence,
+          role: "assistant",
+          content: JSON.stringify(data.content),
+          contentBlocks: data.content,
+        });
+
         messages.push({
           role: "assistant",
           content: data.content,
@@ -114,19 +149,6 @@ export class AnthropicMessagesProvider extends BaseAIProvider {
         const toolUse = this.extractToolUse(data, toolSchema.function.name);
 
         if (toolUse) {
-          if (!session) {
-            this.sessionStore.createSession({
-              provider: "anthropic",
-              sessionId,
-              metadata: { messageCount: messages.length },
-            });
-          }
-
-          this.sessionStore.updateSession(sessionId, "anthropic", {
-            messageHistory: messages,
-            lastResponseId: data.id,
-          });
-
           return {
             success: true,
             data: this.validateResponse(toolUse),
@@ -135,10 +157,18 @@ export class AnthropicMessagesProvider extends BaseAIProvider {
         }
 
         if (data.stop_reason === "end_turn") {
-          messages.push({
+          const retrySequence = messageStore.getLastSequence(session.id) + 1;
+          const retryPrompt =
+            "Please use the save_memories tool to extract and save the memories from the conversation as instructed.";
+
+          messageStore.addMessage({
+            aiSessionId: session.id,
+            sequence: retrySequence,
             role: "user",
-            content: "Please use the save_memories tool to extract and sries from the conversation as instructed.",
+            content: retryPrompt,
           });
+
+          messages.push({ role: "user", content: retryPrompt });
         } else {
           break;
         }
@@ -161,7 +191,7 @@ export class AnthropicMessagesProvider extends BaseAIProvider {
 
     return {
       success: false,
-      error: `Max iterations (${maxIterations}) reachedut tool use`,
+      error: `Max iterations (${maxIterations}) reached without tool use`,
       iterations,
     };
   }
