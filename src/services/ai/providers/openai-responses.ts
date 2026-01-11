@@ -221,26 +221,30 @@ export class OpenAIResponsesProvider extends BaseAIProvider {
       throw new Error("Response is not an object");
     }
 
-    if (!Array.isArray(data.memories)) {
-      throw new Error("memories field is not an array");
+    if (data.memories && Array.isArray(data.memories)) {
+      const validMemories = data.memories.filter((m: any) => {
+        return (
+          m &&
+          typeof m === "object" &&
+          typeof m.summary === "string" &&
+          m.summary.trim().length > 0 &&
+          (m.scope === "user" || m.scope === "project") &&
+          typeof m.type === "string" &&
+          m.type.trim().length > 0
+        );
+      });
+
+      if (validMemories.length === 0) {
+        throw new Error("No valid memories in response");
+      }
+
+      return { memories: validMemories };
     }
 
-    const validMemories = data.memories.filter((m: any) => {
-      return (
-        m &&
-        typeof m === "object" &&
-        typeof m.summary === "string" &&
-        m.summary.trim().length > 0 &&
-        (m.scope === "user" || m.scope === "project") &&
-        typeof m.type === "string" &&
-        m.type.trim().length > 0
-      );
-    });
-
-    if (validMemories.length === 0) {
-      throw new Error("No valid memories in response");
+    if (data.summary && typeof data.summary === "string" && data.summary.trim().length > 0) {
+      return data;
     }
 
-    return { memories: validMemories };
+    throw new Error("Invalid response format: missing summary or memories field");
   }
 }

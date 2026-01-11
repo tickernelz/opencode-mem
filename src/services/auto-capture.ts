@@ -38,7 +38,7 @@ export async function performAutoCapture(
 
     const messages = response.data;
 
-    const promptIndex = messages.findIndex((m: any) => m.id === prompt.messageId);
+    const promptIndex = messages.findIndex((m: any) => m.info?.id === prompt.messageId);
     if (promptIndex === -1) {
       log("Auto-capture: prompt message not found", { sessionID, messageId: prompt.messageId });
       return;
@@ -131,11 +131,20 @@ function extractAIContent(messages: any[]): {
 
     const toolParts = msg.parts.filter((p: any) => p.type === "tool");
     for (const tool of toolParts) {
-      const name = tool.name || "unknown";
+      const name = tool.tool || "unknown";
       let input = "";
 
-      if (tool.input) {
-        input = typeof tool.input === "string" ? tool.input : JSON.stringify(tool.input);
+      if (tool.state?.input) {
+        const inputObj = tool.state.input;
+        if (typeof inputObj === "string") {
+          input = inputObj;
+        } else if (typeof inputObj === "object") {
+          const params = [];
+          for (const [key, value] of Object.entries(inputObj)) {
+            params.push(`${key}: ${JSON.stringify(value)}`);
+          }
+          input = params.join(", ");
+        }
       }
 
       if (input.length > MAX_TOOL_INPUT_LENGTH) {
