@@ -127,8 +127,6 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     "chat.message": async (input, output) => {
       if (!isConfigured()) return;
 
-      const start = Date.now();
-
       try {
         const textParts = output.parts.filter(
           (p): p is Part & { type: "text"; text: string } => p.type === "text"

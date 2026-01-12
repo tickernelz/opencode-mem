@@ -38,11 +38,11 @@
       <div class="scope-tabs">
         <button id="tab-project" class="tab-btn active">
           <i data-lucide="folder" class="icon"></i>
-          PROJECT TIMELINE
+          PROJECT MEMORIES
         </button>
-        <button id="tab-user" class="tab-btn">
+        <button id="tab-profile" class="tab-btn">
           <i data-lucide="user" class="icon"></i>
-          USER TIMELINE
+          USER PROFILE
         </button>
       </div>
 
@@ -99,7 +99,7 @@
         </div>
       </div>
 
-      <div class="memories-section">
+      <div class="memories-section" id="project-section">
         <div class="section-header">
           <h2 id="section-title">└─ PROJECT MEMORIES (0) ──</h2>
           <div class="pagination" id="pagination-top">
@@ -125,6 +125,19 @@
           <button id="next-page-bottom" disabled>
             <i data-lucide="chevron-right" class="icon"></i>
           </button>
+        </div>
+      </div>
+
+      <div class="profile-section hidden" id="profile-section">
+        <div class="section-header">
+          <h2>└─ USER PROFILE ──</h2>
+          <button id="refresh-profile-btn" class="btn-secondary">
+            <i data-lucide="refresh-cw" class="icon"></i> Refresh
+          </button>
+        </div>
+
+        <div id="profile-content" class="profile-content">
+          <div class="loading">Loading profile...</div>
         </div>
       </div>
 
@@ -200,6 +213,18 @@
     </div>
 
     <div id="toast" class="toast hidden"></div>
+
+    <div id="changelog-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Profile Version History</h3>
+          <button class="modal-close" id="changelog-close"><i data-lucide="x" class="icon"></i></button>
+        </div>
+        <div id="changelog-list" class="changelog-list">
+          <div class="loading">Loading changelog...</div>
+        </div>
+      </div>
+    </div>
 
     <script src="/app.js"></script>
   </body>

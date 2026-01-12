@@ -1174,3 +1174,303 @@ textarea:focus-visible {
     transform: translateX(0);
   }
 }
+
+.profile-section {
+  border: 1px solid #333;
+  padding: 20px;
+  margin-bottom: 20px;
+  background: #111;
+}
+
+.profile-content {
+  min-height: 300px;
+}
+
+.profile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid #00ccff;
+  background: rgba(0, 204, 255, 0.05);
+}
+
+.profile-info h3 {
+  color: #00ccff;
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.profile-meta {
+  color: #888;
+  font-size: 12px;
+}
+
+.profile-meta span {
+  margin-right: 8px;
+}
+
+.profile-section h4 {
+  color: #00ccff;
+  font-size: 14px;
+  margin-bottom: 15px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.empty-text {
+  color: #666;
+  font-style: italic;
+  padding: 20px;
+  text-align: center;
+}
+
+.preferences-list,
+.patterns-list,
+.workflows-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.preference-item,
+.pattern-item,
+.workflow-item {
+  border: 1px solid #333;
+  padding: 15px;
+  background: #0a0a0a;
+  transition: border-color 0.2s;
+}
+
+.preference-item:hover,
+.pattern-item:hover,
+.workflow-item:hover {
+  border-color: #00ccff;
+}
+
+.preference-header,
+.pattern-header,
+.workflow-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.preference-name,
+.pattern-name,
+.workflow-name {
+  color: #e0e0e0;
+  font-weight: bold;
+  flex: 1;
+}
+
+.confidence-badge,
+.frequency-badge {
+  background: #00ccff;
+  color: #0a0a0a;
+  padding: 4px 10px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.confidence-bar,
+.frequency-bar {
+  height: 6px;
+  background: #222;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.confidence-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00ccff, #00ff00);
+  transition: width 0.3s;
+}
+
+.frequency-fill {
+  height: 100%;
+  background: #00ccff;
+  transition: width 0.3s;
+}
+
+.preference-evidence {
+  color: #888;
+  font-size: 12px;
+  font-style: italic;
+  margin-bottom: 5px;
+}
+
+.preference-meta,
+.pattern-meta {
+  color: #666;
+  font-size: 11px;
+}
+
+.workflow-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.workflow-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  background: #111;
+  border-left: 2px solid #00ccff;
+}
+.step-number {
+  background: #00ccff;
+  color: #0a0a0a;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.step-text {
+  color: #ccc;
+  font-size: 12px;
+}
+
+.skill-level {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  padding: 15px;
+  background: #0a0a0a;
+  border: 1px solid #333;
+}
+
+.skill-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-left: 3px solid #00ccff;
+  background: #111;
+}
+
+.skill-label {
+  color: #888;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.skill-value {
+  color: #00ccff;
+  font-weight: bold;
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.changelog-list {
+  padding: 20px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.changelog-item {
+  border: 1px solid #333;
+  padding: 15px;
+  margin-bottom: 10px;
+  background: #0a0a0a;
+  transition: border-color 0.2s;
+}
+
+.changelog-item:hover {
+  border-color: #00ccff;
+}
+
+.changelog-header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.changelog-version {
+  background: #00ccff;
+  color: #0a0a0a;
+  padding: 4px 10px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.changelog-type {
+  color: #888;
+  font-size: 11px;
+  text-transform: uppercase;
+  border: 1px solid #333;
+  padding: 4px 8px;
+}
+
+.changelog-date {
+  color: #666;
+  font-size: 11px;
+  margin-left: auto;
+}
+
+.changelog-summary {
+  color: #ccc;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.icon-large {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 15px;
+  opacity: 0.5;
+}
+
+@media (max-width: 768px) {
+  .profile-header {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .skill-level {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-step {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.profile-meta .separator {
+  margin: 0 8px;
+  color: #666;
+}
+
+.badge .icon-sm {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.link-indicator .icon-sm {
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
+}

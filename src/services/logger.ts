@@ -1,6 +1,6 @@
 import { appendFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { homedir } from "os";
-import { join, dirname } from "path";
+import { join } from "path";
 
 const LOG_DIR = join(homedir(), ".opencode-mem");
 const LOG_FILE = join(LOG_DIR, "opencode-mem.log");

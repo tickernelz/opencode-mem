@@ -61,7 +61,7 @@ export async function performAutoCapture(
 
     const context = buildMarkdownContext(prompt.content, textResponses, toolCalls, latestMemory);
 
-    const summaryResult = await generateSummary(ctx, context, sessionID);
+    const summaryResult = await generateSummary(context, sessionID);
 
     if (!summaryResult || summaryResult.type === "skip") {
       log("Auto-capture: skipped non-technical conversation", { sessionID });
@@ -232,7 +232,6 @@ function buildMarkdownContext(
 }
 
 async function generateSummary(
-  ctx: PluginInput,
   context: string,
   sessionID: string
 ): Promise<{ summary: string; type: string } | null> {

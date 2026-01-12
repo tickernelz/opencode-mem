@@ -9,10 +9,12 @@ const state = {
   totalItems: 0,
   selectedTag: "",
   currentScope: "project",
+  currentView: "project",
   searchQuery: "",
   isSearching: false,
   selectedMemories: new Set(),
   autoRefreshInterval: null,
+  userProfile: null,
 };
 
 marked.setOptions({
@@ -143,7 +145,7 @@ function renderPromptCard(prompt) {
           <input type="checkbox" class="memory-checkbox" data-id="${prompt.id}" ${isSelected ? "checked" : ""} />
           <i data-lucide="message-circle" class="icon"></i>
           <span class="badge badge-prompt">USER PROMPT</span>
-          ${isLinked ? '<span class="badge badge-linked">🔗 LINKED</span>' : ""}
+          ${isLinked ? '<span class="badge badge-linked"><i data-lucide="link" class="icon-sm"></i> LINKED</span>' : ""}
           <span class="prompt-date">${promptDate}</span>
         </div>
         <div class="prompt-actions">
@@ -156,7 +158,7 @@ function renderPromptCard(prompt) {
       <div class="prompt-content">
         ${escapeHtml(prompt.content)}
       </div>
-      ${isLinked ? '<div class="link-indicator">↓ Generated memory above ↑</div>' : ""}
+      ${isLinked ? '<div class="link-indicator"><i data-lucide="arrow-down" class="icon-sm"></i> Generated memory above <i data-lucide="arrow-up" class="icon-sm"></i></div>' : ""}
     </div>
   `;
 }
@@ -202,7 +204,7 @@ function renderMemoryCard(memory) {
           <input type="checkbox" class="memory-checkbox" data-id="${memory.id}" ${isSelected ? "checked" : ""} />
           <span class="badge badge-${memory.scope}">${memory.scope}</span>
           ${memory.memoryType ? `<span class="badge badge-type">${memory.memoryType}</span>` : ""}
-          ${isLinked ? '<span class="badge badge-linked">🔗 LINKED</span>' : ""}
+          ${isLinked ? '<span class="badge badge-linked"><i data-lucide="link" class="icon-sm"></i> LINKED</span>' : ""}
           ${similarityHtml}
           ${isPinned ? '<span class="badge badge-pinned">PINNED</span>' : ""}
           <span class="memory-display-name">${escapeHtml(displayInfo)}</span>
@@ -218,7 +220,7 @@ function renderMemoryCard(memory) {
         </div>
       </div>
       <div class="memory-content markdown-content">${renderMarkdown(memory.content)}</div>
-      ${isLinked ? '<div class="link-indicator">↑ From prompt below ↓</div>' : ""}
+      ${isLinked ? '<div class="link-indicator"><i data-lucide="arrow-up" class="icon-sm"></i> From prompt below <i data-lucide="arrow-down" class="icon-sm"></i></div>' : ""}
       <div class="memory-footer">
         ${dateInfo}
         <span>ID: ${memory.id}</span>
@@ -295,19 +297,7 @@ async function loadStats() {
   }
 }
 
-function switchScope(scope) {
-  state.currentScope = scope;
-  state.currentPage = 1;
-  state.selectedTag = "";
 
-  document.querySelectorAll(".tab-btn").forEach((btn) => {
-    btn.classList.remove("active");
-  });
-  document.getElementById(`tab-${scope}`).classList.add("active");
-
-  populateTagDropdowns();
-  loadMemories();
-}
 
 async function addMemory(e) {
   e.preventDefault();
@@ -551,12 +541,6 @@ function showRefreshIndicator(show) {
   }
 }
 
-function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
-
 function formatDate(isoString) {
   const date = new Date(isoString);
   return date.toLocaleString("en-US", {
@@ -722,9 +706,215 @@ async function runMigration(strategy) {
   }
 }
 
+async function loadUserProfile() {
+  const result = await fetchAPI("/api/user-profile");
+  if (result.success) {
+    state.userProfile = result.data;
+    renderUserProfile();
+  } else {
+    showError(result.error || "Failed to load profile");
+  }
+}
+
+function renderUserProfile() {
+  const container = document.getElementById("profile-content");
+  const profile = state.userProfile;
+
+  if (!profile.exists) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <i data-lucide="user-x" class="icon-large"></i>
+        <p>${profile.message}</p>
+      </div>
+    `;
+    lucide.createIcons();
+    return;
+  }
+
+  const data = profile.profileData;
+  const preferences = data.preferences || [];
+  const patterns = data.patterns || [];
+  const workflows = data.workflows || [];
+  const skillLevel = data.skillLevel || {};
+
+  container.innerHTML = `
+    <div class="profile-header">
+      <div class="profile-info">
+        <h3>${profile.displayName || profile.userId}</h3>
+        <p class="profile-meta">
+          <span>Version: ${profile.version}</span>
+          <span class="separator">|</span>
+          <span>Analyzed: ${profile.totalPromptsAnalyzed} prompts</span>
+          <span class="separator">|</span>
+          <span>Updated: ${formatDate(profile.lastAnalyzedAt)}</span>
+        </p>
+      </div>
+      <button id="view-changelog-btn" class="btn-secondary">
+        <i data-lucide="history" class="icon"></i> Version History
+      </button>
+    </div>
+
+    <div class="profile-section">
+      <h4><i data-lucide="heart" class="icon"></i> Preferences (${preferences.length})</h4>
+      ${preferences.length === 0 ? '<p class="empty-text">No preferences learned yet</p>' : `
+        <div class="preferences-list">
+          ${preferences.map(p => `
+            <div class="preference-item">
+              <div class="preference-header">
+                <span class="preference-name">${escapeHtml(p.preference)}</span>
+                <span class="confidence-badge">${Math.round(p.confidence * 100)}%</span>
+              </div>
+              <div class="confidence-bar">
+                <div class="confidence-fill" style="width: ${p.confidence * 100}%"></div>
+              </div>
+              <p class="preference-evidence">${escapeHtml(p.evidence)}</p>
+              <p class="preference-meta">Updated: ${formatDate(p.lastUpdated)}</p>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+
+    <div class="profile-section">
+      <h4><i data-lucide="activity" class="icon"></i> Patterns (${patterns.length})</h4>
+      ${patterns.length === 0 ? '<p class="empty-text">No patterns detected yet</p>' : `
+        <div class="patterns-list">
+          ${patterns.map(p => `
+            <div class="pattern-item">
+              <div class="pattern-header">
+                <span class="pattern-name">${escapeHtml(p.pattern)}</span>
+                <span class="frequency-badge">${p.frequency}x</span>
+              </div>
+              <div class="frequency-bar">
+                <div class="frequency-fill" style="width: ${Math.min(p.frequency * 10, 100)}%"></div>
+              </div>
+              <p class="pattern-meta">Last seen: ${formatDate(p.lastSeen)}</p>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+
+    <div class="profile-section">
+      <h4><i data-lucide="workflow" class="icon"></i> Workflows (${workflows.length})</h4>
+      ${workflows.length === 0 ? '<p class="empty-text">No workflows identified yet</p>' : `
+        <div class="workflows-list">
+          ${workflows.map(w => `
+            <div class="workflow-item">
+              <div class="workflow-header">
+                <span class="workflow-name">${escapeHtml(w.workflow)}</span>
+                <span class="frequency-badge">${w.frequency}x</span>
+              </div>
+              <div class="workflow-steps">
+                ${w.steps.map((step, i) => `
+                  <div class="workflow-step">
+                    <span class="step-number">${i + 1}</span>
+                    <span class="step-text">${escapeHtml(step)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+
+    <div class="profile-section">
+      <h4><i data-lucide="award" class="icon"></i> Skill Level</h4>
+      <div class="skill-level">
+        <div class="skill-item">
+          <span class="skill-label">Overall</span>
+          <span class="skill-value">${escapeHtml(skillLevel.overall || 'unknown')}</span>
+        </div>
+        ${Object.entries(skillLevel.domains || {}).map(([domain, level]) => `
+          <div class="skill-item">
+            <span class="skill-label">${escapeHtml(domain)}</span>
+            <span class="skill-value">${escapeHtml(level)}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  document.getElementById("view-changelog-btn")?.addEventListener("click", showChangelog);
+  lucide.createIcons();
+}
+
+async function showChangelog() {
+  const modal = document.getElementById("changelog-modal");
+  const list = document.getElementById("changelog-list");
+  
+  modal.classList.remove("hidden");
+  list.innerHTML = '<div class="loading">Loading changelog...</div>';
+
+  const result = await fetchAPI(`/api/user-profile/changelog?profileId=${state.userProfile.id}&limit=10`);
+  
+  if (result.success && result.data.length > 0) {
+    list.innerHTML = result.data.map(c => `
+      <div class="changelog-item">
+        <div class="changelog-header">
+          <span class="changelog-version">v${c.version}</span>
+          <span class="changelog-type">${c.changeType}</span>
+          <span class="changelog-date">${formatDate(c.createdAt)}</span>
+        </div>
+        <p class="changelog-summary">${escapeHtml(c.changeSummary)}</p>
+      </div>
+    `).join('');
+  } else {
+    list.innerHTML = '<div class="empty-state">No changelog available</div>';
+  }
+}
+
+async function refreshProfile() {
+  showToast("Refreshing profile...", "info");
+  const result = await fetchAPI("/api/user-profile/refresh", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  
+  if (result.success) {
+    showToast(result.data.message, "success");
+    await loadUserProfile();
+  } else {
+    showToast(result.error || "Failed to refresh profile", "error");
+  }
+}
+
+function switchView(view) {
+  state.currentView = view;
+  
+  document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
+  
+  if (view === "project") {
+    document.getElementById("tab-project").classList.add("active");
+    document.getElementById("project-section").classList.remove("hidden");
+    document.getElementById("profile-section").classList.add("hidden");
+    document.querySelector(".controls").classList.remove("hidden");
+    document.querySelector(".add-section").classList.remove("hidden");
+  } else if (view === "profile") {
+    document.getElementById("tab-profile").classList.add("active");
+    document.getElementById("project-section").classList.add("hidden");
+    document.getElementById("profile-section").classList.remove("hidden");
+    document.querySelector(".controls").classList.add("hidden");
+    document.querySelector(".add-section").classList.add("hidden");
+    loadUserProfile();
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
-  document.getElementById("tab-project").addEventListener("click", () => switchScope("project"));
-  document.getElementById("tab-user").addEventListener("click", () => switchScope("user"));
+  document.getElementById("tab-project").addEventListener("click", () => switchView("project"));
+  document.getElementById("tab-profile").addEventListener("click", () => switchView("profile"));
+  document.getElementById("refresh-profile-btn")?.addEventListener("click", refreshProfile);
+  document.getElementById("changelog-close")?.addEventListener("click", () => {
+    document.getElementById("changelog-modal").classList.add("hidden");
+  });
 
   document.getElementById("tag-filter").addEventListener("change", () => {
     state.selectedTag = document.getElementById("tag-filter").value;

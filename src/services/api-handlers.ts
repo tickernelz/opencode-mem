@@ -793,3 +793,138 @@ export async function handleBulkDeletePrompts(
     return { success: false, error: String(error) };
   }
 }
+
+export async function handleGetUserProfile(userId?: string): Promise<ApiResponse<any>> {
+  try {
+    const { userProfileManager } = await import("./user-profile/user-profile-manager.js");
+    const { getTags } = await import("./tags.js");
+
+    let targetUserId = userId;
+    if (!targetUserId) {
+      const tags = getTags(process.cwd());
+      targetUserId = tags.user.userEmail || "unknown";
+    }
+
+    const profile = userProfileManager.getActiveProfile(targetUserId);
+
+    if (!profile) {
+      return {
+        success: true,
+        data: {
+          exists: false,
+          userId: targetUserId,
+          message: "No profile found. Keep chatting to build your profile.",
+        },
+      };
+    }
+
+    const profileData = JSON.parse(profile.profileData);
+
+    return {
+      success: true,
+      data: {
+        exists: true,
+        id: profile.id,
+        userId: profile.userId,
+        displayName: profile.displayName,
+        userName: profile.userName,
+        userEmail: profile.userEmail,
+        version: profile.version,
+        createdAt: safeToISOString(profile.createdAt),
+        lastAnalyzedAt: safeToISOString(profile.lastAnalyzedAt),
+        totalPromptsAnalyzed: profile.totalPromptsAnalyzed,
+        profileData,
+      },
+    };
+  } catch (error) {
+    log("handleGetUserProfile: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleGetProfileChangelog(
+  profileId: string,
+  limit: number = 5
+): Promise<ApiResponse<any[]>> {
+  try {
+    if (!profileId) {
+      return { success: false, error: "profileId is required" };
+    }
+
+    const { userProfileManager } = await import("./user-profile/user-profile-manager.js");
+    const changelogs = userProfileManager.getProfileChangelogs(profileId, limit);
+
+    const formattedChangelogs = changelogs.map((c) => ({
+      id: c.id,
+      profileId: c.profileId,
+      version: c.version,
+      changeType: c.changeType,
+      changeSummary: c.changeSummary,
+      createdAt: safeToISOString(c.createdAt),
+    }));
+
+    return { success: true, data: formattedChangelogs };
+  } catch (error) {
+    log("handleGetProfileChangelog: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleGetProfileSnapshot(
+  changelogId: string
+): Promise<ApiResponse<any>> {
+  try {
+    if (!changelogId) {
+      return { success: false, error: "changelogId is required" };
+    }
+
+    const { userProfileManager } = await import("./user-profile/user-profile-manager.js");
+    const changelogs = userProfileManager.getProfileChangelogs("", 1000);
+    const changelog = changelogs.find((c) => c.id === changelogId);
+
+    if (!changelog) {
+      return { success: false, error: "Changelog not found" };
+    }
+
+    const profileData = JSON.parse(changelog.profileDataSnapshot);
+
+    return {
+      success: true,
+      data: {
+        version: changelog.version,
+        createdAt: safeToISOString(changelog.createdAt),
+        profileData,
+      },
+    };
+  } catch (error) {
+    log("handleGetProfileSnapshot: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleRefreshProfile(userId?: string): Promise<ApiResponse<any>> {
+  try {
+    const { getTags } = await import("./tags.js");
+    const { userPromptManager } = await import("./user-prompt/user-prompt-manager.js");
+
+    let targetUserId = userId;
+    if (!targetUserId) {
+      const tags = getTags(process.cwd());
+      targetUserId = tags.user.userEmail || "unknown";
+    }
+
+    const unanalyzedCount = userPromptManager.countUnanalyzedForUserLearning();
+
+    return {
+      success: true,
+      data: {
+        message: "Profile refresh queued",
+        unanalyzedPrompts: unanalyzedCount,
+        note: "Profile will be updated when threshold is reached",
+      },
+    };
+  } catch (error) {
+    log("handleRefreshProfile: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}

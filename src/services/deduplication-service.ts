@@ -1,4 +1,3 @@
-import { embeddingService } from "./embedding.js";
 import { shardManager } from "./sqlite/shard-manager.js";
 import { vectorSearch } from "./sqlite/vector-search.js";
 import { connectionManager } from "./sqlite/connection-manager.js";
@@ -64,10 +63,9 @@ export class DeduplicationService {
           contentMap.get(key)!.push(memory);
         }
 
-        for (const [key, duplicates] of contentMap) {
+        for (const [, duplicates] of contentMap) {
           if (duplicates.length > 1) {
             duplicates.sort((a, b) => Number(b.created_at) - Number(a.created_at));
-            const keep = duplicates[0];
             const toDelete = duplicates.slice(1);
 
             for (const dup of toDelete) {

@@ -18,6 +18,10 @@ import {
   handleRunMigration,
   handleDeletePrompt,
   handleBulkDeletePrompts,
+  handleGetUserProfile,
+  handleGetProfileChangelog,
+  handleGetProfileSnapshot,
+  handleRefreshProfile,
 } from "./api-handlers.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -186,6 +190,38 @@ async function handleRequest(req: Request): Promise<Response> {
       const body = (await req.json()) as any;
       const cascade = body.cascade !== false;
       const result = await handleBulkDeletePrompts(body.ids || [], cascade);
+      return jsonResponse(result);
+    }
+
+    if (path === "/api/user-profile" && method === "GET") {
+      const userId = url.searchParams.get("userId") || undefined;
+      const result = await handleGetUserProfile(userId);
+      return jsonResponse(result);
+    }
+
+    if (path === "/api/user-profile/changelog" && method === "GET") {
+      const profileId = url.searchParams.get("profileId");
+      const limit = parseInt(url.searchParams.get("limit") || "5");
+      if (!profileId) {
+        return jsonResponse({ success: false, error: "profileId parameter required" });
+      }
+      const result = await handleGetProfileChangelog(profileId, limit);
+      return jsonResponse(result);
+    }
+
+    if (path === "/api/user-profile/snapshot" && method === "GET") {
+      const changelogId = url.searchParams.get("chlogId");
+      if (!changelogId) {
+        return jsonResponse({ success: false, error: "changelogId parameter required" });
+      }
+      const result = await handleGetProfileSnapshot(changelogId);
+      return jsonResponse(result);
+    }
+
+    if (path === "/api/user-profile/refresh" && method === "POST") {
+      const body = (await req.json().catch(() => ({}))) as any;
+      const userId = body.userId || undefined;
+      const result = await handleRefreshProfile(userId);
       return jsonResponse(result);
     }
 
