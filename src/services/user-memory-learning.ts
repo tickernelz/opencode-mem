@@ -191,7 +191,7 @@ Use the update_user_profile tool to save the ${existingProfile ? "updated" : "ne
             type: "array",
             items: {
               type: "object",
-    properties: {
+              properties: {
                 category: { type: "string" },
                 description: { type: "string" },
                 confidence: { type: "number", minimum: 0, maximum: 1 },
