@@ -90,10 +90,7 @@ export async function performUserMemoryLearning(
   }
 }
 
-function generateChangeSummary(
-  oldProfile: UserProfileData,
-  newProfile: UserProfileData
-): string {
+function generateChangeSummary(oldProfile: UserProfileData, newProfile: UserProfileData): string {
   const changes: string[] = [];
 
   const prefDiff = newProfile.preferences.length - oldProfile.preferences.length;
@@ -108,7 +105,10 @@ function generateChangeSummary(
   return changes.length > 0 ? changes.join(", ") : "Profile refinement";
 }
 
-function buildUserAnalysisContext(prompts: UserPrompt[], existingProfile: UserProfile | null): string {
+function buildUserAnalysisContext(
+  prompts: UserPrompt[],
+  existingProfile: UserProfile | null
+): string {
   const existingProfileSection = existingProfile
     ? `
 ## Existing User Profile
@@ -183,7 +183,9 @@ Use the update_user_profile tool to save the ${existingProfile ? "updated" : "ne
     type: "function" as const,
     function: {
       name: "update_user_profile",
-      description: existingProfile ? "Update existing user profile with new insights" : "Create new user profile",
+      description: existingProfile
+        ? "Update existing user profile with new insights"
+        : "Create new user profile",
       parameters: {
         type: "object",
         properties: {

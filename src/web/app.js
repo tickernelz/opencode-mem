@@ -297,8 +297,6 @@ async function loadStats() {
   }
 }
 
-
-
 async function addMemory(e) {
   e.preventDefault();
 
@@ -756,9 +754,14 @@ function renderUserProfile() {
 
     <div class="profile-section">
       <h4><i data-lucide="heart" class="icon"></i> Preferences (${preferences.length})</h4>
-      ${preferences.length === 0 ? '<p class="empty-text">No preferences learned yet</p>' : `
+      ${
+        preferences.length === 0
+          ? '<p class="empty-text">No preferences learned yet</p>'
+          : `
         <div class="preferences-list">
-          ${preferences.map(p => `
+          ${preferences
+            .map(
+              (p) => `
             <div class="preference-item">
               <div class="preference-header">
                 <span class="preference-name">${escapeHtml(p.preference)}</span>
@@ -770,16 +773,24 @@ function renderUserProfile() {
               <p class="preference-evidence">${escapeHtml(p.evidence)}</p>
               <p class="preference-meta">Updated: ${formatDate(p.lastUpdated)}</p>
             </div>
-          `).join('')}
+          `
+            )
+            .join("")}
         </div>
-      `}
+      `
+      }
     </div>
 
     <div class="profile-section">
       <h4><i data-lucide="activity" class="icon"></i> Patterns (${patterns.length})</h4>
-      ${patterns.length === 0 ? '<p class="empty-text">No patterns detected yet</p>' : `
+      ${
+        patterns.length === 0
+          ? '<p class="empty-text">No patterns detected yet</p>'
+          : `
         <div class="patterns-list">
-          ${patterns.map(p => `
+          ${patterns
+            .map(
+              (p) => `
             <div class="pattern-item">
               <div class="pattern-header">
                 <span class="pattern-name">${escapeHtml(p.pattern)}</span>
@@ -790,33 +801,48 @@ function renderUserProfile() {
               </div>
               <p class="pattern-meta">Last seen: ${formatDate(p.lastSeen)}</p>
             </div>
-          `).join('')}
+          `
+            )
+            .join("")}
         </div>
-      `}
+      `
+      }
     </div>
 
     <div class="profile-section">
       <h4><i data-lucide="workflow" class="icon"></i> Workflows (${workflows.length})</h4>
-      ${workflows.length === 0 ? '<p class="empty-text">No workflows identified yet</p>' : `
+      ${
+        workflows.length === 0
+          ? '<p class="empty-text">No workflows identified yet</p>'
+          : `
         <div class="workflows-list">
-          ${workflows.map(w => `
+          ${workflows
+            .map(
+              (w) => `
             <div class="workflow-item">
               <div class="workflow-header">
                 <span class="workflow-name">${escapeHtml(w.workflow)}</span>
                 <span class="frequency-badge">${w.frequency}x</span>
               </div>
               <div class="workflow-steps">
-                ${w.steps.map((step, i) => `
+                ${w.steps
+                  .map(
+                    (step, i) => `
                   <div class="workflow-step">
                     <span class="step-number">${i + 1}</span>
                     <span class="step-text">${escapeHtml(step)}</span>
                   </div>
-                `).join('')}
+                `
+                  )
+                  .join("")}
               </div>
             </div>
-          `).join('')}
+          `
+            )
+            .join("")}
         </div>
-      `}
+      `
+      }
     </div>
 
     <div class="profile-section">
@@ -824,14 +850,18 @@ function renderUserProfile() {
       <div class="skill-level">
         <div class="skill-item">
           <span class="skill-label">Overall</span>
-          <span class="skill-value">${escapeHtml(skillLevel.overall || 'unknown')}</span>
+          <span class="skill-value">${escapeHtml(skillLevel.overall || "unknown")}</span>
         </div>
-        ${Object.entries(skillLevel.domains || {}).map(([domain, level]) => `
+        ${Object.entries(skillLevel.domains || {})
+          .map(
+            ([domain, level]) => `
           <div class="skill-item">
             <span class="skill-label">${escapeHtml(domain)}</span>
             <span class="skill-value">${escapeHtml(level)}</span>
           </div>
-        `).join('')}
+        `
+          )
+          .join("")}
       </div>
     </div>
   `;
@@ -843,14 +873,18 @@ function renderUserProfile() {
 async function showChangelog() {
   const modal = document.getElementById("changelog-modal");
   const list = document.getElementById("changelog-list");
-  
+
   modal.classList.remove("hidden");
   list.innerHTML = '<div class="loading">Loading changelog...</div>';
 
-  const result = await fetchAPI(`/api/user-profile/changelog?profileId=${state.userProfile.id}&limit=10`);
-  
+  const result = await fetchAPI(
+    `/api/user-profile/changelog?profileId=${state.userProfile.id}&limit=10`
+  );
+
   if (result.success && result.data.length > 0) {
-    list.innerHTML = result.data.map(c => `
+    list.innerHTML = result.data
+      .map(
+        (c) => `
       <div class="changelog-item">
         <div class="changelog-header">
           <span class="changelog-version">v${c.version}</span>
@@ -859,7 +893,9 @@ async function showChangelog() {
         </div>
         <p class="changelog-summary">${escapeHtml(c.changeSummary)}</p>
       </div>
-    `).join('');
+    `
+      )
+      .join("");
   } else {
     list.innerHTML = '<div class="empty-state">No changelog available</div>';
   }
@@ -872,7 +908,7 @@ async function refreshProfile() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),
   });
-  
+
   if (result.success) {
     showToast(result.data.message, "success");
     await loadUserProfile();
@@ -883,9 +919,9 @@ async function refreshProfile() {
 
 function switchView(view) {
   state.currentView = view;
-  
-  document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
-  
+
+  document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.remove("active"));
+
   if (view === "project") {
     document.getElementById("tab-project").classList.add("active");
     document.getElementById("project-section").classList.remove("hidden");
@@ -903,7 +939,7 @@ function switchView(view) {
 }
 
 function escapeHtml(text) {
-  const div = document.createElement('div');
+  const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
 }

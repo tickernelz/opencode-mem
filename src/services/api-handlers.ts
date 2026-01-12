@@ -870,9 +870,7 @@ export async function handleGetProfileChangelog(
   }
 }
 
-export async function handleGetProfileSnapshot(
-  changelogId: string
-): Promise<ApiResponse<any>> {
+export async function handleGetProfileSnapshot(changelogId: string): Promise<ApiResponse<any>> {
   try {
     if (!changelogId) {
       return { success: false, error: "changelogId is required" };

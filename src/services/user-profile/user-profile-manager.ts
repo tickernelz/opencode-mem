@@ -2,11 +2,7 @@ import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { connectionManager } from "../sqlite/connection-manager.js";
 import { CONFIG } from "../../config.js";
-import type {
-  UserProfile,
-  UserProfileChangelog,
-  UserProfileData,
-} from "./types.js";
+import type { UserProfile, UserProfileChangelog, UserProfileData } from "./types.js";
 
 const USER_PROFILES_DB_NAME = "user-profiles.db";
 
@@ -133,7 +129,13 @@ export class UserProfileManager {
       WHERE id = ?
     `);
 
-    updateStmt.run(JSON.stringify(profileData), newVersion, now, additionalPromptsAnalyzed, profileId);
+    updateStmt.run(
+      JSON.stringify(profileData),
+      newVersion,
+      now,
+      additionalPromptsAnalyzed,
+      profileId
+    );
 
     this.addChangelog(profileId, newVersion, "update", changeSummary, profileData);
 
@@ -263,10 +265,7 @@ export class UserProfileManager {
     };
   }
 
-  mergeProfileData(
-    existing: UserProfileData,
-    updates: Partial<UserProfileData>
-  ): UserProfileData {
+  mergeProfileData(existing: UserProfileData, updates: Partial<UserProfileData>): UserProfileData {
     const merged: UserProfileData = {
       preferences: [...existing.preferences],
       patterns: [...existing.patterns],

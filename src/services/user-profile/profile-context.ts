@@ -3,7 +3,7 @@ import type { UserProfileData } from "./types.js";
 
 export function getUserProfileContext(userId: string): string | null {
   const profile = userProfileManager.getActiveProfile(userId);
-  
+
   if (!profile) {
     return null;
   }

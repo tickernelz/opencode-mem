@@ -477,7 +477,8 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
               }
 
               case "profile": {
-                const { userProfileManager } = await import("./services/user-profile/user-profile-manager.js");
+                const { userProfileManager } =
+                  await import("./services/user-profile/user-profile-manager.js");
                 const userId = tags.user.userEmail || "unknown";
                 const profile = userProfileManager.getActiveProfile(userId);
 
@@ -498,7 +499,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                     patterns: profileData.patterns,
                     workflows: profileData.workflows,
                     skillLevel: profileData.skillLevel,
-        version: profile.version,
+                    version: profile.version,
                     lastAnalyzed: profile.lastAnalyzedAt,
                     totalPromptsAnalyzed: profile.totalPromptsAnalyzed,
                   },
