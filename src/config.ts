@@ -377,7 +377,9 @@ function getEmbeddingDimensions(model: string): number {
 
 export const CONFIG = {
   storagePath: expandPath(fileConfig.storagePath ?? DEFAULTS.storagePath),
-  customSqlitePath: fileConfig.customSqlitePath ? expandPath(fileConfig.customSqlitePath) : undefined,
+  customSqlitePath: fileConfig.customSqlitePath
+    ? expandPath(fileConfig.customSqlitePath)
+    : undefined,
   embeddingModel: fileConfig.embeddingModel ?? DEFAULTS.embeddingModel,
   embeddingDimensions:
     fileConfig.embeddingDimensions ??

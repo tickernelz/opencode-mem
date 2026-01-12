@@ -938,6 +938,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("tag-filter").addEventListener("change", () => {
     state.selectedTag = document.getElementById("tag-filter").value;
     state.currentPage = 1;
+    state.isSearching = false;
+    state.searchQuery = "";
+    document.getElementById("search-input").value = "";
+    document.getElementById("clear-search-btn").classList.add("hidden");
     loadMemories();
   });
 

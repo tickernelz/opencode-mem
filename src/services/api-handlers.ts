@@ -83,6 +83,23 @@ function extractScopeFromTag(tag: string): { scope: "project"; hash: string } {
   return { scope: "project", hash: tag };
 }
 
+function getProjectPathFromTag(tag: string): string | undefined {
+  const projectShards = shardManager.getAllShards("project", "");
+
+  for (const shard of projectShards) {
+    const db = connectionManager.getConnection(shard.dbPath);
+    const tags = vectorSearch.getDistinctTags(db);
+
+    for (const t of tags) {
+      if (t.container_tag === tag && t.project_path) {
+        return t.project_path;
+      }
+    }
+  }
+
+  return undefined;
+}
+
 export async function handleListTags(): Promise<ApiResponse<{ project: TagInfo[] }>> {
   try {
     await embeddingService.warmup();
@@ -183,7 +200,8 @@ export async function handleListMemories(
     let timeline: any[] = memoriesWithType;
 
     if (includePrompts) {
-      const prompts = userPromptManager.getCapturedPrompts(tag);
+      const projectPath = tag ? getProjectPathFromTag(tag) : undefined;
+      const prompts = userPromptManager.getCapturedPrompts(projectPath);
       const promptsWithType = prompts.map((p) => ({
         type: "prompt",
         id: p.id,
