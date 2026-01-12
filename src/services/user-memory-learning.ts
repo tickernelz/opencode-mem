@@ -139,7 +139,9 @@ async function analyzeUserPatterns(
 
 Your task is to analyze user prompts fy patterns, preferences, and workflows.
 
-Use the save_user_memories tool to save identified patterns. Only save patterns that are clearly evident from the prompts.`;
+Use the save_user_memories tool to save identified patterns. Only save patterns that are clearly evident from the prompts.
+
+IMPORTANT: All memories must have scope set to "user".`;
 
   const toolSchema = {
     type: "function" as const,
@@ -159,6 +161,11 @@ Use the save_user_memories tool to save identified patterns. Only save patterns 
                   type: "string",
                   description: "Clear description of the pattern or preference",
                 },
+                scope: {
+                  type: "string",
+                  enum: ["user"],
+                  description: "Memory scope (must be 'user' for user learning)",
+                },
                 type: {
                   type: "string",
                   description:
@@ -169,7 +176,7 @@ Use the save_user_memories tool to save identified patterns. Only save patterns 
                   description: "Why this pattern is significant (optial)",
                 },
               },
-              required: ["summary", "type"],
+              required: ["summary", "scope", "type"],
             },
           },
         },
