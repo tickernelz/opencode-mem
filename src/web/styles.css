@@ -1291,7 +1291,7 @@ textarea:focus-visible {
 
 .confidence-fill {
   height: 100%;
-  background: linear-gradient(90deg, #00ccff, #00ff00);
+  background: #00ccff;
   transition: width 0.3s;
 }
 
@@ -1473,4 +1473,13 @@ textarea:focus-visible {
   width: 14px;
   height: 14px;
   vertical-align: middle;
+}
+
+.category-badge {
+  background: #00ccff;
+  color: #0a0a0a;
+  padding: 4px 10px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: bold;
 }

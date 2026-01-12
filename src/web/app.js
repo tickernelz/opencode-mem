@@ -764,14 +764,14 @@ function renderUserProfile() {
               (p) => `
             <div class="preference-item">
               <div class="preference-header">
-                <span class="preference-name">${escapeHtml(p.preference)}</span>
+                <span class="preference-name">${escapeHtml(p.description)}</span>
                 <span class="confidence-badge">${Math.round(p.confidence * 100)}%</span>
               </div>
               <div class="confidence-bar">
                 <div class="confidence-fill" style="width: ${p.confidence * 100}%"></div>
               </div>
-              <p class="preference-evidence">${escapeHtml(p.evidence)}</p>
-              <p class="preference-meta">Updated: ${formatDate(p.lastUpdated)}</p>
+              <p class="preference-evidence">${escapeHtml(Array.isArray(p.evidence) ? p.evidence.join(", ") : p.evidence)}</p>
+              <p class="preference-meta">Category: ${escapeHtml(p.category)}</p>
             </div>
           `
             )
@@ -793,13 +793,9 @@ function renderUserProfile() {
               (p) => `
             <div class="pattern-item">
               <div class="pattern-header">
-                <span class="pattern-name">${escapeHtml(p.pattern)}</span>
-                <span class="frequency-badge">${p.frequency}x</span>
+                <span class="pattern-name">${escapeHtml(p.description)}</span>
+                <span class="category-badge">${escapeHtml(p.category)}</span>
               </div>
-              <div class="frequency-bar">
-                <div class="frequency-fill" style="width: ${Math.min(p.frequency * 10, 100)}%"></div>
-              </div>
-              <p class="pattern-meta">Last seen: ${formatDate(p.lastSeen)}</p>
             </div>
           `
             )
@@ -821,15 +817,13 @@ function renderUserProfile() {
               (w) => `
             <div class="workflow-item">
               <div class="workflow-header">
-                <span class="workflow-name">${escapeHtml(w.workflow)}</span>
-                <span class="frequency-badge">${w.frequency}x</span>
+                <span class="workflow-name">${escapeHtml(w.description)}</span>
               </div>
               <div class="workflow-steps">
                 ${w.steps
                   .map(
-                    (step, i) => `
+                    (step) => `
                   <div class="workflow-step">
-                    <span class="step-number">${i + 1}</span>
                     <span class="step-text">${escapeHtml(step)}</span>
                   </div>
                 `
