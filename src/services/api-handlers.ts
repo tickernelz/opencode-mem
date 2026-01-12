@@ -505,7 +505,6 @@ export async function handleSearch(
         }
       }
     } else {
-      
       const projectShards = shardManager.getAllShards("project", "");
       const allShards = [...projectShards];
 
@@ -586,7 +585,6 @@ export async function handleStats(): Promise<
   try {
     await embeddingService.warmup();
 
-    
     const projectShards = shardManager.getAllShards("project", "");
     const allShards = [...projectShards];
 
@@ -631,7 +629,6 @@ export async function handlePinMemory(id: string): Promise<ApiResponse<void>> {
       return { success: false, error: "id is required" };
     }
 
-    
     const projectShards = shardManager.getAllShards("project", "");
     const allShards = [...projectShards];
 
@@ -658,7 +655,6 @@ export async function handleUnpinMemory(id: string): Promise<ApiResponse<void>> 
       return { success: false, error: "id is required" };
     }
 
-    
     const projectShards = shardManager.getAllShards("project", "");
     const allShards = [...projectShards];
 
