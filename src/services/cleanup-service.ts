@@ -10,6 +10,8 @@ interface CleanupResult {
   userCount: number;
   projectCount: number;
   promptsDeleted: number;
+  linkedMemoriesDeleted: number;
+  pinnedMemoriesSkipped: number;
 }
 
 export class CleanupService {
@@ -43,32 +45,50 @@ export class CleanupService {
 
       const cutoffTime = Date.now() - CONFIG.autoCleanupRetentionDays * 24 * 60 * 60 * 1000;
 
-      const promptsDeleted = userPromptManager.deleteOldPrompts(cutoffTime);
-
       const userShards = shardManager.getAllShards("user", "");
       const projectShards = shardManager.getAllShards("project", "");
       const allShards = [...userShards, ...projectShards];
 
+      const pinnedMemoryIds = new Set<string>();
+      for (const shard of allShards) {
+        const db = connectionManager.getConnection(shard.dbPath);
+        const pinned = db.prepare(`SELECT id FROM memories WHERE is_pinned = 1`).all() as any[];
+        pinned.forEach((row) => pinnedMemoryIds.add(row.id));
+      }
+
+      const promptCleanupResult = userPromptManager.deleteOldPrompts(cutoffTime);
+      const linkedMemoryIds = new Set(promptCleanupResult.linkedMemoryIds);
+
+      const protectedMemoryIds = new Set([...pinnedMemoryIds, ...linkedMemoryIds]);
+
       let totalDeleted = 0;
       let userDeleted = 0;
       let projectDeleted = 0;
+      let linkedMemoriesDeleted = 0;
+      let pinnedSkipped = 0;
 
       for (const shard of allShards) {
         const db = connectionManager.getConnection(shard.dbPath);
 
-        const oldMemories = db
-          .prepare(
-            `
-          SELECT id, container_tag FROM memories 
-          WHERE updated_at < ? AND is_pinned = 0
-        `
-          )
-          .all(cutoffTime) as any[];
-
-        if (oldMemories.length === 0) continue;
+        const oldMemories = db.prepare(`
+          SELECT id, container_tag, is_pinned FROM memories 
+          WHERE updated_at < ?
+        `).all(cutoffTime) as any[];
 
         for (const memory of oldMemories) {
           try {
+            if (memory.is_pinned === 1) {
+              pinnedSkipped++;
+              continue;
+            }
+
+            if (protectedMemoryIds.has(memory.id)) {
+              if (linkedMemoryIds.has(memory.id)) {
+                log("Cleanup: skipped linked memory", { memoryId: memory.id });
+              }
+              continue;
+            }
+
             vectorSearch.deleteVector(db, memory.id);
             shardManager.decrementVectorCount(shard.id);
             totalDeleted++;
@@ -84,11 +104,15 @@ export class CleanupService {
         }
       }
 
+      const promptsDeleted = promptCleanupResult.deleted - linkedMemoryIds.size;
+
       log("Cleanup: completed", {
         totalDeleted,
         userDeleted,
         projectDeleted,
         promptsDeleted,
+        linkedMemoriesProtected: linkedMemoryIds.size,
+        pinnedMemoriesSkipped: pinnedSkipped,
         cutoffTime: new Date(cutoffTime).toISOString(),
       });
 
@@ -97,6 +121,8 @@ export class CleanupService {
         userCount: userDeleted,
         projectCount: projectDeleted,
         promptsDeleted,
+        linkedMemoriesDeleted,
+        pinnedMemoriesSkipped: pinnedSkipped,
       };
     } finally {
       this.isRunning = false;

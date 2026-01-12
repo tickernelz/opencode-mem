@@ -11,14 +11,14 @@ export async function performUserMemoryLearning(
   directory: string
 ): Promise<void> {
   try {
-    const count = userPromptManager.countUncapturedPrompts();
+    const count = userPromptManager.countUnanalyzedForUserLearning();
     const threshold = CONFIG.userMemoryAnalysisInterval;
 
     if (count < threshold) {
       return;
     }
 
-    const prompts = userPromptManager.getUncapturedPrompts(threshold);
+    const prompts = userPromptManager.getPromptsForUserLearning(threshold);
 
     if (prompts.length === 0) {
       return;
@@ -30,7 +30,7 @@ export async function performUserMemoryLearning(
 
     if (!memories || memories.length === 0) {
       log("User memory learning: no patterns identified", { promptCount: prompts.length });
-      userPromptManager.markMultipleAsCaptured(prompts.map((p) => p.id));
+      userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
       return;
     }
 
@@ -54,7 +54,7 @@ export async function performUserMemoryLearning(
       }
     }
 
-    userPromptManager.markMultipleAsCaptured(prompts.map((p) => p.id));
+    userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
 
     if (savedCount > 0) {
       await ctx.client?.tui

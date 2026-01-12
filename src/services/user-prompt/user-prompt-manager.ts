@@ -13,6 +13,7 @@ export interface UserPrompt {
   content: string;
   createdAt: number;
   captured: boolean;
+  userLearningCaptured: boolean;
   linkedMemoryId: string | null;
 }
 
@@ -36,6 +37,7 @@ export class UserPromptManager {
         content TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         captured BOOLEAN DEFAULT 0,
+        user_learning_captured BOOLEAN DEFAULT 0,
         linked_memory_id TEXT
       )
     `);
@@ -45,6 +47,7 @@ export class UserPromptManager {
     this.db.run("CREATE INDEX IF NOT EXISTS idx_user_prompts_created ON user_prompts(created_at DESC)");
     this.db.run("CREATE INDEX IF NOT EXISTS idx_user_prompts_project ON user_prompts(project_path)");
     this.db.run("CREATE INDEX IF NOT EXISTS idx_user_prompts_linked ON user_prompts(linked_memory_id)");
+    this.db.run("CREATE INDEX IF NOT EXISTS idx_user_prompts_user_learning ON user_prompts(user_learning_captured)");
   }
 
   savePrompt(sessionId: string, messageId: string, projectPath: string, content: string): string {
@@ -110,10 +113,52 @@ export class UserPromptManager {
     stmt.run(...promptIds);
   }
 
-  deleteOldPrompts(cutoffTime: number): number {
-    const stmt = this.db.prepare(`DELETE FROM user_prompts WHERE created_at < ?`);
-    const result = stmt.run(cutoffTime);
-    return result.changes;
+  countUnanalyzedForUserLearning(): number {
+    const stmt = this.db.prepare(`SELECT COUNT(*) as count FROM user_prompts WHERE user_learning_captured = 0`);
+    const row = stmt.get() as any;
+    return row?.count || 0;
+  }
+
+  getPromptsForUserLearning(limit: number): UserPrompt[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM user_prompts 
+      WHERE user_learning_captured = 0 
+      ORDER BY created_at ASC 
+      LIMIT ?
+    `);
+
+    const rows = stmt.all(limit) as any[];
+    return rows.map((row) => this.rowToPrompt(row));
+  }
+
+  markAsUserLearningCaptured(promptId: string): void {
+    const stmt = this.db.prepare(`UPDATE user_prompts SET user_learning_captured = 1 WHERE id = ?`);
+    stmt.run(promptId);
+  }
+
+  markMultipleAsUserLearningCaptured(promptIds: string[]): void {
+    if (promptIds.length === 0) return;
+
+    const placeholders = promptIds.map(() => "?").join(",");
+    const stmt = this.db.prepare(`UPDATE user_prompts SET user_learning_captured = 1 WHERE id IN (${placeholders})`);
+    stmt.run(...promptIds);
+  }
+
+  deleteOldPrompts(cutoffTime: number): { deleted: number; linkedMemoryIds: string[] } {
+    const getLinkedStmt = this.db.prepare(`
+      SELECT linked_memory_id FROM user_prompts 
+      WHERE created_at < ? AND linked_memory_id IS NOT NULL
+    `);
+    const linkedRows = getLinkedStmt.all(cutoffTime) as any[];
+    const linkedMemoryIds = linkedRows.map((row) => row.linked_memory_id).filter((id) => id);
+
+    const deleteStmt = this.db.prepare(`DELETE FROM user_prompts WHERE created_at < ?`);
+    const result = deleteStmt.run(cutoffTime);
+
+    return {
+      deleted: result.changes,
+      linkedMemoryIds,
+    };
   }
 
   linkMemoryToPrompt(promptId: string, memoryId: string): void {
@@ -153,6 +198,7 @@ export class UserPromptManager {
       content: row.content,
       createdAt: row.created_at,
       captured: row.captured === 1,
+      userLearningCaptured: row.user_learning_captured === 1,
       linkedMemoryId: row.linked_memory_id,
     };
   }
