@@ -7,6 +7,7 @@ env.allowRemoteModels = true;
 env.cacheDir = CONFIG.storagePath + "/.cache";
 
 const TIMEOUT_MS = 30000;
+const GLOBAL_EMBEDDING_KEY = Symbol.for("opencode-mem.embedding.instance");
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -20,34 +21,42 @@ export class EmbeddingService {
   private initPromise: Promise<void> | null = null;
   public isWarmedUp: boolean = false;
 
+  static getInstance(): EmbeddingService {
+    if (!(globalThis as any)[GLOBAL_EMBEDDING_KEY]) {
+      (globalThis as any)[GLOBAL_EMBEDDING_KEY] = new EmbeddingService();
+    }
+    return (globalThis as any)[GLOBAL_EMBEDDING_KEY];
+  }
+
   async warmup(progressCallback?: (progress: any) => void): Promise<void> {
     if (this.isWarmedUp) return;
     if (this.initPromise) return this.initPromise;
 
-    this.initPromise = (async () => {
-      try {
-        if (CONFIG.embeddingApiUrl && CONFIG.embeddingApiKey) {
-          log("Using OpenAI-compatible API for embeddings");
-          this.isWarmedUp = true;
-          return;
-        }
-
-        log("Downloading embedding model", { model: CONFIG.embeddingModel });
-
-        this.pipe = await pipeline("feature-extraction", CONFIG.embeddingModel, {
-          progress_callback: progressCallback,
-        });
-
-        this.isWarmedUp = true;
-        log("Embedding model ready");
-      } catch (error) {
-        this.initPromise = null;
-        log("Failed to initialize embedding model", { error: String(error) });
-        throw error;
-      }
-    })();
-
+    this.initPromise = this.initializeModel(progressCallback);
     return this.initPromise;
+  }
+
+  private async initializeModel(progressCallback?: (progress: any) => void): Promise<void> {
+    try {
+      if (CONFIG.embeddingApiUrl && CONFIG.embeddingApiKey) {
+        log("Using OpenAI-compatible API for embeddings");
+        this.isWarmedUp = true;
+        return;
+      }
+
+      log("Downloading embedding model", { model: CONFIG.embeddingModel });
+
+      this.pipe = await pipeline("feature-extraction", CONFIG.embeddingModel, {
+        progress_callback: progressCallback,
+      });
+
+      this.isWarmedUp = true;
+      log("Embedding model ready");
+    } catch (error) {
+      this.initPromise = null;
+      log("Failed to initialize embedding model", { error: String(error) });
+      throw error;
+    }
   }
 
   async embed(text: string): Promise<Float32Array> {
@@ -89,4 +98,4 @@ export class EmbeddingService {
   }
 }
 
-export const embeddingService = new EmbeddingService();
+export const embeddingService = EmbeddingService.getInstance();

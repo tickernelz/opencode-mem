@@ -50,6 +50,18 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     log("Plugin disabled - memory system not configured");
   }
 
+  const GLOBAL_PLUGIN_WARMUP_KEY = Symbol.for("opencode-mem.plugin.warmedup");
+
+  if (!(globalThis as any)[GLOBAL_PLUGIN_WARMUP_KEY] && isConfigured()) {
+    try {
+      await memoryClient.warmup();
+      (globalThis as any)[GLOBAL_PLUGIN_WARMUP_KEY] = true;
+      log("Plugin warmup completed");
+    } catch (error) {
+      log("Plugin warmup failed", { error: String(error) });
+    }
+  }
+
   if (CONFIG.webServerEnabled) {
     startWebServer({
       port: CONFIG.webServerPort,
@@ -157,65 +169,6 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
         if (isFirstMessage) {
           injectedSessions.add(input.sessionID);
-
-          const needsWarmup = !(await memoryClient.isReady());
-
-          if (needsWarmup) {
-            if (ctx.client?.tui) {
-              await ctx.client.tui
-                .showToast({
-                  body: {
-                    title: "Memory System",
-                    message: "Initializing (first time: 30-60s)...",
-                    variant: "info",
-                    duration: 5000,
-                  },
-                })
-                .catch(() => {});
-            }
-
-            try {
-              await memoryClient.warmup();
-
-              if (ctx.client?.tui) {
-                const autoCaptureStatus =
-                  CONFIG.autoCaptureEnabled &&
-                  CONFIG.memoryModel &&
-                  CONFIG.memoryApiUrl &&
-                  CONFIG.memoryApiKey
-                    ? "Auto-capture: enabled"
-                    : "Auto-capture: disabled";
-
-                await ctx.client.tui
-                  .showToast({
-                    body: {
-                      title: "Memory System Ready!",
-                      message: autoCaptureStatus,
-                      variant: CONFIG.autoCaptureEnabled ? "success" : "warning",
-                      duration: 3000,
-                    },
-                  })
-                  .catch(() => {});
-              }
-            } catch (warmupError) {
-              log("Warmup failed", { error: String(warmupError) });
-
-              if (ctx.client?.tui) {
-                await ctx.client.tui
-                  .showToast({
-                    body: {
-                      title: "Memory System Error",
-                      message: `Failed to initialize: ${String(warmupError)}`,
-                      variant: "error",
-                      duration: 10000,
-                    },
-                  })
-                  .catch(() => {});
-              }
-
-              return;
-            }
-          }
 
           const projectMemoriesListResult = await memoryClient.listMemories(
             tags.project.tag,
