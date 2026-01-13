@@ -413,7 +413,6 @@ function editMemory(id) {
   if (!memory) return;
 
   document.getElementById("edit-id").value = memory.id;
-  document.getElementById("edit-type").value = memory.memoryType || "";
   document.getElementById("edit-content").value = memory.content;
 
   document.getElementById("edit-modal").classList.remove("hidden");
@@ -423,7 +422,6 @@ async function saveEdit(e) {
   e.preventDefault();
 
   const id = document.getElementById("edit-id").value;
-  const type = document.getElementById("edit-type").value.trim();
   const content = document.getElementById("edit-content").value.trim();
 
   if (!content) {
@@ -434,7 +432,7 @@ async function saveEdit(e) {
   const result = await fetchAPI(`/api/memories/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content, type: type || undefined }),
+    body: JSON.stringify({ content }),
   });
 
   if (result.success) {

@@ -71,6 +71,7 @@ export async function performAutoCapture(
 
     const result = await memoryClient.addMemory(summaryResult.summary, tags.project.tag, {
       source: "auto-capture" as any,
+      type: summaryResult.type as any,
       sessionID,
       promptId: prompt.id,
       captureTimestamp: Date.now(),
