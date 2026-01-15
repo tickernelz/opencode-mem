@@ -8,99 +8,7 @@
 
 A persistent memory system for AI coding agents that enables long-term context retention across sessions using local vector database technology.
 
-## Overview
-
-OpenCode Memory provides AI coding agents with the ability to remember and recall information across conversations. It uses vector embeddings and SQLite for efficient storage and retrieval of contextual information.
-
-## Key Features
-
-- **Local Vector Database**: SQLite-based storage with sqlite-vec extension
-- **Project Memory System**: Persistent storage for project-specific knowledge
-- **User Profile System**: Automatic learning of preferences, patterns, and workflows
-- **Unified Timeline**: Browse memories and prompts together with linking support
-- **Web Interface**: Full-featured UI for memory management and search
-- **Auto-Capture System**: Intelligent prompt-based memory extraction
-- **Multi-Provider AI**: Support for OpenAI, Anthropic, and OpenAI-compatible APIs
-- **Flexible Embedding Models**: 12+ local models or OpenAI-compatible APIs
-- **Smart Deduplication**: Prevents redundant memories using similarity detection
-- **Privacy Protection**: Built-in content filtering for sensitive information
-
-## Installation
-
-Add the plugin to your OpenCode configuration:
-
-**Location**: `~/.config/opencode/opencode.json` or `opencode.jsonc`
-
-```jsonc
-{
-  "plugins": [
-    "opencode-mem"
-  ]
-}
-```
-
-OpenCode will automatically download and install the plugin on next startup.
-
-### macOS Users - IMPORTANT
-
-macOS ships with Apple's SQLite which **disables extension loading** for security reasons. You must install and configure Homebrew SQLite:
-
-**Step 1: Install Homebrew SQLite**
-```bash
-brew install sqlite
-```
-
-**Step 2: Find the library path**
-```bash
-brew --prefix sqlite
-```
-
-**Step 3: Configure the path**
-
-Edit `~/.config/opencode/opencode-mem.jsonc` and add:
-
-```jsonc
-{
-  "customSqlitePath": "/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib"
-}
-```
-
-**Common paths:**
-- **Apple Silicon (M1/M2/M3)**: `/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib`
-- **Intel Mac**: `/usr/local/opt/sqlite/lib/libsqlite3.dylib`
-
-The plugin will auto-detect these paths if not configured, but manual configuration is recommended for reliability.
-
-### Install from Source
-
-```bash
-git clone https://github.com/tickernelz/opencode-mem.git
-cd opencode-mem
-bun install
-bun run build
-```
-
-## Quick Start
-
-### Basic Usage
-
-```typescript
-// Add project memory
-memory({ mode: "add", content: "Project uses microservices architecture" })
-
-// Search memories
-memory({ mode: "search", query: "architecture decisions" })
-
-// View user profile
-memory({ mode: "profile" })
-
-// List recent memories
-memory({ mode: "list", limit: 10 })
-```
-
-### Web Interface
-
-Access at `http://127.0.0.1:4747` to browse memories, view prompt-memory links, and manage your memory database.
+## Visual Overview
 
 **Project Memory Timeline:**
 
@@ -110,100 +18,100 @@ Access at `http://127.0.0.1:4747` to browse memories, view prompt-memory links, 
 
 ![User Profile Viewer](.github/screenshot-user-profile.png)
 
-## Configuration
+## Core Features
 
-Configuration file: `~/.config/opencode/opencode-mem.jsonc`
+Local vector database with SQLite, persistent project memories, automatic user profile learning, unified memory-prompt timeline, full-featured web UI, intelligent prompt-based memory extraction, multi-provider AI support (OpenAI, Anthropic), 12+ local embedding models, smart deduplication, and built-in privacy protection.
+
+## Getting Started
+
+Add to your OpenCode configuration at `~/.config/opencode/opencode.json`:
+
+```jsonc
+{
+  "plugins": ["opencode-mem"]
+}
+```
+
+The plugin downloads automatically on next startup. macOS users with Apple Silicon must install Homebrew SQLite and configure the custom path - see our Wiki for details.
+
+## Usage Examples
+
+```typescript
+memory({ mode: "add", content: "Project uses microservices architecture" })
+memory({ mode: "search", query: "architecture decisions" })
+memory({ mode: "profile" })
+memory({ mode: "list", limit: 10 })
+```
+
+Access the web interface at `http://127.0.0.1:4747` for visual memory browsing and management.
+
+## Configuration Essentials
+
+Configure at `~/.config/opencode/opencode-mem.jsonc`:
 
 ```jsonc
 {
   "storagePath": "~/.opencode-mem/data",
-  "customSqlitePath": "/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib",
   "embeddingModel": "Xenova/nomic-embed-text-v1",
   "webServerEnabled": true,
   "webServerPort": 4747,
   "autoCaptureEnabled": true,
   "memoryProvider": "openai-chat",
   "memoryModel": "gpt-4",
-  "memoryApiUrl": "https://api.openai.com/v1",
-  "memoryApiKey": "sk-...",
   "userProfileAnalysisInterval": 10,
   "maxMemories": 10
 }
 ```
 
-See [Configuration Guide](https://github.com/tickernelz/opencode-mem/wiki/Configuration-Guide) for all options.
+Full documentation available in our [Configuration Guide](https://github.com/tickernelz/opencode-mem/wiki/Configuration-Guide).
 
-## Breaking Changes (v2.3)
+## Important: v2.3 Breaking Changes
 
-**User-scoped memories completely removed:**
+User-scoped memories removed. All memories now project-scoped. Update configuration:
 
-- **Removed**: `scope` parameter from all memory operations
-- **Removed**: `maxProjectMemories` config (use `maxMemories` instead)
-- **Renamed**: `userMemoryAnalysisInterval` → `userProfileAnalysisInterval`
-- **Renamed**: `performUserMemoryLearning()` → `performUserProfileLearning()`
-- **Changed**: All memories are now project-scoped by default
-- **Changed**: User preferences managed exclusively through automatic profile system
-
-**Migration required:**
 ```jsonc
-// OLD
+// OLD: Remove these
 {
   "userMemoryAnalysisInterval": 10,
-  "maxMemories": 5,
   "maxProjectMemories": 10
 }
 
-// NEW
+// NEW: Use only
 {
   "userProfileAnalysisInterval": 10,
   "maxMemories": 10
 }
 ```
 
-Remove `scope` parameter from all `memory()` calls:
-```typescript
-// OLD
-memory({ mode: "add", content: "...", scope: "project" })
-
-// NEW
-memory({ mode: "add", content: "..." })
-```
+Remove `scope` parameter from all `memory()` calls. See [Migration Guide](https://github.com/tickernelz/opencode-mem/wiki/Migration-v2-3) for details.
 
 ## Documentation
 
-For detailed documentation, see the [Wiki](https://github.com/tickernelz/opencode-mem/wiki):
-
 - [Installation Guide](https://github.com/tickernelz/opencode-mem/wiki/Installation-Guide)
-- [Quick Start](https://github.com/tickernelz/opencode-mem/wiki/Quick-Start)
-- [Configuration Guide](https://github.com/tickernelz/opencode-mem/wiki/Configuration-Guide)
-- [User Profile System](https://github.com/tickernelz/opencode-mem/wiki/User-Profile-System)
-- [Memory Operations](https://github.com/tickernelz/opencode-mem/wiki/Memory-Operations)
-- [Auto-Capture System](https://github.com/tickernelz/opencode-mem/wiki/Auto-Capture-System)
-- [Web Interface](https://github.com/tickernelz/opencode-mem/wiki/Web-Interface)
 - [API Reference](https://github.com/tickernelz/opencode-mem/wiki/API-Reference)
 - [Troubleshooting](https://github.com/tickernelz/opencode-mem/wiki/Troubleshooting)
+- [Complete Wiki](https://github.com/tickernelz/opencode-mem/wiki)
 
-## Development
+## Development & Contribution
+
+Build and test locally:
 
 ```bash
 bun install
-bun run dev
 bun run build
-bun run format
 bun run typecheck
+bun run format
 ```
 
-## License
+This project is actively seeking contributions to become the definitive memory plugin for AI coding agents. Whether you are fixing bugs, adding features, improving documentation, or expanding embedding model support, your contributions are critical. The codebase is well-structured and ready for enhancement. If you hit a blocker or have improvement ideas, submit a pull request - we review and merge contributions quickly.
 
-MIT License - see LICENSE file for details
+## License & Links
 
-## Acknowledgments
-
-Inspired by [opencode-supermemory](https://github.com/supermemoryai/opencode-supermemory)
-
-## Links
+MIT License - see LICENSE file
 
 - **Repository**: https://github.com/tickernelz/opencode-mem
 - **Wiki**: https://github.com/tickernelz/opencode-mem/wiki
 - **Issues**: https://github.com/tickernelz/opencode-mem/issues
 - **OpenCode Platform**: https://opencode.ai
+
+Inspired by [opencode-supermemory](https://github.com/supermemoryai/opencode-supermemory)
