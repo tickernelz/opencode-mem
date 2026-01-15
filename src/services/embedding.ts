@@ -1,10 +1,11 @@
 import { pipeline, env } from "@xenova/transformers";
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
+import { join } from "node:path";
 
 env.allowLocalModels = true;
 env.allowRemoteModels = true;
-env.cacheDir = CONFIG.storagePath + "/.cache";
+env.cacheDir = join(CONFIG.storagePath, ".cache");
 
 const TIMEOUT_MS = 30000;
 const GLOBAL_EMBEDDING_KEY = Symbol.for("opencode-mem.embedding.instance");

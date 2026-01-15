@@ -166,14 +166,14 @@ function renderMemoryCard(memory) {
   const isSelected = state.selectedMemories.has(memory.id);
   const isPinned = memory.isPinned || false;
   const isLinked = !!memory.linkedPromptId;
-  const similarityHtml =
+const similarityHtml =
     memory.similarity !== undefined
       ? `<span class="similarity-score">${memory.similarity}%</span>`
       : "";
 
   let displayInfo = memory.displayName || memory.id;
   if (memory.projectPath) {
-    const pathParts = memory.projectPath.split("/");
+    const pathParts = memory.projectPath.replace(/\\/g, "/").split("/").filter((p) => p);
     displayInfo = pathParts[pathParts.length - 1] || memory.projectPath;
   }
 

@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import * as sqliteVec from "sqlite-vec";
 import { existsSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { log } from "../logger.js";
 import { CONFIG } from "../../config.js";
 
@@ -77,7 +78,7 @@ export class ConnectionManager {
     this.sqliteConfigured = true;
   }
 
-  private initDatabase(db: Database): void {
+private initDatabase(db: Database): void {
     db.run("PRAGMA journal_mode = WAL");
     db.run("PRAGMA synchronous = NORMAL");
     db.run("PRAGMA cache_size = -64000");
@@ -105,7 +106,7 @@ export class ConnectionManager {
 
     this.configureSqlite();
 
-    const dir = dbPath.substring(0, dbPath.lastIndexOf("/"));
+    const dir = dirname(dbPath);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
