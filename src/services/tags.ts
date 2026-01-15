@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { execSync } from "node:child_process";
 import { CONFIG } from "../config.js";
+import { sep, normalize } from "node:path";
 
 function sha256(input: string): string {
   return createHash("sha256").update(input).digest("hex").slice(0, 16);
@@ -47,7 +48,9 @@ export function getGitRepoUrl(directory: string): string | null {
 }
 
 export function getProjectName(directory: string): string {
-  const parts = directory.split("/").filter((p) => p);
+  // Normalize path to handle both Unix and Windows separators
+  const normalized = normalize(directory);
+  const parts = normalized.split(sep).filter((p) => p);
   return parts[parts.length - 1] || directory;
 }
 
