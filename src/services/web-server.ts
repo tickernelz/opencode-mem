@@ -78,10 +78,24 @@ export class WebServer {
           }
         };
 
-        this.worker!.onerror = (error) => {
+        this.worker!.onerror = (error: ErrorEvent) => {
           clearTimeout(timeout);
-          log("Web server worker error", { error: String(error) });
-          reject(error);
+          const errorDetails = {
+            message: error.message || "Unknown error",
+            filename: error.filename || "unknown",
+            lineno: error.lineno || 0,
+            colno: error.colno || 0,
+            error: error.error ? String(error.error) : "no error object",
+            type: error.type || "error",
+          };
+          log("Web server worker error (detailed)", errorDetails);
+          
+          const errorMsg = error.message 
+            ? `${error.message} (at ${error.filename}:${error.lineno}:${error.colno})`
+            : error.error 
+              ? String(error.error)
+              : `Worker failed: ${JSON.stringify(errorDetails)}`;
+          reject(new Error(errorMsg));
         };
       });
 

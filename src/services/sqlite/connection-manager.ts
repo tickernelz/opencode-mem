@@ -29,9 +29,14 @@ export class ConnectionManager {
           Database.setCustomSQLite(customPath);
           log("Using custom SQLite library", { path: customPath });
         } catch (error) {
-          throw new Error(
-            `Failed to load custom SQLite library: ${error}\n` + `Path: ${customPath}`
-          );
+          const errorStr = String(error);
+          if (errorStr.includes("SQLite already loaded")) {
+            log("SQLite already loaded, skipping custom path configuration");
+          } else {
+            throw new Error(
+              `Failed to load custom SQLite library: ${error}\n` + `Path: ${customPath}`
+            );
+          }
         }
       } else {
         const commonPaths = [
@@ -52,7 +57,12 @@ export class ConnectionManager {
             Database.setCustomSQLite(foundPath);
             log("Auto-detected and using Homebrew SQLite", { path: foundPath });
           } catch (error) {
-            throw new Error(`Failed to load Homebrew SQLite: ${error}\n` + `Path: ${foundPath}`);
+            const errorStr = String(error);
+            if (errorStr.includes("SQLite already loaded")) {
+              log("SQLite already loaded, skipping auto-detected path configuration");
+            } else {
+              throw new Error(`Failed to load Homebrew SQLite: ${error}\n` + `Path: ${foundPath}`);
+            }
           }
         } else {
           throw new Error(
