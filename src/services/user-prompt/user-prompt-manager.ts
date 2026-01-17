@@ -203,6 +203,31 @@ export class UserPromptManager {
     return rows.map((row) => this.rowToPrompt(row));
   }
 
+  searchPrompts(query: string, projectPath?: string, limit: number = 20): UserPrompt[] {
+    let sql = `SELECT * FROM user_prompts WHERE content LIKE ? AND captured = 1`;
+    const params: any[] = [`%${query}%`];
+
+    if (projectPath) {
+      sql += ` AND project_path = ?`;
+      params.push(projectPath);
+    }
+
+    sql += ` ORDER BY created_at DESC LIMIT ?`;
+    params.push(limit);
+
+    const stmt = this.db.prepare(sql);
+    const rows = stmt.all(...params) as any[];
+    return rows.map((row) => this.rowToPrompt(row));
+  }
+
+  getPromptsByIds(ids: string[]): UserPrompt[] {
+    if (ids.length === 0) return [];
+    const placeholders = ids.map(() => "?").join(",");
+    const stmt = this.db.prepare(`SELECT * FROM user_prompts WHERE id IN (${placeholders})`);
+    const rows = stmt.all(...ids) as any[];
+    return rows.map((row) => this.rowToPrompt(row));
+  }
+
   private rowToPrompt(row: any): UserPrompt {
     return {
       id: row.id,

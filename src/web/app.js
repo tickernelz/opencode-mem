@@ -115,12 +115,14 @@ function renderMemories() {
     return;
   }
 
-  container.innerHTML = state.memories
-    .map((item) => {
-      if (item.type === "prompt") {
-        return renderPromptCard(item);
+  container.innerHTML = groupMemories(state.memories)
+    .map((group) => {
+      if (group.isPair) {
+        return renderCombinedCard(group);
+      } else if (group.type === "prompt") {
+        return renderPromptCard(group.item);
       } else {
-        return renderMemoryCard(item);
+        return renderMemoryCard(group.item);
       }
     })
     .join("");
@@ -130,6 +132,82 @@ function renderMemories() {
   });
 
   lucide.createIcons();
+}
+
+function groupMemories(items) {
+  const map = new Map();
+  const pairs = [];
+  const processed = new Set();
+
+  items.forEach((item) => map.set(item.id, item));
+
+  items.forEach((item) => {
+    if (processed.has(item.id)) return;
+
+    if (item.type === "memory" && item.linkedPromptId && map.has(item.linkedPromptId)) {
+      const prompt = map.get(item.linkedPromptId);
+      pairs.push({ isPair: true, memory: item, prompt: prompt });
+      processed.add(item.id);
+      processed.add(prompt.id);
+    } else if (item.type === "prompt" && item.linkedMemoryId && map.has(item.linkedMemoryId)) {
+      const memory = map.get(item.linkedMemoryId);
+      pairs.push({ isPair: true, memory: memory, prompt: item });
+      processed.add(item.id);
+      processed.add(memory.id);
+    } else {
+      pairs.push({ isPair: false, type: item.type, item: item });
+      processed.add(item.id);
+    }
+  });
+
+  return pairs.sort((a, b) => {
+    const timeA = a.isPair ? a.memory.createdAt : a.item.createdAt;
+    const timeB = b.isPair ? b.memory.createdAt : b.item.createdAt;
+    return new Date(timeB) - new Date(timeA);
+  });
+}
+
+function renderCombinedCard(pair) {
+  const { memory, prompt } = pair;
+  const isSelected = state.selectedMemories.has(memory.id);
+  const similarityHtml =
+    memory.similarity !== undefined
+      ? `<span class="similarity-score">${Math.round(memory.similarity * 100)}%</span>`
+      : "";
+
+  return `
+    <div class="combined-card ${isSelected ? "selected" : ""}" data-id="${memory.id}">
+      <div class="combined-prompt-section">
+        <div class="combined-header">
+          <span class="badge badge-prompt">USER PROMPT</span>
+          <span class="prompt-date">${formatDate(prompt.createdAt)}</span>
+        </div>
+        <div class="prompt-content">${escapeHtml(prompt.content)}</div>
+      </div>
+      
+      <div class="combined-divider">
+        <i data-lucide="arrow-down" class="divider-icon"></i>
+      </div>
+
+      <div class="combined-memory-section">
+        <div class="memory-header">
+          <div class="meta">
+            <input type="checkbox" class="memory-checkbox" data-id="${memory.id}" ${isSelected ? "checked" : ""} />
+            <span class="badge badge-memory">MEMORY</span>
+            ${memory.memoryType ? `<span class="badge badge-type">${memory.memoryType}</span>` : ""}
+            ${similarityHtml}
+            <span class="memory-display-name">${escapeHtml(memory.displayName || memory.id)}</span>
+          </div>
+          <div class="memory-actions">
+            <button class="btn-delete" onclick="deleteMemoryWithLink('${memory.id}', true)">
+              <i data-lucide="trash-2" class="icon"></i> Delete Pair
+            </button>
+          </div>
+        </div>
+        <div class="memory-content markdown-content">${renderMarkdown(memory.content)}</div>
+      </div>
+    </div>
+  `;
 }
 
 function renderPromptCard(prompt) {

@@ -494,12 +494,46 @@ export async function handleUpdateMemory(
   }
 }
 
+interface FormattedPrompt {
+  type: "prompt";
+  id: string;
+  sessionId: string;
+  content: string;
+  createdAt: string;
+  projectPath: string | null;
+  linkedMemoryId: string | null;
+  similarity?: number;
+  isContext?: boolean;
+}
+
+interface FormattedMemory {
+  type: "memory";
+  id: string;
+  content: string;
+  memoryType?: string;
+  createdAt: string;
+  updatedAt?: string;
+  similarity?: number;
+  metadata?: Record<string, unknown>;
+  displayName?: string;
+  userName?: string;
+  userEmail?: string;
+  projectPath?: string;
+  projectName?: string;
+  gitRepoUrl?: string;
+  isPinned?: boolean;
+  linkedPromptId?: string;
+  isContext?: boolean;
+}
+
+type SearchResultItem = FormattedPrompt | FormattedMemory;
+
 export async function handleSearch(
   query: string,
   tag?: string,
   page: number = 1,
   pageSize: number = 20
-): Promise<ApiResponse<PaginatedResponse<Memory & { similarity: number }>>> {
+): Promise<ApiResponse<PaginatedResponse<SearchResultItem>>> {
   try {
     if (!query) {
       return { success: false, error: "query is required" };
@@ -508,7 +542,8 @@ export async function handleSearch(
     await embeddingService.warmup();
 
     const queryVector = await embeddingService.embedWithTimeout(query);
-    let allResults: any[] = [];
+    let memoryResults: any[] = [];
+    let promptResults: any[] = [];
 
     if (tag) {
       const { scope, hash } = extractScopeFromTag(tag);
@@ -517,11 +552,14 @@ export async function handleSearch(
       for (const shard of shards) {
         try {
           const results = vectorSearch.searchInShard(shard, queryVector, tag, pageSize * 2);
-          allResults.push(...results);
+          memoryResults.push(...results);
         } catch (error) {
           log("Shard search error", { shardId: shard.id, error: String(error) });
         }
       }
+
+      const projectPath = getProjectPathFromTag(tag);
+      promptResults = userPromptManager.searchPrompts(query, projectPath, pageSize * 2);
     } else {
       const projectShards = shardManager.getAllShards("project", "");
       const allShards = [...projectShards];
@@ -544,29 +582,35 @@ export async function handleSearch(
         for (const shard of shards) {
           try {
             const results = vectorSearch.searchInShard(shard, queryVector, containerTag, pageSize);
-            allResults.push(...results);
+            memoryResults.push(...results);
           } catch (error) {
             log("Shard search error", { shardId: shard.id, error: String(error) });
           }
         }
       }
+
+      promptResults = userPromptManager.searchPrompts(query, undefined, pageSize * 2);
     }
 
-    const sortedResults = allResults.sort((a: any, b: any) => b.similarity - a.similarity);
+    const formattedPrompts: FormattedPrompt[] = promptResults.map((p) => ({
+      type: "prompt",
+      id: p.id,
+      sessionId: p.sessionId,
+      content: p.content,
+      createdAt: safeToISOString(p.createdAt),
+      projectPath: p.projectPath,
+      linkedMemoryId: p.linkedMemoryId,
+      similarity: 1.0,
+    }));
 
-    const total = sortedResults.length;
-    const totalPages = Math.ceil(total / pageSize);
-    const offset = (page - 1) * pageSize;
-
-    const paginatedResults = sortedResults.slice(offset, offset + pageSize);
-
-    const memories = paginatedResults.map((r: any) => ({
+    const formattedMemories: FormattedMemory[] = memoryResults.map((r: any) => ({
+      type: "memory",
       id: r.id,
       content: r.memory,
-      type: r.metadata?.type,
+      memoryType: r.metadata?.type,
       createdAt: safeToISOString(r.metadata?.createdAt),
       updatedAt: r.metadata?.updatedAt ? safeToISOString(r.metadata.updatedAt) : undefined,
-      similarity: Math.round(r.similarity * 100),
+      similarity: r.similarity,
       metadata: r.metadata,
       displayName: r.displayName,
       userName: r.userName,
@@ -575,12 +619,84 @@ export async function handleSearch(
       projectName: r.projectName,
       gitRepoUrl: r.gitRepoUrl,
       isPinned: r.isPinned === 1,
+      linkedPromptId: r.metadata?.promptId,
     }));
+
+    const combinedResults = [...formattedMemories, ...formattedPrompts].sort(
+      (a: any, b: any) =>
+        (b.similarity || 0) - (a.similarity || 0) || b.createdAt.localeCompare(a.createdAt)
+    );
+
+    const total = combinedResults.length;
+    const totalPages = Math.ceil(total / pageSize);
+    const offset = (page - 1) * pageSize;
+    const paginatedResults: SearchResultItem[] = combinedResults.slice(offset, offset + pageSize);
+
+    const missingPromptIds = new Set<string>();
+    const missingMemoryIds = new Set<string>();
+
+    for (const item of paginatedResults) {
+      if (item.type === "memory" && item.linkedPromptId) {
+        const hasPrompt = paginatedResults.some((p) => p.id === item.linkedPromptId);
+        if (!hasPrompt) missingPromptIds.add(item.linkedPromptId);
+      } else if (item.type === "prompt" && item.linkedMemoryId) {
+        const hasMemory = paginatedResults.some((m) => m.id === item.linkedMemoryId);
+        if (!hasMemory) missingMemoryIds.add(item.linkedMemoryId);
+      }
+    }
+
+    if (missingPromptIds.size > 0) {
+      const extraPrompts = userPromptManager.getPromptsByIds(Array.from(missingPromptIds));
+      for (const p of extraPrompts) {
+        paginatedResults.push({
+          type: "prompt",
+          id: p.id,
+          sessionId: p.sessionId,
+          content: p.content,
+          createdAt: safeToISOString(p.createdAt),
+          projectPath: p.projectPath,
+          linkedMemoryId: p.linkedMemoryId,
+          similarity: 0,
+          isContext: true,
+        });
+      }
+    }
+
+    if (missingMemoryIds.size > 0) {
+      const projectShards = shardManager.getAllShards("project", "");
+      for (const shard of projectShards) {
+        const db = connectionManager.getConnection(shard.dbPath);
+        for (const mid of missingMemoryIds) {
+          const m = vectorSearch.getMemoryById(db, mid);
+          if (m && !paginatedResults.some((existing) => existing.id === m.id)) {
+            paginatedResults.push({
+              type: "memory",
+              id: m.id,
+              content: m.content,
+              memoryType: m.type,
+              createdAt: safeToISOString(m.created_at),
+              updatedAt: m.updated_at ? safeToISOString(m.updated_at) : undefined,
+              similarity: 0,
+              metadata: safeJSONParse(m.metadata),
+              displayName: m.display_name,
+              userName: m.user_name,
+              userEmail: m.user_email,
+              projectPath: m.project_path,
+              projectName: m.project_name,
+              gitRepoUrl: m.git_repo_url,
+              isPinned: m.is_pinned === 1,
+              linkedPromptId: safeJSONParse(m.metadata)?.promptId,
+              isContext: true,
+            });
+          }
+        }
+      }
+    }
 
     return {
       success: true,
       data: {
-        items: memories,
+        items: paginatedResults,
         total,
         page,
         pageSize,

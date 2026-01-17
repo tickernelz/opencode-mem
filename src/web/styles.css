@@ -314,6 +314,55 @@ button:disabled {
   height: 16px;
 }
 
+.combined-card {
+  border: 1px solid #333;
+  margin-bottom: 20px;
+  background: #0a0a0a;
+}
+
+.combined-card.selected {
+  border-color: #00ff00;
+}
+
+.combined-prompt-section {
+  padding: 15px;
+  background: rgba(0, 204, 255, 0.05);
+  border-bottom: 1px dashed #333;
+}
+
+.combined-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.combined-divider {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 20px;
+  background: #111;
+  border-top: 1px solid #222;
+  border-bottom: 1px solid #222;
+}
+
+.divider-icon {
+  width: 14px;
+  height: 14px;
+  color: #666;
+}
+
+.combined-memory-section {
+  padding: 15px;
+  background: rgba(0, 255, 0, 0.02);
+}
+
+.badge-memory {
+  color: #00ff00;
+  border-color: #00ff00;
+  font-weight: bold;
+}
+
 .memories-section {
   border: 1px solid #333;
   padding: 20px;
