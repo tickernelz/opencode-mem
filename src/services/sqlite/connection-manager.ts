@@ -124,7 +124,7 @@ export class ConnectionManager {
       db.run(`
         CREATE VIRTUAL TABLE IF NOT EXISTS vec_tags USING vec0(
           memory_id TEXT PRIMARY KEY,
-          embedding BLOB float32
+          embedding float32[${CONFIG.embeddingDimensions}]
         )
       `);
     } catch (error) {
