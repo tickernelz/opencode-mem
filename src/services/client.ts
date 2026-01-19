@@ -131,6 +131,7 @@ export class LocalMemoryClient {
     metadata?: {
       type?: MemoryType;
       source?: "manual" | "auto-capture" | "import" | "api";
+      tags?: string[];
       tool?: string;
       sessionID?: string;
       reasoning?: string;
@@ -147,7 +148,14 @@ export class LocalMemoryClient {
     try {
       await this.initialize();
 
+      const tags = metadata?.tags || [];
       const vector = await embeddingService.embedWithTimeout(content);
+      let tagsVector: Float32Array | undefined = undefined;
+
+      if (tags.length > 0) {
+        tagsVector = await embeddingService.embedWithTimeout(tags.join(", "));
+      }
+
       const { scope, hash } = extractScopeFromContainerTag(containerTag);
       const shard = shardManager.getWriteShard(scope, hash);
 
@@ -162,6 +170,7 @@ export class LocalMemoryClient {
         projectName,
         gitRepoUrl,
         type,
+        tags: _tags,
         ...dynamicMetadata
       } = metadata || {};
 
@@ -169,7 +178,9 @@ export class LocalMemoryClient {
         id,
         content,
         vector,
+        tagsVector,
         containerTag,
+        tags: tags.length > 0 ? tags.join(",") : undefined,
         type,
         createdAt: now,
         updatedAt: now,

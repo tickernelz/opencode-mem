@@ -175,6 +175,11 @@ function renderCombinedCard(pair) {
       ? `<span class="similarity-score">${Math.round(memory.similarity * 100)}%</span>`
       : "";
 
+  const tagsHtml =
+    memory.tags && memory.tags.length > 0
+      ? `<div class="tags-list">${memory.tags.map((t) => `<span class="tag-badge">${escapeHtml(t)}</span>`).join("")}</div>`
+      : "";
+
   return `
     <div class="combined-card ${isSelected ? "selected" : ""}" data-id="${memory.id}">
       <div class="combined-prompt-section">
@@ -204,6 +209,7 @@ function renderCombinedCard(pair) {
             </button>
           </div>
         </div>
+        ${tagsHtml}
         <div class="memory-content markdown-content">${renderMarkdown(memory.content)}</div>
       </div>
     </div>
@@ -275,6 +281,11 @@ function renderMemoryCard(memory) {
     ? `<span>Created: ${createdDate}</span><span>Updated: ${updatedDate}</span>`
     : `<span>Created: ${createdDate}</span>`;
 
+  const tagsHtml =
+    memory.tags && memory.tags.length > 0
+      ? `<div class="tags-list">${memory.tags.map((t) => `<span class="tag-badge">${escapeHtml(t)}</span>`).join("")}</div>`
+      : "";
+
   return `
     <div class="memory-card ${isSelected ? "selected" : ""} ${isPinned ? "pinned" : ""}" data-id="${memory.id}">
       <div class="memory-header">
@@ -296,6 +307,7 @@ function renderMemoryCard(memory) {
           </button>
         </div>
       </div>
+      ${tagsHtml}
       <div class="memory-content markdown-content">${renderMarkdown(memory.content)}</div>
       ${isLinked ? '<div class="link-indicator"><i data-lucide="arrow-up" class="icon-sm"></i> From prompt below <i data-lucide="arrow-down" class="icon-sm"></i></div>' : ""}
       <div class="memory-footer">
@@ -376,6 +388,13 @@ async function addMemory(e) {
   const content = document.getElementById("add-content").value.trim();
   const containerTag = document.getElementById("add-tag").value;
   const type = document.getElementById("add-type").value.trim();
+  const tagsStr = document.getElementById("add-tags").value.trim();
+  const tags = tagsStr
+    ? tagsStr
+        .split(",")
+        .map((t) => t.trim())
+        .filter((t) => t)
+    : [];
 
   if (!content || !containerTag) {
     showToast("Content and tag are required", "error");
@@ -385,7 +404,7 @@ async function addMemory(e) {
   const result = await fetchAPI("/api/memories", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content, containerTag, type: type || undefined }),
+    body: JSON.stringify({ content, containerTag, type: type || undefined, tags }),
   });
 
   if (result.success) {
@@ -395,6 +414,57 @@ async function addMemory(e) {
     await loadStats();
   } else {
     showToast(result.error || "Failed to add memory", "error");
+  }
+}
+
+function performSearch() {
+  const input = document.getElementById("search-input").value.trim();
+
+  if (!input) {
+    clearSearch();
+    return;
+  }
+
+  state.searchQuery = input;
+  state.isSearching = true;
+  state.currentPage = 1;
+
+  document.getElementById("clear-search-btn").classList.remove("hidden");
+
+  loadMemories();
+}
+
+async function loadMemories() {
+  showRefreshIndicator(true);
+
+  let endpoint = `/api/memories?page=${state.currentPage}&pageSize=${state.pageSize}&includePrompts=true`;
+
+  if (state.isSearching) {
+    endpoint = `/api/search?q=${encodeURIComponent(state.searchQuery || "")}&page=${state.currentPage}&pageSize=${state.pageSize}`;
+    if (state.selectedTag) {
+      endpoint += `&tag=${encodeURIComponent(state.selectedTag)}`;
+    }
+  } else {
+    if (state.selectedTag) {
+      endpoint += `&tag=${encodeURIComponent(state.selectedTag)}`;
+    }
+  }
+
+  const result = await fetchAPI(endpoint);
+
+  showRefreshIndicator(false);
+
+  if (result.success) {
+    state.memories = result.data.items;
+    state.totalPages = result.data.totalPages;
+    state.totalItems = result.data.total;
+    state.currentPage = result.data.page;
+
+    renderMemories();
+    updatePagination();
+    updateSectionTitle();
+  } else {
+    showError(result.error || "Failed to load memories");
   }
 }
 
@@ -696,6 +766,46 @@ async function checkMigrationStatus() {
   const result = await fetchAPI("/api/migration/detect");
   if (result.success && result.data.needsMigration) {
     showMigrationWarning(result.data);
+  }
+
+  const tagResult = await fetchAPI("/api/migration/tags/detect");
+  if (tagResult.success && tagResult.data.needsMigration) {
+    showTagMigrationModal(tagResult.data.count);
+  }
+}
+
+function showTagMigrationModal(count) {
+  const overlay = document.getElementById("tag-migration-overlay");
+  const status = document.getElementById("tag-migration-status");
+  status.textContent = `Found ${count} memories needing technical tags.`;
+  overlay.classList.remove("hidden");
+
+  document.getElementById("start-tag-migration-btn").onclick = runTagMigration;
+}
+
+async function runTagMigration() {
+  const actions = document.getElementById("tag-migration-actions");
+  const status = document.getElementById("tag-migration-status");
+  const progress = document.getElementById("tag-migration-progress");
+
+  actions.classList.add("hidden");
+  status.textContent = "Running technical tagging... This uses AI and may take a while.";
+  progress.style.width = "50%"; // Simple progress for now as it is non-streaming
+
+  const result = await fetchAPI("/api/migration/tags/run", { method: "POST" });
+
+  if (result.success) {
+    progress.style.width = "100%";
+    status.textContent = `Successfully tagged ${result.data.processed} memories!`;
+    showToast("Migration complete", "success");
+    setTimeout(() => {
+      document.getElementById("tag-migration-overlay").classList.add("hidden");
+      loadMemories();
+      loadStats();
+    }, 2000);
+  } else {
+    status.textContent = "Migration failed: " + result.error;
+    actions.classList.remove("hidden");
   }
 }
 

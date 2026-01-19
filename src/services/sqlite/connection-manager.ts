@@ -107,6 +107,29 @@ export class ConnectionManager {
           `2. Configure customSqlitePath in ~/.config/opencode/opencode-mem.jsonc`
       );
     }
+
+    this.migrateSchema(db);
+  }
+
+  private migrateSchema(db: Database): void {
+    try {
+      const columns = db.prepare("PRAGMA table_info(memories)").all() as any[];
+      const hasTags = columns.some((c) => c.name === "tags");
+
+      if (!hasTags && columns.length > 0) {
+        db.run("ALTER TABLE memories ADD COLUMN tags TEXT");
+        log("Migrated schema: added tags column to memories table");
+      }
+
+      db.run(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS vec_tags USING vec0(
+          memory_id TEXT PRIMARY KEY,
+          embedding BLOB float32
+        )
+      `);
+    } catch (error) {
+      log("Schema migration error", { error: String(error) });
+    }
   }
 
   getConnection(dbPath: string): Database {

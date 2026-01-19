@@ -149,6 +149,7 @@ export class ShardManager {
         content TEXT NOT NULL,
         vector BLOB NOT NULL,
         container_tag TEXT NOT NULL,
+        tags TEXT,
         type TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
@@ -166,7 +167,14 @@ export class ShardManager {
     db.run(`
       CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories USING vec0(
         memory_id TEXT PRIMARY KEY,
-        embedding FLOAT[${CONFIG.embeddingDimensions}]
+        embedding BLOB float32
+      )
+    `);
+
+    db.run(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS vec_tags USING vec0(
+        memory_id TEXT PRIMARY KEY,
+        embedding BLOB float32
       )
     `);
 

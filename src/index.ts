@@ -14,6 +14,7 @@ import { startWebServer, WebServer } from "./services/web-server.js";
 import { isConfigured, CONFIG } from "./config.js";
 import { log } from "./services/logger.js";
 import type { MemoryScope, MemoryType } from "./types/index.js";
+import { getLanguageName } from "./services/language-detector.js";
 
 export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   const { directory } = ctx;
@@ -97,9 +98,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       if (webServer) {
         await webServer.stop();
       }
-
       memoryClient.close();
-
       process.exit(0);
     } catch (error) {
       log("Shutdown error", { error: String(error) });
@@ -120,13 +119,10 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
         );
 
         if (textParts.length === 0) return;
-
         const userMessage = textParts.map((p) => p.text).join("\n");
-
         if (!userMessage.trim()) return;
 
         userPromptManager.savePrompt(input.sessionID, output.message.id, directory, userMessage);
-
         const searchResult = await memoryClient.searchMemories(userMessage, tags.project.tag);
 
         if (searchResult.success && searchResult.results.length > 0) {
@@ -164,14 +160,12 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                 text: memoryContext,
                 synthetic: true,
               };
-
               output.parts.unshift(contextPart);
             }
           }
         }
       } catch (error) {
         log("chat.message: ERROR", { error: String(error) });
-
         if (ctx.client?.tui && CONFIG.showErrorToasts) {
           await ctx.client.tui
             .showToast({
@@ -189,21 +183,22 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
     tool: {
       memory: tool({
-        description:
-          "Manage and query local persistent memory. Use 'search' to find relevant memories, 'add' to store new knowledge (MATCH USER LANGUAGE), 'profile' to view user preferences, 'list' to see recent memories, 'forget' to remove a memory.",
+        description: `Manage and query project memory (MATCH USER LANGUAGE: ${getLanguageName(CONFIG.autoCaptureLanguage || "en")}). Use 'search' with technical keywords/tags, 'add' to store knowledge, 'profile' for preferences.`,
         args: {
           mode: tool.schema.enum(["add", "search", "profile", "list", "forget", "help"]).optional(),
           content: tool.schema.string().optional(),
           query: tool.schema.string().optional(),
+          tags: tool.schema.string().optional(),
           type: tool.schema.string().optional(),
           memoryId: tool.schema.string().optional(),
           limit: tool.schema.number().optional(),
         },
         async execute(
           args: {
-            mode?: string;
+            mode?: "add" | "search" | "profile" | "list" | "forget" | "help";
             content?: string;
             query?: string;
+            tags?: string;
             type?: MemoryType;
             memoryId?: string;
             limit?: number;
@@ -219,73 +214,49 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
           const needsWarmup = !(await memoryClient.isReady());
           if (needsWarmup) {
-            return JSON.stringify({
-              success: false,
-              error: "Memory system is initializing. Please wait a moment and try again.",
-            });
+            return JSON.stringify({ success: false, error: "Memory system is initializing." });
           }
 
           const mode = args.mode || "help";
+          const langName = getLanguageName(CONFIG.autoCaptureLanguage || "en");
 
           try {
             switch (mode) {
-              case "help": {
+              case "help":
                 return JSON.stringify({
                   success: true,
                   message: "Memory System Usage Guide",
                   commands: [
                     {
                       command: "add",
-                      description: "Store a new project memory (MATCH USER LANGUAGE)",
-                      args: ["content", "type?"],
+                      description: `Store new memory (MATCH USER LANGUAGE: ${langName})`,
+                      args: ["content", "type?", "tags?"],
                     },
                     {
                       command: "search",
-                      description: "Search project memories (MATCH USER LANGUAGE)",
+                      description: `Search memories via keywords (MATCH USER LANGUAGE: ${langName})`,
                       args: ["query"],
                     },
-                    {
-                      command: "profile",
-                      description: "View user profile (preferences, patterns, workflows)",
-                      args: [],
-                    },
-                    {
-                      command: "list",
-                      description: "List recent project memories",
-                      args: ["limit?"],
-                    },
-                    {
-                      command: "forget",
-                      description: "Remove a project memory",
-                      args: ["memoryId"],
-                    },
+                    { command: "profile", description: "View user profile", args: [] },
+                    { command: "list", description: "List recent memories", args: ["limit?"] },
+                    { command: "forget", description: "Remove memory", args: ["memoryId"] },
                   ],
-                  note: "User preferences are automatically learned through the user profile system. Only project-specific memories can be added manually.",
-                  typeGuidance:
-                    "Choose appropriate type: preference, architecture, workflow, bug-fix, configuration, pattern, request, context, etc. Be specific and descriptive with categories.",
+                  tagGuidance: "Use technical keywords for search. Tags rank highest.",
                 });
-              }
 
-              case "add": {
-                if (!args.content) {
-                  return JSON.stringify({
-                    success: false,
-                    error: "content parameter is required for add mode",
-                  });
-                }
-
+              case "add":
+                if (!args.content)
+                  return JSON.stringify({ success: false, error: "content required" });
                 const sanitizedContent = stripPrivateContent(args.content);
-                if (isFullyPrivate(args.content)) {
-                  return JSON.stringify({
-                    success: false,
-                    error: "Cannot store fully private content",
-                  });
-                }
-
+                if (isFullyPrivate(args.content))
+                  return JSON.stringify({ success: false, error: "Private content blocked" });
                 const tagInfo = tags.project;
-
+                const parsedTags = args.tags
+                  ? args.tags.split(",").map((t) => t.trim())
+                  : undefined;
                 const result = await memoryClient.addMemory(sanitizedContent, tagInfo.tag, {
                   type: args.type,
+                  tags: parsedTags,
                   displayName: tagInfo.displayName,
                   userName: tagInfo.userName,
                   userEmail: tagInfo.userEmail,
@@ -293,130 +264,62 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                   projectName: tagInfo.projectName,
                   gitRepoUrl: tagInfo.gitRepoUrl,
                 });
-
-                if (!result.success) {
-                  return JSON.stringify({
-                    success: false,
-                    error: result.error || "Failed to add memory",
-                  });
-                }
-
                 return JSON.stringify({
-                  success: true,
-                  message: `Memory added to project`,
+                  success: result.success,
+                  message: `Memory added`,
                   id: result.id,
-                  type: args.type,
+                  tags: parsedTags,
                 });
-              }
 
-              case "search": {
-                if (!args.query) {
-                  return JSON.stringify({
-                    success: false,
-                    error: "query parameter is required for search mode",
-                  });
-                }
+              case "search":
+                if (!args.query) return JSON.stringify({ success: false, error: "query required" });
+                const searchRes = await memoryClient.searchMemories(args.query, tags.project.tag);
+                if (!searchRes.success)
+                  return JSON.stringify({ success: false, error: searchRes.error });
+                return formatSearchResults(args.query, searchRes, args.limit);
 
-                const result = await memoryClient.searchMemories(args.query, tags.project.tag);
-                if (!result.success) {
-                  return JSON.stringify({
-                    success: false,
-                    error: result.error || "Failed to search memories",
-                  });
-                }
-
-                return formatSearchResults(args.query, result, args.limit);
-              }
-
-              case "profile": {
+              case "profile":
                 const { userProfileManager } =
                   await import("./services/user-profile/user-profile-manager.js");
-                const userId = tags.user.userEmail || "unknown";
-                const profile = userProfileManager.getActiveProfile(userId);
-
-                if (!profile) {
-                  return JSON.stringify({
-                    success: true,
-                    profile: null,
-                    message: "No user profile found",
-                  });
-                }
-
-                const profileData = JSON.parse(profile.profileData);
-
+                const profile = userProfileManager.getActiveProfile(
+                  tags.user.userEmail || "unknown"
+                );
+                if (!profile) return JSON.stringify({ success: true, profile: null });
+                const pData = JSON.parse(profile.profileData);
                 return JSON.stringify({
                   success: true,
                   profile: {
-                    preferences: profileData.preferences,
-                    patterns: profileData.patterns,
-                    workflows: profileData.workflows,
-                    skillLevel: profileData.skillLevel,
+                    ...pData,
                     version: profile.version,
                     lastAnalyzed: profile.lastAnalyzedAt,
-                    totalPromptsAnalyzed: profile.totalPromptsAnalyzed,
                   },
                 });
-              }
 
-              case "list": {
-                const limit = args.limit || 20;
-
-                const result = await memoryClient.listMemories(tags.project.tag, limit);
-
-                if (!result.success) {
-                  return JSON.stringify({
-                    success: false,
-                    error: result.error || "Failed to list memories",
-                  });
-                }
-
-                const memories = result.memories || [];
+              case "list":
+                const listRes = await memoryClient.listMemories(tags.project.tag, args.limit || 20);
+                if (!listRes.success)
+                  return JSON.stringify({ success: false, error: listRes.error });
                 return JSON.stringify({
                   success: true,
-                  count: memories.length,
-                  memories: memories.map((m: any) => ({
+                  count: listRes.memories?.length,
+                  memories: listRes.memories?.map((m: any) => ({
                     id: m.id,
                     content: m.summary,
                     createdAt: m.createdAt,
-                    metadata: m.metadata,
                   })),
                 });
-              }
 
-              case "forget": {
-                if (!args.memoryId) {
-                  return JSON.stringify({
-                    success: false,
-                    error: "memoryId parameter is required for forget mode",
-                  });
-                }
-
-                const result = await memoryClient.deleteMemory(args.memoryId);
-
-                if (!result.success) {
-                  return JSON.stringify({
-                    success: false,
-                    error: result.error || "Failed to delete memory",
-                  });
-                }
-
-                return JSON.stringify({
-                  success: true,
-                  message: `Memory ${args.memoryId} removed`,
-                });
-              }
+              case "forget":
+                if (!args.memoryId)
+                  return JSON.stringify({ success: false, error: "memoryId required" });
+                const delRes = await memoryClient.deleteMemory(args.memoryId);
+                return JSON.stringify({ success: delRes.success, message: `Memory removed` });
 
               default:
-                return JSON.stringify({
-                  success: false,
-                  error: `Unknown mode: ${mode}`,
-                });
+                return JSON.stringify({ success: false, error: `Unknown mode: ${mode}` });
             }
           } catch (error) {
-            return JSON.stringify({
-              success: false,
-              error: error instanceof Error ? error.message : String(error),
-            });
+            return JSON.stringify({ success: false, error: String(error) });
           }
         },
       }),
@@ -424,71 +327,25 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
     event: async (input: { event: { type: string; properties?: any } }) => {
       const event = input.event;
-      const props = event.properties as Record<string, unknown> | undefined;
-
       if (event.type === "session.idle") {
         if (!isConfigured()) return;
-
-        const sessionID = props?.sessionID as string | undefined;
-
-        if (sessionID) {
-          await performAutoCapture(ctx, sessionID, directory);
-        }
-
+        const sessionID = event.properties?.sessionID;
+        if (sessionID) await performAutoCapture(ctx, sessionID, directory);
         await performUserProfileLearning(ctx, directory);
-
         const { cleanupService } = await import("./services/cleanup-service.js");
-
-        const shouldRun = await cleanupService.shouldRunCleanup();
-        if (!shouldRun) return;
-
-        cleanupService
-          .runCleanup()
-          .then((result) => {
-            if (result.deletedCount > 0 && ctx.client?.tui) {
-              ctx.client.tui
-                .showToast({
-                  body: {
-                    title: "Memory Cleanup",
-                    message: `Deleted ${result.deletedCount} old memories (user: ${result.userCount}, project: ${result.projectCount})`,
-                    variant: "info",
-                    duration: 5000,
-                  },
-                })
-                .catch(() => {});
-            }
-          })
-          .catch((err) => {
-            log("Auto-cleanup failed", { error: String(err) });
-            if (ctx.client?.tui && CONFIG.showErrorToasts) {
-              ctx.client.tui
-                .showToast({
-                  body: {
-                    title: "Memory Cleanup Error",
-                    message: String(err),
-                    variant: "error",
-                    duration: 5000,
-                  },
-                })
-                .catch(() => {});
-            }
-          });
+        if (await cleanupService.shouldRunCleanup()) await cleanupService.runCleanup();
       }
     },
   };
 };
 
-function formatSearchResults(
-  query: string,
-  results: { results?: Array<{ id: string; memory?: string; chunk?: string; similarity: number }> },
-  limit?: number
-): string {
+function formatSearchResults(query: string, results: any, limit?: number): string {
   const memoryResults = results.results || [];
   return JSON.stringify({
     success: true,
     query,
     count: memoryResults.length,
-    results: memoryResults.slice(0, limit || 10).map((r) => ({
+    results: memoryResults.slice(0, limit || 10).map((r: any) => ({
       id: r.id,
       content: r.memory || r.chunk,
       similarity: Math.round(r.similarity * 100),

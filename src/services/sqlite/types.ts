@@ -13,7 +13,9 @@ export interface MemoryRecord {
   id: string;
   content: string;
   vector: Float32Array;
+  tagsVector?: Float32Array;
   containerTag: string;
+  tags?: string;
   type?: string;
   createdAt: number;
   updatedAt: number;
@@ -30,6 +32,7 @@ export interface SearchResult {
   id: string;
   memory: string;
   similarity: number;
+  tags?: string[];
   metadata?: Record<string, unknown>;
   displayName?: string;
   userName?: string;

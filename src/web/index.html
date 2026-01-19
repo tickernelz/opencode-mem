@@ -154,6 +154,11 @@
               <label>Type:</label>
               <input type="text" id="add-type" placeholder="preference, architecture, etc." />
             </div>
+
+            <div class="form-group">
+              <label>Tags:</label>
+              <input type="text" id="add-tags" placeholder="react, hooks, auth (comma separated)" />
+            </div>
           </div>
 
           <div class="form-group">
@@ -198,6 +203,29 @@
     </div>
 
     <div id="toast" class="toast hidden"></div>
+
+    <div id="tag-migration-overlay" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Memory Tagging Migration</h3>
+        </div>
+        <div class="migration-progress-body">
+          <p id="tag-migration-status">Initializing migration...</p>
+          <div class="progress-bar-container">
+            <div id="tag-migration-progress" class="progress-bar" style="width: 0%"></div>
+          </div>
+          <p class="migration-note">
+            Please don't close the browser. This will re-vectorize your memories with technical tags
+            to improve search accuracy.
+          </p>
+        </div>
+        <div class="modal-actions" id="tag-migration-actions">
+          <button id="start-tag-migration-btn" class="btn-primary">
+            <i data-lucide="play" class="icon"></i> Start Migration
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div id="changelog-modal" class="modal hidden">
       <div class="modal-content">

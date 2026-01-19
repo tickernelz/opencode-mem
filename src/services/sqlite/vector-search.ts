@@ -7,9 +7,9 @@ export class VectorSearch {
   insertVector(db: Database, record: MemoryRecord): void {
     const insertMemory = db.prepare(`
       INSERT INTO memories (
-        id, content, vector, container_tag, type, created_at, updated_at,
+        id, content, vector, container_tag, tags, type, created_at, updated_at,
         metadata, display_name, user_name, user_email, project_path, project_name, git_repo_url
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const vectorBuffer = new Uint8Array(record.vector.buffer);
@@ -19,6 +19,7 @@ export class VectorSearch {
       record.content,
       vectorBuffer,
       record.containerTag,
+      record.tags || null,
       record.type || null,
       record.createdAt,
       record.updatedAt,
@@ -34,8 +35,15 @@ export class VectorSearch {
     const insertVec = db.prepare(`
       INSERT INTO vec_memories (memory_id, embedding) VALUES (?, ?)
     `);
-
     insertVec.run(record.id, vectorBuffer);
+
+    if (record.tagsVector) {
+      const tagsVectorBuffer = new Uint8Array(record.tagsVector.buffer);
+      const insertTagsVec = db.prepare(`
+        INSERT INTO vec_tags (memory_id, embedding) VALUES (?, ?)
+      `);
+      insertTagsVec.run(record.id, tagsVectorBuffer);
+    }
   }
 
   searchInShard(
@@ -45,46 +53,75 @@ export class VectorSearch {
     limit: number
   ): SearchResult[] {
     const db = connectionManager.getConnection(shard.dbPath);
-
-    const stmt = db.prepare(`
-      SELECT 
-        m.id,
-        m.content,
-        m.container_tag,
-        m.metadata,
-        m.display_name,
-        m.user_name,
-        m.user_email,
-        m.project_path,
-        m.project_name,
-        m.git_repo_url,
-        m.is_pinned,
-        v.distance
-      FROM vec_memories v
-      INNER JOIN memories m ON v.memory_id = m.id
-      WHERE v.embedding MATCH ?
-        AND v.k = ?
-        AND m.container_tag = ?
-      ORDER BY v.distance
-    `);
-
     const queryBuffer = new Uint8Array(queryVector.buffer);
-    const rows = stmt.all(queryBuffer, limit * 2, containerTag) as any[];
 
-    return rows.map((row: any) => ({
-      id: row.id,
-      memory: row.content,
-      similarity: 1 - row.distance,
-      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-      containerTag: row.container_tag,
-      displayName: row.display_name,
-      userName: row.user_name,
-      userEmail: row.user_email,
-      projectPath: row.project_path,
-      projectName: row.project_name,
-      gitRepoUrl: row.git_repo_url,
-      isPinned: row.is_pinned,
-    }));
+    const contentResults = db
+      .prepare(
+        `
+      SELECT memory_id, distance FROM vec_memories 
+      WHERE embedding MATCH ? AND k = ?
+      ORDER BY distance
+    `
+      )
+      .all(queryBuffer, limit * 4) as any[];
+
+    const tagsResults = db
+      .prepare(
+        `
+      SELECT memory_id, distance FROM vec_tags 
+      WHERE embedding MATCH ? AND k = ?
+      ORDER BY distance
+    `
+      )
+      .all(queryBuffer, limit * 4) as any[];
+
+    const scoreMap = new Map<string, { contentDist: number; tagsDist: number }>();
+
+    for (const r of contentResults) {
+      scoreMap.set(r.memory_id, { contentDist: r.distance, tagsDist: 1 });
+    }
+
+    for (const r of tagsResults) {
+      const entry = scoreMap.get(r.memory_id) || { contentDist: 1, tagsDist: 1 };
+      entry.tagsDist = r.distance;
+      scoreMap.set(r.memory_id, entry);
+    }
+
+    const ids = Array.from(scoreMap.keys());
+    if (ids.length === 0) return [];
+
+    const placeholders = ids.map(() => "?").join(",");
+    const rows = db
+      .prepare(
+        `
+      SELECT * FROM memories 
+      WHERE id IN (${placeholders}) AND container_tag = ?
+    `
+      )
+      .all(...ids, containerTag) as any[];
+
+    return rows.map((row: any) => {
+      const scores = scoreMap.get(row.id)!;
+      const contentSim = 1 - scores.contentDist;
+      const tagsSim = 1 - scores.tagsDist;
+      const similarity = tagsSim * 0.8 + contentSim * 0.2;
+
+      return {
+        id: row.id,
+        memory: row.content,
+        similarity,
+        tags: row.tags ? row.tags.split(",").map((t: string) => t.trim()) : [],
+        metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+        containerTag: row.container_tag,
+        displayName: row.display_name,
+        userName: row.user_name,
+        userEmail: row.user_email,
+        projectPath: row.project_path,
+        projectName: row.project_name,
+        gitRepoUrl: row.git_repo_url,
+        isPinned: row.is_pinned,
+      };
+    });
   }
 
   async searchAcrossShards(
@@ -106,16 +143,13 @@ export class VectorSearch {
     }
 
     allResults.sort((a, b) => b.similarity - a.similarity);
-
     return allResults.filter((r) => r.similarity >= similarityThreshold).slice(0, limit);
   }
 
   deleteVector(db: Database, memoryId: string): void {
-    const deleteVec = db.prepare(`DELETE FROM vec_memories WHERE memory_id = ?`);
-    deleteVec.run(memoryId);
-
-    const deleteMemory = db.prepare(`DELETE FROM memories WHERE id = ?`);
-    deleteMemory.run(memoryId);
+    db.prepare(`DELETE FROM vec_memories WHERE memory_id = ?`).run(memoryId);
+    db.prepare(`DELETE FROM vec_tags WHERE memory_id = ?`).run(memoryId);
+    db.prepare(`DELETE FROM memories WHERE id = ?`).run(memoryId);
   }
 
   listMemories(db: Database, containerTag: string, limit: number): any[] {

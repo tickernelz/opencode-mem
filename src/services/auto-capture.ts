@@ -72,6 +72,7 @@ export async function performAutoCapture(
     const result = await memoryClient.addMemory(summaryResult.summary, tags.project.tag, {
       source: "auto-capture" as any,
       type: summaryResult.type as any,
+      tags: summaryResult.tags,
       sessionID,
       promptId: prompt.id,
       captureTimestamp: Date.now(),
@@ -240,7 +241,7 @@ async function generateSummary(
   context: string,
   sessionID: string,
   userPrompt: string
-): Promise<{ summary: string; type: string } | null> {
+): Promise<{ summary: string; type: string; tags: string[] } | null> {
   if (!CONFIG.memoryModel || !CONFIG.memoryApiUrl) {
     throw new Error("External API not configured for auto-capture");
   }
@@ -272,7 +273,8 @@ RULES:
 2. SKIP non-technical by returning type="skip"
 3. NO meta-commentary or behavior analysis
 4. Include specific file names, functions, technical details
-5. You MUST write the summary in ${langName}.
+5. Generate 2-4 technical tags (e.g., "react", "auth", "bug-fix")
+6. You MUST write the summary in ${langName}.
 
 FORMAT:
 ## Request
@@ -286,7 +288,7 @@ CAPTURE if: code changed, bug fixed, feature added, decision made`;
 
   const aiPrompt = `${context}
 
-Analyze this conversation. If it contains technical work (code, bugs, features, decisions), create a concise summary. If it's non-technical (greetings, casual chat, incomplete requests), return type="skip" with empty summary.`;
+Analyze this conversation. If it contains technical work (code, bugs, features, decisions), create a concise summary and relevant tags. If it's non-technical (greetings, casual chat, incomplete requests), return type="skip" with empty summary.`;
 
   const toolSchema = {
     type: "function" as const,
@@ -305,8 +307,13 @@ Analyze this conversation. If it contains technical work (code, bugs, features, 
             description:
               "Type of memory: 'skip' for non-technical conversations, or technical type (feature, bug-fix, refactor, analysis, configuration, discussion, other)",
           },
+          tags: {
+            type: "array",
+            items: { type: "string" },
+            description: "List of 2-4 technical tags related to the memory",
+          },
         },
-        required: ["summary", "type"],
+        required: ["summary", "type", "tags"],
       },
     },
   };
@@ -320,5 +327,6 @@ Analyze this conversation. If it contains technical work (code, bugs, features, 
   return {
     summary: result.data.summary,
     type: result.data.type,
+    tags: result.data.tags || [],
   };
 }
