@@ -52,6 +52,8 @@ Configure at `~/.config/opencode/opencode-mem.jsonc`:
 ```jsonc
 {
   "storagePath": "~/.opencode-mem/data",
+  "userEmailOverride": "user@example.com",
+  "userNameOverride": "John Doe",
   "embeddingModel": "Xenova/nomic-embed-text-v1",
   "webServerEnabled": true,
   "webServerPort": 4747,

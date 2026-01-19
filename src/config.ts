@@ -22,6 +22,8 @@ if (!existsSync(DATA_DIR)) {
 interface OpenCodeMemConfig {
   storagePath?: string;
   customSqlitePath?: string;
+  userEmailOverride?: string;
+  userNameOverride?: string;
   embeddingModel?: string;
   embeddingDimensions?: number;
   embeddingApiUrl?: string;
@@ -70,6 +72,8 @@ const DEFAULTS: Required<
     | "memoryProvider"
     | "customSqlitePath"
     | "autoCaptureLanguage"
+    | "userEmailOverride"
+    | "userNameOverride"
   >
 > & {
   embeddingApiUrl?: string;
@@ -80,6 +84,8 @@ const DEFAULTS: Required<
   memoryProvider?: "openai-chat" | "openai-responses" | "anthropic";
   customSqlitePath?: string;
   autoCaptureLanguage?: string;
+  userEmailOverride?: string;
+  userNameOverride?: string;
 } = {
   storagePath: join(DATA_DIR, "data"),
   embeddingModel: "Xenova/nomic-embed-text-v1",
@@ -144,6 +150,9 @@ const CONFIG_TEMPLATE = `{
   
   // Storage location for vector database
   "storagePath": "~/.opencode-mem/data",
+
+  "userEmailOverride": "",
+  "userNameOverride": "",
   
   // ============================================
   // macOS SQLite Extension Loading (REQUIRED FOR macOS)
@@ -378,6 +387,8 @@ export const CONFIG = {
   customSqlitePath: fileConfig.customSqlitePath
     ? expandPath(fileConfig.customSqlitePath)
     : undefined,
+  userEmailOverride: fileConfig.userEmailOverride,
+  userNameOverride: fileConfig.userNameOverride,
   embeddingModel: fileConfig.embeddingModel ?? DEFAULTS.embeddingModel,
   embeddingDimensions:
     fileConfig.embeddingDimensions ??

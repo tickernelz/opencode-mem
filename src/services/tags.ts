@@ -55,8 +55,8 @@ export function getProjectName(directory: string): string {
 }
 
 export function getUserTagInfo(): TagInfo {
-  const email = getGitEmail();
-  const name = getGitName();
+  const email = CONFIG.userEmailOverride || getGitEmail();
+  const name = CONFIG.userNameOverride || getGitName();
 
   if (email) {
     return {
@@ -67,7 +67,7 @@ export function getUserTagInfo(): TagInfo {
     };
   }
 
-  const fallback = process.env.USER || process.env.USERNAME || "anonymous";
+  const fallback = name || process.env.USER || process.env.USERNAME || "anonymous";
   return {
     tag: `${CONFIG.containerTagPrefix}_user_${sha256(fallback)}`,
     displayName: fallback,
