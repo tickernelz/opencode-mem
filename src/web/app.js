@@ -387,7 +387,7 @@ async function addMemory(e) {
 
   const content = document.getElementById("add-content").value.trim();
   const containerTag = document.getElementById("add-tag").value;
-  const type = document.getElementById("add-type").value.trim();
+  const type = document.getElementById("add-type").value;
   const tagsStr = document.getElementById("add-tags").value.trim();
   const tags = tagsStr
     ? tagsStr
