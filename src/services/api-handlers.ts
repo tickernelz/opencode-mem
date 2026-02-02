@@ -1,7 +1,5 @@
 import { embeddingService } from "./embedding.js";
-import { shardManager } from "./sqlite/shard-manager.js";
-import { vectorSearch } from "./sqlite/vector-search.js";
-import { connectionManager } from "./sqlite/connection-manager.js";
+import { DatabaseFactory } from "./database/factory.js";
 import { log } from "./logger.js";
 import { CONFIG } from "../config.js";
 import type { MemoryType } from "../types/index.js";
@@ -84,11 +82,29 @@ function extractScopeFromTag(tag: string): { scope: "project"; hash: string } {
   return { scope: "project", hash: tag };
 }
 
-function getProjectPathFromTag(tag: string): string | undefined {
-  const projectShards = shardManager.getAllShards("project", "");
-  for (const shard of projectShards) {
-    const db = connectionManager.getConnection(shard.dbPath);
-    const tags = vectorSearch.getDistinctTags(db);
+async function getProjectPathFromTag(tag: string): Promise<string | undefined> {
+  const adapter = DatabaseFactory.getCached();
+  if (!adapter) return undefined;
+
+  if (CONFIG.databaseType === "sqlite") {
+    const shardManager = adapter.getShardManager();
+    const projectShards = shardManager.getAllShards("project", "");
+    for (const shard of projectShards) {
+      // SQLite specific: need to access connection manager
+      const { connectionManager } = await import("./database/sqlite/connection-manager.js");
+      const db = connectionManager.getConnection(shard.dbPath);
+      const { vectorSearch } = await import("./database/sqlite/vector-search.js");
+      const tags = vectorSearch.getDistinctTags(db);
+      for (const t of tags) {
+        if (t.container_tag === tag && t.project_path) {
+          return t.project_path;
+        }
+      }
+    }
+  } else {
+    // PostgreSQL: use adapter interface
+    const vectorSearch = adapter.getVectorSearch();
+    const tags = await vectorSearch.getDistinctTags();
     for (const t of tags) {
       if (t.container_tag === tag && t.project_path) {
         return t.project_path;
@@ -101,25 +117,51 @@ function getProjectPathFromTag(tag: string): string | undefined {
 export async function handleListTags(): Promise<ApiResponse<{ project: TagInfo[] }>> {
   try {
     await embeddingService.warmup();
-    const projectShards = shardManager.getAllShards("project", "");
+    const adapter = DatabaseFactory.getCached();
+    if (!adapter) return { success: false, error: "Database not initialized" };
+
     const tagsMap = new Map<string, TagInfo>();
-    for (const shard of projectShards) {
-      const db = connectionManager.getConnection(shard.dbPath);
-      const tags = vectorSearch.getDistinctTags(db);
+
+    if (CONFIG.databaseType === "sqlite") {
+      const shardManager = adapter.getShardManager();
+      const projectShards = shardManager.getAllShards("project", "");
+      for (const shard of projectShards) {
+        const { connectionManager } = await import("./database/sqlite/connection-manager.js");
+        const db = connectionManager.getConnection(shard.dbPath);
+        const { vectorSearch } = await import("./database/sqlite/vector-search.js");
+        const tags = vectorSearch.getDistinctTags(db);
+        for (const t of tags) {
+          if (t.container_tag && !tagsMap.has(t.container_tag)) {
+            tagsMap.set(t.container_tag, {
+              tag: t.container_tag,
+              displayName: t.display_name,
+              userName: t.user_name,
+              userEmail: t.user_email,
+              projectPath: t.project_path,
+              projectName: t.project_name,
+              gitRepoUrl: t.git_repo_url,
+            });
+          }
+        }
+      }
+    } else {
+      const vectorSearch = adapter.getVectorSearch();
+      const tags = await vectorSearch.getDistinctTags();
       for (const t of tags) {
         if (t.container_tag && !tagsMap.has(t.container_tag)) {
           tagsMap.set(t.container_tag, {
             tag: t.container_tag,
-            displayName: t.display_name,
-            userName: t.user_name,
-            userEmail: t.user_email,
-            projectPath: t.project_path,
-            projectName: t.project_name,
-            gitRepoUrl: t.git_repo_url,
+            displayName: t.display_name || undefined,
+            userName: t.user_name || undefined,
+            userEmail: t.user_email || undefined,
+            projectPath: t.project_path || undefined,
+            projectName: t.project_name || undefined,
+            gitRepoUrl: t.git_repo_url || undefined,
           });
         }
       }
     }
+
     const projectTags: TagInfo[] = [];
     for (const tagInfo of tagsMap.values()) {
       if (tagInfo.tag.includes("_project_")) {
@@ -141,20 +183,40 @@ export async function handleListMemories(
 ): Promise<ApiResponse<PaginatedResponse<Memory | any>>> {
   try {
     await embeddingService.warmup();
+    const adapter = DatabaseFactory.getCached();
+    if (!adapter) return { success: false, error: "Database not initialized" };
+
     let allMemories: any[] = [];
-    if (tag) {
-      const { scope: tagScope, hash } = extractScopeFromTag(tag);
-      const shards = shardManager.getAllShards(tagScope, hash);
-      for (const shard of shards) {
-        const db = connectionManager.getConnection(shard.dbPath);
-        const memories = vectorSearch.listMemories(db, tag, 10000);
-        allMemories.push(...memories);
+
+    if (CONFIG.databaseType === "sqlite") {
+      const shardManager = adapter.getShardManager();
+      const { connectionManager } = await import("./database/sqlite/connection-manager.js");
+      const { vectorSearch } = await import("./database/sqlite/vector-search.js");
+
+      if (tag) {
+        const { scope: tagScope, hash } = extractScopeFromTag(tag);
+        const shards = shardManager.getAllShards(tagScope, hash);
+        for (const shard of shards) {
+          const db = connectionManager.getConnection(shard.dbPath);
+          const memories = vectorSearch.listMemories(db, tag, 10000);
+          allMemories.push(...memories);
+        }
+      } else {
+        const shards = shardManager.getAllShards("project", "");
+        for (const shard of shards) {
+          const db = connectionManager.getConnection(shard.dbPath);
+          const memories = vectorSearch.getAllMemories(db);
+          allMemories.push(...memories.filter((m: any) => m.container_tag?.includes(`_project_`)));
+        }
       }
     } else {
-      const shards = shardManager.getAllShards("project", "");
-      for (const shard of shards) {
-        const db = connectionManager.getConnection(shard.dbPath);
-        const memories = vectorSearch.getAllMemories(db);
+      // PostgreSQL: use adapter interface
+      const vectorSearch = adapter.getVectorSearch();
+      if (tag) {
+        const memories = await vectorSearch.listMemories(tag, 10000);
+        allMemories.push(...memories);
+      } else {
+        const memories = await vectorSearch.getAllMemories();
         allMemories.push(...memories.filter((m: any) => m.container_tag?.includes(`_project_`)));
       }
     }
@@ -183,8 +245,8 @@ export async function handleListMemories(
 
     let timeline: any[] = memoriesWithType;
     if (includePrompts) {
-      const projectPath = tag ? getProjectPathFromTag(tag) : undefined;
-      const prompts = userPromptManager.getCapturedPrompts(projectPath);
+      const projectPath = tag ? await getProjectPathFromTag(tag) : undefined;
+      const prompts = await userPromptManager.getCapturedPrompts(projectPath);
       const promptsWithType = prompts.map((p) => ({
         type: "prompt",
         id: p.id,
@@ -291,6 +353,9 @@ export async function handleAddMemory(data: {
       return { success: false, error: "content and containerTag are required" };
     }
     await embeddingService.warmup();
+    const adapter = DatabaseFactory.getCached();
+    if (!adapter) return { success: false, error: "Database not initialized" };
+
     const tags = (data.tags || []).map((t) => t.trim().toLowerCase());
     const embeddingInput =
       tags.length > 0 ? `${data.content}\nTags: ${tags.join(", ")}` : data.content;
@@ -301,18 +366,14 @@ export async function handleAddMemory(data: {
       tagsVector = await embeddingService.embedWithTimeout(tags.join(", "));
     }
 
-    const { scope, hash } = extractScopeFromTag(data.containerTag);
-
-    const shard = shardManager.getWriteShard(scope, hash);
-
     const id = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     const now = Date.now();
 
     const record = {
       id,
       content: data.content,
-      vector,
-      tagsVector,
+      embedding: Array.from(vector),
+      tagsEmbedding: tagsVector ? Array.from(tagsVector) : undefined,
       containerTag: data.containerTag,
       tags: tags.length > 0 ? tags.join(",") : undefined,
       type: data.type,
@@ -326,9 +387,27 @@ export async function handleAddMemory(data: {
       gitRepoUrl: data.gitRepoUrl,
       metadata: JSON.stringify({ source: "api" }),
     };
-    const db = connectionManager.getConnection(shard.dbPath);
-    vectorSearch.insertVector(db, record);
-    shardManager.incrementVectorCount(shard.id);
+
+    if (CONFIG.databaseType === "sqlite") {
+      // SQLite: use sharding logic
+      const { scope, hash } = extractScopeFromTag(data.containerTag);
+      const shardManager = adapter.getShardManager();
+      const shard = shardManager.getWriteShard(scope, hash);
+      const { connectionManager } = await import("./database/sqlite/connection-manager.js");
+      const { vectorSearch } = await import("./database/sqlite/vector-search.js");
+      const db = connectionManager.getConnection(shard.dbPath);
+      vectorSearch.insertVector(db, {
+        ...record,
+        vector,
+        tagsVector,
+      });
+      shardManager.incrementVectorCount(shard.id);
+    } else {
+      // PostgreSQL: use adapter interface
+      const vectorSearch = adapter.getVectorSearch();
+      await vectorSearch.insertMemory(record);
+    }
+
     return { success: true, data: { id } };
   } catch (error) {
     log("handleAddMemory: error", { error: String(error) });
@@ -342,18 +421,41 @@ export async function handleDeleteMemory(
 ): Promise<ApiResponse<{ deletedPrompt: boolean }>> {
   try {
     if (!id) return { success: false, error: "id is required" };
-    const projectShards = shardManager.getAllShards("project", "");
-    for (const shard of projectShards) {
-      const db = connectionManager.getConnection(shard.dbPath);
-      const memory = vectorSearch.getMemoryById(db, id);
+    const adapter = DatabaseFactory.getCached();
+    if (!adapter) return { success: false, error: "Database not initialized" };
+
+    if (CONFIG.databaseType === "sqlite") {
+      const shardManager = adapter.getShardManager();
+      const { connectionManager } = await import("./database/sqlite/connection-manager.js");
+      const { vectorSearch } = await import("./database/sqlite/vector-search.js");
+      const projectShards = shardManager.getAllShards("project", "");
+      for (const shard of projectShards) {
+        const db = connectionManager.getConnection(shard.dbPath);
+        const memory = vectorSearch.getMemoryById(db, id);
+        if (memory) {
+          if (cascade) {
+            const metadata = safeJSONParse(memory.metadata);
+            const linkedPromptId = metadata?.promptId;
+            if (linkedPromptId) await userPromptManager.deletePrompt(linkedPromptId);
+          }
+          vectorSearch.deleteVector(db, id);
+          shardManager.decrementVectorCount(shard.id);
+          return {
+            success: true,
+            data: { deletedPrompt: cascade && !!safeJSONParse(memory.metadata)?.promptId },
+          };
+        }
+      }
+    } else {
+      const vectorSearch = adapter.getVectorSearch();
+      const memory = await vectorSearch.getMemoryById(id);
       if (memory) {
         if (cascade) {
           const metadata = safeJSONParse(memory.metadata);
           const linkedPromptId = metadata?.promptId;
-          if (linkedPromptId) userPromptManager.deletePrompt(linkedPromptId);
+          if (linkedPromptId) await userPromptManager.deletePrompt(linkedPromptId);
         }
-        vectorSearch.deleteVector(db, id);
-        shardManager.decrementVectorCount(shard.id);
+        await vectorSearch.deleteMemory(id);
         return {
           success: true,
           data: { deletedPrompt: cascade && !!safeJSONParse(memory.metadata)?.promptId },
@@ -392,52 +494,100 @@ export async function handleUpdateMemory(
   try {
     if (!id) return { success: false, error: "id is required" };
     await embeddingService.warmup();
-    const projectShards = shardManager.getAllShards("project", "");
-    let foundShard = null,
-      existingMemory = null;
-    for (const shard of projectShards) {
-      const db = connectionManager.getConnection(shard.dbPath);
-      const memory = vectorSearch.getMemoryById(db, id);
-      if (memory) {
-        foundShard = shard;
-        existingMemory = memory;
-        break;
+    const adapter = DatabaseFactory.getCached();
+    if (!adapter) return { success: false, error: "Database not initialized" };
+
+    let existingMemory: any = null;
+
+    if (CONFIG.databaseType === "sqlite") {
+      const shardManager = adapter.getShardManager();
+      const { connectionManager } = await import("./database/sqlite/connection-manager.js");
+      const { vectorSearch } = await import("./database/sqlite/vector-search.js");
+      const projectShards = shardManager.getAllShards("project", "");
+      let foundShard = null;
+
+      for (const shard of projectShards) {
+        const db = connectionManager.getConnection(shard.dbPath);
+        const memory = vectorSearch.getMemoryById(db, id);
+        if (memory) {
+          foundShard = shard;
+          existingMemory = memory;
+          break;
+        }
       }
+
+      if (!foundShard || !existingMemory) return { success: false, error: "Memory not found" };
+      const db = connectionManager.getConnection(foundShard.dbPath);
+      vectorSearch.deleteVector(db, id);
+      shardManager.decrementVectorCount(foundShard.id);
+
+      const newContent = data.content || existingMemory.content;
+      const tags = data.tags || (existingMemory.tags ? existingMemory.tags.split(",") : []);
+
+      const vector = await embeddingService.embedWithTimeout(newContent);
+      let tagsVector: Float32Array | undefined = undefined;
+      if (tags.length > 0) {
+        tagsVector = await embeddingService.embedWithTimeout(tags.join(", "));
+      }
+
+      const updatedRecord = {
+        id,
+        content: newContent,
+        vector,
+        tagsVector,
+        containerTag: existingMemory.container_tag,
+        tags: tags.length > 0 ? tags.join(",") : undefined,
+        type: data.type || existingMemory.type,
+        createdAt: existingMemory.created_at,
+        updatedAt: Date.now(),
+        metadata: existingMemory.metadata,
+        displayName: existingMemory.display_name,
+        userName: existingMemory.user_name,
+        userEmail: existingMemory.user_email,
+        projectPath: existingMemory.project_path,
+        projectName: existingMemory.project_name,
+        gitRepoUrl: existingMemory.git_repo_url,
+      };
+      vectorSearch.insertVector(db, updatedRecord);
+      shardManager.incrementVectorCount(foundShard.id);
+    } else {
+      const vectorSearch = adapter.getVectorSearch();
+      existingMemory = await vectorSearch.getMemoryById(id);
+      if (!existingMemory) return { success: false, error: "Memory not found" };
+
+      await vectorSearch.deleteMemory(id);
+
+      const newContent = data.content || existingMemory.content;
+      const tags = data.tags || (existingMemory.tags ? existingMemory.tags.split(",") : []);
+
+      const vector = await embeddingService.embedWithTimeout(newContent);
+      let tagsVector: number[] | undefined = undefined;
+      if (tags.length > 0) {
+        const tagsVectorResult = await embeddingService.embedWithTimeout(tags.join(", "));
+        tagsVector = Array.from(tagsVectorResult);
+      }
+
+      const updatedRecord = {
+        id,
+        content: newContent,
+        embedding: Array.from(vector),
+        tagsEmbedding: tagsVector,
+        containerTag: existingMemory.container_tag,
+        tags: tags.length > 0 ? tags.join(",") : undefined,
+        type: data.type || existingMemory.type,
+        createdAt: existingMemory.created_at,
+        updatedAt: Date.now(),
+        metadata: existingMemory.metadata,
+        displayName: existingMemory.display_name || undefined,
+        userName: existingMemory.user_name || undefined,
+        userEmail: existingMemory.user_email || undefined,
+        projectPath: existingMemory.project_path || undefined,
+        projectName: existingMemory.project_name || undefined,
+        gitRepoUrl: existingMemory.git_repo_url || undefined,
+      };
+      await vectorSearch.insertMemory(updatedRecord);
     }
-    if (!foundShard || !existingMemory) return { success: false, error: "Memory not found" };
-    const db = connectionManager.getConnection(foundShard.dbPath);
-    vectorSearch.deleteVector(db, id);
-    shardManager.decrementVectorCount(foundShard.id);
 
-    const newContent = data.content || existingMemory.content;
-    const tags = data.tags || (existingMemory.tags ? existingMemory.tags.split(",") : []);
-
-    const vector = await embeddingService.embedWithTimeout(newContent);
-    let tagsVector: Float32Array | undefined = undefined;
-    if (tags.length > 0) {
-      tagsVector = await embeddingService.embedWithTimeout(tags.join(", "));
-    }
-
-    const updatedRecord = {
-      id,
-      content: newContent,
-      vector,
-      tagsVector,
-      containerTag: existingMemory.container_tag,
-      tags: tags.length > 0 ? tags.join(",") : undefined,
-      type: data.type || existingMemory.type,
-      createdAt: existingMemory.created_at,
-      updatedAt: Date.now(),
-      metadata: existingMemory.metadata,
-      displayName: existingMemory.display_name,
-      userName: existingMemory.user_name,
-      userEmail: existingMemory.user_email,
-      projectPath: existingMemory.project_path,
-      projectName: existingMemory.project_name,
-      gitRepoUrl: existingMemory.git_repo_url,
-    };
-    vectorSearch.insertVector(db, updatedRecord);
-    shardManager.incrementVectorCount(foundShard.id);
     return { success: true };
   } catch (error) {
     log("handleUpdateMemory: error", { error: String(error) });
@@ -489,45 +639,68 @@ export async function handleSearch(
   try {
     if (!query) return { success: false, error: "query is required" };
     await embeddingService.warmup();
+    const adapter = DatabaseFactory.getCached();
+    if (!adapter) return { success: false, error: "Database not initialized" };
+
     const queryVector = await embeddingService.embedWithTimeout(query);
     let memoryResults: any[] = [];
     let promptResults: any[] = [];
-    if (tag) {
-      const { scope, hash } = extractScopeFromTag(tag);
-      const shards = shardManager.getAllShards(scope, hash);
-      for (const shard of shards) {
-        try {
-          const results = vectorSearch.searchInShard(shard, queryVector, tag, pageSize * 2);
-          memoryResults.push(...results);
-        } catch (error) {
-          log("Shard search error", { shardId: shard.id, error: String(error) });
-        }
-      }
-      const projectPath = getProjectPathFromTag(tag);
-      promptResults = userPromptManager.searchPrompts(query, projectPath, pageSize * 2);
-    } else {
-      const projectShards = shardManager.getAllShards("project", "");
-      const uniqueTags = new Set<string>();
-      for (const shard of projectShards) {
-        const db = connectionManager.getConnection(shard.dbPath);
-        const tags = vectorSearch.getDistinctTags(db);
-        for (const t of tags) {
-          if (t.container_tag) uniqueTags.add(t.container_tag);
-        }
-      }
-      for (const containerTag of uniqueTags) {
-        const { scope, hash } = extractScopeFromTag(containerTag);
+
+    if (CONFIG.databaseType === "sqlite") {
+      const shardManager = adapter.getShardManager();
+      const { connectionManager } = await import("./database/sqlite/connection-manager.js");
+      const { vectorSearch } = await import("./database/sqlite/vector-search.js");
+
+      if (tag) {
+        const { scope, hash } = extractScopeFromTag(tag);
         const shards = shardManager.getAllShards(scope, hash);
         for (const shard of shards) {
           try {
-            const results = vectorSearch.searchInShard(shard, queryVector, containerTag, pageSize);
+            const results = vectorSearch.searchInShard(shard, queryVector, tag, pageSize * 2);
             memoryResults.push(...results);
           } catch (error) {
             log("Shard search error", { shardId: shard.id, error: String(error) });
           }
         }
+        const projectPath = await getProjectPathFromTag(tag);
+        promptResults = await userPromptManager.searchPrompts(query, projectPath, pageSize * 2);
+      } else {
+        const projectShards = shardManager.getAllShards("project", "");
+        const uniqueTags = new Set<string>();
+        for (const shard of projectShards) {
+          const db = connectionManager.getConnection(shard.dbPath);
+          const tags = vectorSearch.getDistinctTags(db);
+          for (const t of tags) {
+            if (t.container_tag) uniqueTags.add(t.container_tag);
+          }
+        }
+        for (const containerTag of uniqueTags) {
+          const { scope, hash } = extractScopeFromTag(containerTag);
+          const shards = shardManager.getAllShards(scope, hash);
+          for (const shard of shards) {
+            try {
+              const results = vectorSearch.searchInShard(shard, queryVector, containerTag, pageSize);
+              memoryResults.push(...results);
+            } catch (error) {
+              log("Shard search error", { shardId: shard.id, error: String(error) });
+            }
+          }
+        }
+        promptResults = await userPromptManager.searchPrompts(query, undefined, pageSize * 2);
       }
-      promptResults = userPromptManager.searchPrompts(query, undefined, pageSize * 2);
+    } else {
+      // PostgreSQL: use adapter's vector search interface
+      const vectorSearch = adapter.getVectorSearch();
+      const searchResults = await vectorSearch.searchMemories(
+        Array.from(queryVector),
+        tag || "",
+        pageSize * 2,
+        0.5,
+        query
+      );
+      memoryResults = searchResults;
+      const projectPath = tag ? await getProjectPathFromTag(tag) : undefined;
+      promptResults = await userPromptManager.searchPrompts(query, projectPath, pageSize * 2);
     }
 
     const formattedPrompts: FormattedPrompt[] = promptResults.map((p) => ({
@@ -584,7 +757,7 @@ export async function handleSearch(
     }
 
     if (missingPromptIds.size > 0) {
-      const extraPrompts = userPromptManager.getPromptsByIds(Array.from(missingPromptIds));
+      const extraPrompts = await userPromptManager.getPromptsByIds(Array.from(missingPromptIds));
       for (const p of extraPrompts) {
         paginatedResults.push({
           type: "prompt",
@@ -601,28 +774,60 @@ export async function handleSearch(
     }
 
     if (missingMemoryIds.size > 0) {
-      const projectShards = shardManager.getAllShards("project", "");
-      for (const shard of projectShards) {
-        const db = connectionManager.getConnection(shard.dbPath);
+      if (CONFIG.databaseType === "sqlite") {
+        const shardManager = adapter.getShardManager();
+        const { connectionManager } = await import("./database/sqlite/connection-manager.js");
+        const { vectorSearch } = await import("./database/sqlite/vector-search.js");
+        const projectShards = shardManager.getAllShards("project", "");
+        for (const shard of projectShards) {
+          const db = connectionManager.getConnection(shard.dbPath);
+          for (const mid of missingMemoryIds) {
+            const m = vectorSearch.getMemoryById(db, mid);
+            if (m && !paginatedResults.some((existing) => existing.id === m.id)) {
+              paginatedResults.push({
+                type: "memory",
+                id: m.id,
+                content: m.content,
+                memoryType: m.type || undefined,
+                tags: m.tags ? m.tags.split(",").map((t: string) => t.trim()) : [],
+                createdAt: safeToISOString(m.created_at),
+                updatedAt: m.updated_at ? safeToISOString(m.updated_at) : undefined,
+                similarity: 0,
+                metadata: safeJSONParse(m.metadata),
+                displayName: m.display_name || undefined,
+                userName: m.user_name || undefined,
+                userEmail: m.user_email || undefined,
+                projectPath: m.project_path || undefined,
+                projectName: m.project_name || undefined,
+                gitRepoUrl: m.git_repo_url || undefined,
+                isPinned: m.is_pinned === 1,
+                linkedPromptId: safeJSONParse(m.metadata)?.promptId,
+                isContext: true,
+              });
+            }
+          }
+        }
+      } else {
+        const vectorSearch = adapter.getVectorSearch();
         for (const mid of missingMemoryIds) {
-          const m = vectorSearch.getMemoryById(db, mid);
+          const m = await vectorSearch.getMemoryById(mid);
           if (m && !paginatedResults.some((existing) => existing.id === m.id)) {
             paginatedResults.push({
               type: "memory",
               id: m.id,
               content: m.content,
-              memoryType: m.type,
+              memoryType: m.type || undefined,
               tags: m.tags ? m.tags.split(",").map((t: string) => t.trim()) : [],
               createdAt: safeToISOString(m.created_at),
               updatedAt: m.updated_at ? safeToISOString(m.updated_at) : undefined,
               similarity: 0,
               metadata: safeJSONParse(m.metadata),
-              displayName: m.display_name,
-              userName: m.user_name,
-              userEmail: m.user_email,
-              projectPath: m.project_path,
-              projectName: m.project_name,
-              gitRepoUrl: m.git_repo_url,
+              displayName: m.display_name || undefined,
+              userName: m.user_name || undefined,
+              userEmail: m.user_email || undefined,
+              projectPath: m.project_path || undefined,
+              projectName: m.project_name || undefined,
+              gitRepoUrl: m.git_repo_url || undefined,
               isPinned: m.is_pinned === 1,
               linkedPromptId: safeJSONParse(m.metadata)?.promptId,
               isContext: true,
@@ -648,19 +853,37 @@ export async function handleStats(): Promise<
 > {
   try {
     await embeddingService.warmup();
-    const projectShards = shardManager.getAllShards("project", "");
+    const adapter = DatabaseFactory.getCached();
+    if (!adapter) return { success: false, error: "Database not initialized" };
+
     let userCount = 0,
       projectCount = 0;
     const typeCount: Record<string, number> = {};
-    for (const shard of projectShards) {
-      const db = connectionManager.getConnection(shard.dbPath);
-      const memories = vectorSearch.getAllMemories(db);
+
+    if (CONFIG.databaseType === "sqlite") {
+      const shardManager = adapter.getShardManager();
+      const { connectionManager } = await import("./database/sqlite/connection-manager.js");
+      const { vectorSearch } = await import("./database/sqlite/vector-search.js");
+      const projectShards = shardManager.getAllShards("project", "");
+      for (const shard of projectShards) {
+        const db = connectionManager.getConnection(shard.dbPath);
+        const memories = vectorSearch.getAllMemories(db);
+        for (const r of memories) {
+          if (r.container_tag?.includes("_user_")) userCount++;
+          else if (r.container_tag?.includes("_project_")) projectCount++;
+          if (r.type) typeCount[r.type] = (typeCount[r.type] || 0) + 1;
+        }
+      }
+    } else {
+      const vectorSearch = adapter.getVectorSearch();
+      const memories = await vectorSearch.getAllMemories();
       for (const r of memories) {
         if (r.container_tag?.includes("_user_")) userCount++;
         else if (r.container_tag?.includes("_project_")) projectCount++;
         if (r.type) typeCount[r.type] = (typeCount[r.type] || 0) + 1;
       }
     }
+
     return {
       success: true,
       data: {
@@ -678,12 +901,27 @@ export async function handleStats(): Promise<
 export async function handlePinMemory(id: string): Promise<ApiResponse<void>> {
   try {
     if (!id) return { success: false, error: "id is required" };
-    const projectShards = shardManager.getAllShards("project", "");
-    for (const shard of projectShards) {
-      const db = connectionManager.getConnection(shard.dbPath);
-      const memory = vectorSearch.getMemoryById(db, id);
+    const adapter = DatabaseFactory.getCached();
+    if (!adapter) return { success: false, error: "Database not initialized" };
+
+    if (CONFIG.databaseType === "sqlite") {
+      const shardManager = adapter.getShardManager();
+      const { connectionManager } = await import("./database/sqlite/connection-manager.js");
+      const { vectorSearch } = await import("./database/sqlite/vector-search.js");
+      const projectShards = shardManager.getAllShards("project", "");
+      for (const shard of projectShards) {
+        const db = connectionManager.getConnection(shard.dbPath);
+        const memory = vectorSearch.getMemoryById(db, id);
+        if (memory) {
+          vectorSearch.pinMemory(db, id);
+          return { success: true };
+        }
+      }
+    } else {
+      const vectorSearch = adapter.getVectorSearch();
+      const memory = await vectorSearch.getMemoryById(id);
       if (memory) {
-        vectorSearch.pinMemory(db, id);
+        await vectorSearch.pinMemory(id);
         return { success: true };
       }
     }
@@ -697,12 +935,27 @@ export async function handlePinMemory(id: string): Promise<ApiResponse<void>> {
 export async function handleUnpinMemory(id: string): Promise<ApiResponse<void>> {
   try {
     if (!id) return { success: false, error: "id is required" };
-    const projectShards = shardManager.getAllShards("project", "");
-    for (const shard of projectShards) {
-      const db = connectionManager.getConnection(shard.dbPath);
-      const memory = vectorSearch.getMemoryById(db, id);
+    const adapter = DatabaseFactory.getCached();
+    if (!adapter) return { success: false, error: "Database not initialized" };
+
+    if (CONFIG.databaseType === "sqlite") {
+      const shardManager = adapter.getShardManager();
+      const { connectionManager } = await import("./database/sqlite/connection-manager.js");
+      const { vectorSearch } = await import("./database/sqlite/vector-search.js");
+      const projectShards = shardManager.getAllShards("project", "");
+      for (const shard of projectShards) {
+        const db = connectionManager.getConnection(shard.dbPath);
+        const memory = vectorSearch.getMemoryById(db, id);
+        if (memory) {
+          vectorSearch.unpinMemory(db, id);
+          return { success: true };
+        }
+      }
+    } else {
+      const vectorSearch = adapter.getVectorSearch();
+      const memory = await vectorSearch.getMemoryById(id);
       if (memory) {
-        vectorSearch.unpinMemory(db, id);
+        await vectorSearch.unpinMemory(id);
         return { success: true };
       }
     }
@@ -783,14 +1036,14 @@ export async function handleDeletePrompt(
 ): Promise<ApiResponse<{ deletedMemory: boolean }>> {
   try {
     if (!id) return { success: false, error: "id is required" };
-    const prompt = userPromptManager.getPromptById(id);
+    const prompt = await userPromptManager.getPromptById(id);
     if (!prompt) return { success: false, error: "Prompt not found" };
     let deletedMemory = false;
     if (cascade && prompt.linkedMemoryId) {
       const result = await handleDeleteMemory(prompt.linkedMemoryId, false);
       if (result.success) deletedMemory = true;
     }
-    userPromptManager.deletePrompt(id);
+    await userPromptManager.deletePrompt(id);
     return { success: true, data: { deletedMemory } };
   } catch (error) {
     log("handleDeletePrompt: error", { error: String(error) });
@@ -825,7 +1078,7 @@ export async function handleGetUserProfile(userId?: string): Promise<ApiResponse
       const tags = getTags(process.cwd());
       targetUserId = tags.user.userEmail || "unknown";
     }
-    const profile = userProfileManager.getActiveProfile(targetUserId);
+    const profile = await userProfileManager.getActiveProfile(targetUserId);
     if (!profile)
       return {
         success: true,
@@ -865,7 +1118,7 @@ export async function handleGetProfileChangelog(
   try {
     if (!profileId) return { success: false, error: "profileId is required" };
     const { userProfileManager } = await import("./user-profile/user-profile-manager.js");
-    const changelogs = userProfileManager.getProfileChangelogs(profileId, limit);
+    const changelogs = await userProfileManager.getProfileChangelogs(profileId, limit);
     const formattedChangelogs = changelogs.map((c) => ({
       id: c.id,
       profileId: c.profileId,
@@ -885,7 +1138,7 @@ export async function handleGetProfileSnapshot(changelogId: string): Promise<Api
   try {
     if (!changelogId) return { success: false, error: "changelogId is required" };
     const { userProfileManager } = await import("./user-profile/user-profile-manager.js");
-    const changelogs = userProfileManager.getProfileChangelogs("", 1000);
+    const changelogs = await userProfileManager.getProfileChangelogs("", 1000);
     const changelog = changelogs.find((c) => c.id === changelogId);
     if (!changelog) return { success: false, error: "Changelog not found" };
     const profileData = JSON.parse(changelog.profileDataSnapshot);
@@ -912,7 +1165,7 @@ export async function handleRefreshProfile(userId?: string): Promise<ApiResponse
       const tags = getTags(process.cwd());
       targetUserId = tags.user.userEmail || "unknown";
     }
-    const unanalyzedCount = userPromptManager.countUnanalyzedForUserLearning();
+    const unanalyzedCount = await userPromptManager.countUnanalyzedForUserLearning();
     return {
       success: true,
       data: {
@@ -931,6 +1184,15 @@ export async function handleDetectTagMigration(): Promise<
   ApiResponse<{ needsMigration: boolean; count: number }>
 > {
   try {
+    if (CONFIG.databaseType !== "sqlite") {
+      return { success: false, error: "Tag migration is only supported for SQLite" };
+    }
+
+    const adapter = DatabaseFactory.getCached();
+    if (!adapter) return { success: false, error: "Database not initialized" };
+
+    const shardManager = adapter.getShardManager();
+    const { connectionManager } = await import("./database/sqlite/connection-manager.js");
     const projectShards = shardManager.getAllShards("project", "");
     let untaggedCount = 0;
     for (const shard of projectShards) {
@@ -950,6 +1212,13 @@ export async function handleRunTagMigration(): Promise<
   ApiResponse<{ success: boolean; processed: number; duration: number }>
 > {
   try {
+    if (CONFIG.databaseType !== "sqlite") {
+      return { success: false, error: "Tag migration is only supported for SQLite" };
+    }
+
+    const adapter = DatabaseFactory.getCached();
+    if (!adapter) return { success: false, error: "Database not initialized" };
+
     const startTime = Date.now();
     const { AIProviderFactory } = await import("./ai/ai-provider-factory.js");
     const providerConfig = {
@@ -960,6 +1229,8 @@ export async function handleRunTagMigration(): Promise<
       iterationTimeout: 30000,
     };
     const provider = AIProviderFactory.createProvider(CONFIG.memoryProvider, providerConfig);
+    const shardManager = adapter.getShardManager();
+    const { connectionManager } = await import("./database/sqlite/connection-manager.js");
     const projectShards = shardManager.getAllShards("project", "");
     let processed = 0;
 

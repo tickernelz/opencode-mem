@@ -26,7 +26,7 @@ export class AIProviderFactory {
     return ["openai-chat", "openai-responses", "anthropic"];
   }
 
-  static cleanupExpiredSessions(): number {
-    return aiSessionManager.cleanupExpiredSessions();
+  static async cleanupExpiredSessions(): Promise<number> {
+    return await aiSessionManager.cleanupExpiredSessions();
   }
 }

@@ -1,8 +1,8 @@
 import { userProfileManager } from "./user-profile-manager.js";
 import type { UserProfileData } from "./types.js";
 
-export function getUserProfileContext(userId: string): string | null {
-  const profile = userProfileManager.getActiveProfile(userId);
+export async function getUserProfileContext(userId: string): Promise<string | null> {
+  const profile = await userProfileManager.getActiveProfile(userId);
 
   if (!profile) {
     return null;

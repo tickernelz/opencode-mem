@@ -50,17 +50,17 @@ export class AnthropicMessagesProvider extends BaseAIProvider {
     toolSchema: ChatCompletionTool,
     sessionId: string
   ): Promise<ToolCallResult> {
-    let session = this.aiSessionManager.getSession(sessionId, "anthropic");
+    let session = await this.aiSessionManager.getSession(sessionId, "anthropic");
 
     if (!session) {
-      session = this.aiSessionManager.createSession({
+      session = await this.aiSessionManager.createSession({
         provider: "anthropic",
         sessionId,
         metadata: { systemPrompt },
       });
     }
 
-    const storedMessages = this.aiSessionManager.getMessages(session.id);
+    const storedMessages = await this.aiSessionManager.getMessages(session.id);
     const messages: AnthropicMessage[] = [];
 
     for (const msg of storedMessages) {
@@ -74,8 +74,8 @@ export class AnthropicMessagesProvider extends BaseAIProvider {
       messages.push(anthropicMsg);
     }
 
-    const userSequence = this.aiSessionManager.getLastSequence(session.id) + 1;
-    this.aiSessionManager.addMessage({
+    const userSequence = (await this.aiSessionManager.getLastSequence(session.id)) + 1;
+    await this.aiSessionManager.addMessage({
       aiSessionId: session.id,
       sequence: userSequence,
       role: "user",
@@ -138,8 +138,8 @@ export class AnthropicMessagesProvider extends BaseAIProvider {
 
         const data = (await response.json()) as AnthropicResponse;
 
-        const assistantSequence = this.aiSessionManager.getLastSequence(session.id) + 1;
-        this.aiSessionManager.addMessage({
+        const assistantSequence = (await this.aiSessionManager.getLastSequence(session.id)) + 1;
+        await this.aiSessionManager.addMessage({
           aiSessionId: session.id,
           sequence: assistantSequence,
           role: "assistant",
@@ -187,11 +187,11 @@ export class AnthropicMessagesProvider extends BaseAIProvider {
         }
 
         if (data.stop_reason === "end_turn") {
-          const retrySequence = this.aiSessionManager.getLastSequence(session.id) + 1;
+          const retrySequence = (await this.aiSessionManager.getLastSequence(session.id)) + 1;
           const retryPrompt =
             "Please use the save_memories tool to extract and save the memories from the conversation as instructed.";
 
-          this.aiSessionManager.addMessage({
+          await this.aiSessionManager.addMessage({
             aiSessionId: session.id,
             sequence: retrySequence,
             role: "user",

@@ -121,7 +121,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
         const userMessage = textParts.map((p) => p.text).join("\n");
         if (!userMessage.trim()) return;
 
-        userPromptManager.savePrompt(input.sessionID, output.message.id, directory, userMessage);
+        await userPromptManager.savePrompt(input.sessionID, output.message.id, directory, userMessage);
         const searchResult = await memoryClient.searchMemories(userMessage, tags.project.tag);
 
         if (searchResult.success && searchResult.results.length > 0) {
@@ -148,7 +148,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
             };
 
             const userId = tags.user.userEmail || null;
-            const memoryContext = formatContextForPrompt(userId, projectMemories);
+            const memoryContext = await formatContextForPrompt(userId, projectMemories);
 
             if (memoryContext) {
               const contextPart: Part = {
@@ -280,7 +280,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
               case "profile":
                 const { userProfileManager } =
                   await import("./services/user-profile/user-profile-manager.js");
-                const profile = userProfileManager.getActiveProfile(
+                const profile = await userProfileManager.getActiveProfile(
                   tags.user.userEmail || "unknown"
                 );
                 if (!profile) return JSON.stringify({ success: true, profile: null });
@@ -341,7 +341,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
               await performUserProfileLearning(ctx, directory);
               const { cleanupService } = await import("./services/cleanup-service.js");
               if (await cleanupService.shouldRunCleanup()) await cleanupService.runCleanup();
-              const { connectionManager } = await import("./services/sqlite/connection-manager.js");
+              const { connectionManager } = await import("./services/database/sqlite/connection-manager.js");
               connectionManager.checkpointAll();
             }
           } catch (error) {

@@ -44,10 +44,10 @@ export class OpenAIResponsesProvider extends BaseAIProvider {
     toolSchema: ChatCompletionTool,
     sessionId: string
   ): Promise<ToolCallResult> {
-    let session = this.aiSessionManager.getSession(sessionId, "openai-responses");
+    let session = await this.aiSessionManager.getSession(sessionId, "openai-responses");
 
     if (!session) {
-      session = this.aiSessionManager.createSession({
+      session = await this.aiSessionManager.createSession({
         provider: "openai-responses",
         sessionId,
       });
@@ -111,8 +111,8 @@ export class OpenAIResponsesProvider extends BaseAIProvider {
         conversationId = data.conversation || conversationId;
 
         if (iterations === 1) {
-          const userSeq = this.aiSessionManager.getLastSequence(session.id) + 1;
-          this.aiSessionManager.addMessage({
+          const userSeq = (await this.aiSessionManager.getLastSequence(session.id)) + 1;
+          await this.aiSessionManager.addMessage({
             aiSessionId: session.id,
             sequence: userSeq,
             role: "user",
@@ -123,7 +123,7 @@ export class OpenAIResponsesProvider extends BaseAIProvider {
         const toolCall = this.extractToolCall(data, toolSchema.function.name);
 
         if (toolCall) {
-          this.aiSessionManager.updateSession(sessionId, "openai-responses", {
+          await this.aiSessionManager.updateSession(sessionId, "openai-responses", {
             conversationId,
           });
 

@@ -16,14 +16,14 @@ export async function performUserProfileLearning(
   if (isLearningRunning) return;
   isLearningRunning = true;
   try {
-    const count = userPromptManager.countUnanalyzedForUserLearning();
+    const count = await userPromptManager.countUnanalyzedForUserLearning();
     const threshold = CONFIG.userProfileAnalysisInterval;
 
     if (count < threshold) {
       return;
     }
 
-    const prompts = userPromptManager.getPromptsForUserLearning(threshold);
+    const prompts = await userPromptManager.getPromptsForUserLearning(threshold);
 
     if (prompts.length === 0) {
       return;
@@ -32,14 +32,14 @@ export async function performUserProfileLearning(
     const tags = getTags(directory);
     const userId = tags.user.userEmail || "unknown";
 
-    const existingProfile = userProfileManager.getActiveProfile(userId);
+    const existingProfile = await userProfileManager.getActiveProfile(userId);
 
     const context = buildUserAnalysisContext(prompts, existingProfile);
 
     const updatedProfileData = await analyzeUserProfile(context, existingProfile);
 
     if (!updatedProfileData) {
-      userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
+      await userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
       return;
     }
 
@@ -48,14 +48,14 @@ export async function performUserProfileLearning(
         JSON.parse(existingProfile.profileData),
         updatedProfileData
       );
-      userProfileManager.updateProfile(
+      await userProfileManager.updateProfile(
         existingProfile.id,
         updatedProfileData,
         prompts.length,
         changeSummary
       );
     } else {
-      userProfileManager.createProfile(
+      await userProfileManager.createProfile(
         userId,
         tags.user.displayName || "Unknown",
         tags.user.userName || "unknown",
@@ -65,7 +65,7 @@ export async function performUserProfileLearning(
       );
     }
 
-    userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
+    await userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
 
     if (CONFIG.showUserProfileToasts) {
       await ctx.client?.tui

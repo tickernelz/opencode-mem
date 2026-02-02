@@ -37,14 +37,14 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
     return true;
   }
 
-  private addToolResponse(
+  private async addToolResponse(
     sessionId: string,
     messages: any[],
     toolCallId: string,
     content: string
-  ): void {
-    const sequence = this.aiSessionManager.getLastSequence(sessionId) + 1;
-    this.aiSessionManager.addMessage({
+  ): Promise<void> {
+    const sequence = (await this.aiSessionManager.getLastSequence(sessionId)) + 1;
+    await this.aiSessionManager.addMessage({
       aiSessionId: sessionId,
       sequence,
       role: "tool",
@@ -100,16 +100,16 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
     toolSchema: ChatCompletionTool,
     sessionId: string
   ): Promise<ToolCallResult> {
-    let session = this.aiSessionManager.getSession(sessionId, "openai-chat");
+    let session = await this.aiSessionManager.getSession(sessionId, "openai-chat");
 
     if (!session) {
-      session = this.aiSessionManager.createSession({
+      session = await this.aiSessionManager.createSession({
         provider: "openai-chat",
         sessionId,
       });
     }
 
-    const existingMessages = this.aiSessionManager.getMessages(session.id);
+    const existingMessages = await this.aiSessionManager.getMessages(session.id);
     const messages: any[] = [];
 
     const validatedMessages = this.filterIncompleteToolCallSequences(existingMessages);
@@ -132,8 +132,8 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
     }
 
     if (messages.length === 0) {
-      const sequence = this.aiSessionManager.getLastSequence(session.id) + 1;
-      this.aiSessionManager.addMessage({
+      const sequence = (await this.aiSessionManager.getLastSequence(session.id)) + 1;
+      await this.aiSessionManager.addMessage({
         aiSessionId: session.id,
         sequence,
         role: "system",
@@ -143,8 +143,8 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
       messages.push({ role: "system", content: systemPrompt });
     }
 
-    const userSequence = this.aiSessionManager.getLastSequence(session.id) + 1;
-    this.aiSessionManager.addMessage({
+    const userSequence = (await this.aiSessionManager.getLastSequence(session.id)) + 1;
+    await this.aiSessionManager.addMessage({
       aiSessionId: session.id,
       sequence: userSequence,
       role: "user",
@@ -215,7 +215,7 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
 
         const choice = data.choices[0];
 
-        const assistantSequence = this.aiSessionManager.getLastSequence(session.id) + 1;
+        const assistantSequence = (await this.aiSessionManager.getLastSequence(session.id)) + 1;
         const assistantMsg: any = {
           aiSessionId: session.id,
           sequence: assistantSequence,
@@ -227,7 +227,7 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
           assistantMsg.toolCalls = choice.message.tool_calls;
         }
 
-        this.aiSessionManager.addMessage(assistantMsg);
+        await this.aiSessionManager.addMessage(assistantMsg);
         messages.push(choice.message);
 
         if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
@@ -242,7 +242,7 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
                   throw new Error(result.errors.join(", "));
                 }
 
-                this.addToolResponse(
+                await this.addToolResponse(
                   session.id,
                   messages,
                   toolCallId,
@@ -270,7 +270,7 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
                 });
 
                 const errorMessage = `Validation failed: ${String(validationError)}`;
-                this.addToolResponse(
+                await this.addToolResponse(
                   session.id,
                   messages,
                   toolCallId,
@@ -286,7 +286,7 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
             }
 
             const wrongToolMessage = `Wrong tool called. Please use ${toolSchema.function.name} instead.`;
-            this.addToolResponse(
+            await this.addToolResponse(
               session.id,
               messages,
               toolCallId,
@@ -297,11 +297,11 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
           }
         }
 
-        const retrySequence = this.aiSessionManager.getLastSequence(session.id) + 1;
+        const retrySequence = (await this.aiSessionManager.getLastSequence(session.id)) + 1;
         const retryPrompt =
           "Please use the save_memories tool to extract and save the memories from the conversation as instructed.";
 
-        this.aiSessionManager.addMessage({
+        await this.aiSessionManager.addMessage({
           aiSessionId: session.id,
           sequence: retrySequence,
           role: "user",

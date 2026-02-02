@@ -20,6 +20,8 @@ if (!existsSync(DATA_DIR)) {
 }
 
 interface OpenCodeMemConfig {
+  databaseType?: "sqlite" | "postgresql";
+  databaseUrl?: string;
   storagePath?: string;
   customSqlitePath?: string;
   userEmailOverride?: string;
@@ -64,6 +66,7 @@ interface OpenCodeMemConfig {
 const DEFAULTS: Required<
   Omit<
     OpenCodeMemConfig,
+    | "databaseUrl"
     | "embeddingApiUrl"
     | "embeddingApiKey"
     | "memoryModel"
@@ -76,6 +79,7 @@ const DEFAULTS: Required<
     | "userNameOverride"
   >
 > & {
+  databaseUrl?: string;
   embeddingApiUrl?: string;
   embeddingApiKey?: string;
   memoryModel?: string;
@@ -87,6 +91,7 @@ const DEFAULTS: Required<
   userEmailOverride?: string;
   userNameOverride?: string;
 } = {
+  databaseType: "sqlite",
   storagePath: join(DATA_DIR, "data"),
   embeddingModel: "Xenova/nomic-embed-text-v1",
   embeddingDimensions: 768,
@@ -206,8 +211,18 @@ const CONFIG_TEMPLATE = `{
   // ============================================
   // Database Settings
   // ============================================
-  
-  // Maximum vectors per database shard (auto-creates new shard when limit reached)
+
+  // Database type: "sqlite" (default) or "postgresql"
+  // SQLite: Local file-based database with sharding support
+  // PostgreSQL: Requires pgvector extension, better for production/multi-user
+  "databaseType": "sqlite",
+
+  // PostgreSQL connection URL (required if databaseType is "postgresql")
+  // Format: postgresql://user:password@host:port/database
+  // Can also be set via DATABASE_URL environment variable
+  // "databaseUrl": "postgresql://localhost:5432/opencode_mem",
+
+  // Maximum vectors per database shard (SQLite only, auto-creates new shard when limit reached)
   "maxVectorsPerShard": 50000,
   
   // Automatically delete old memories based on retention period
@@ -383,6 +398,8 @@ function getEmbeddingDimensions(model: string): number {
 }
 
 export const CONFIG = {
+  databaseType: (fileConfig.databaseType ?? DEFAULTS.databaseType) as "sqlite" | "postgresql",
+  databaseUrl: fileConfig.databaseUrl ?? process.env.DATABASE_URL,
   storagePath: expandPath(fileConfig.storagePath ?? DEFAULTS.storagePath),
   customSqlitePath: fileConfig.customSqlitePath
     ? expandPath(fileConfig.customSqlitePath)

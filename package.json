@@ -36,10 +36,13 @@
     "@xenova/transformers": "^2.17.2",
     "franc-min": "^6.2.0",
     "iso-639-3": "^3.0.1",
+    "pg": "^8.13.1",
+    "pgvector": "^0.2.0",
     "sqlite-vec": "^0.1.7-alpha.2"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/pg": "^8.11.10",
     "prettier": "^3.4.2",
     "typescript": "^5.7.3"
   },

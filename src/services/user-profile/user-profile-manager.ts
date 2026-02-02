@@ -1,6 +1,6 @@
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
+import type pg from "pg";
 import { join } from "node:path";
-import { connectionManager } from "../sqlite/connection-manager.js";
 import { CONFIG } from "../../config.js";
 import type { UserProfile, UserProfileChangelog, UserProfileData } from "./types.js";
 import { safeArray, safeObject } from "./profile-utils.js";
@@ -8,16 +8,30 @@ import { safeArray, safeObject } from "./profile-utils.js";
 const USER_PROFILES_DB_NAME = "user-profiles.db";
 
 export class UserProfileManager {
-  private db: Database;
+  private db: Database | null = null;
+  private pool: pg.Pool | null = null;
   private readonly dbPath: string;
 
   constructor() {
     this.dbPath = join(CONFIG.storagePath, USER_PROFILES_DB_NAME);
-    this.db = connectionManager.getConnection(this.dbPath);
     this.initDatabase();
   }
 
   private initDatabase(): void {
+    if (CONFIG.databaseType === "sqlite") {
+      this.initSqlite();
+    }
+    // PostgreSQL schema is already created by postgres/connection-manager.ts
+  }
+
+  private initSqlite(): void {
+    const { connectionManager } = require("../database/sqlite/connection-manager.js");
+    this.db = connectionManager.getConnection(this.dbPath);
+
+    if (!this.db) {
+      throw new Error("Failed to initialize SQLite database");
+    }
+
     this.db.run(`
       CREATE TABLE IF NOT EXISTS user_profiles (
         id TEXT PRIMARY KEY,
@@ -59,29 +73,50 @@ export class UserProfileManager {
     );
   }
 
-  getActiveProfile(userId: string): UserProfile | null {
-    const stmt = this.db.prepare(`
-      SELECT * FROM user_profiles 
-      WHERE user_id = ? AND is_active = 1
-      LIMIT 1
-    `);
-
-    const row = stmt.get(userId) as any;
-    if (!row) return null;
-
-    return this.rowToProfile(row);
+  private async getPool(): Promise<pg.Pool> {
+    if (!this.pool) {
+      const { connectionManager } = await import("../database/postgres/connection-manager.js");
+      this.pool = await connectionManager.getPool();
+    }
+    return this.pool;
   }
 
-  createProfile(
+  async getActiveProfile(userId: string): Promise<UserProfile | null> {
+    if (CONFIG.databaseType === "sqlite") {
+      if (!this.db) throw new Error("SQLite database not initialized");
+      const stmt = this.db.prepare(`
+        SELECT * FROM user_profiles
+        WHERE user_id = ? AND is_active = 1
+        LIMIT 1
+      `);
+
+      const row = stmt.get(userId) as any;
+      if (!row) return null;
+
+      return this.rowToProfile(row);
+    } else {
+      const pool = await this.getPool();
+      const result = await pool.query(
+        `SELECT * FROM user_profiles
+         WHERE user_id = $1 AND is_active = true
+         LIMIT 1`,
+        [userId]
+      );
+
+      if (result.rows.length === 0) return null;
+      return this.rowToProfile(result.rows[0]);
+    }
+  }
+
+  async createProfile(
     userId: string,
     displayName: string,
     userName: string,
     userEmail: string,
     profileData: UserProfileData,
     promptsAnalyzed: number
-  ): string {
+  ): Promise<string> {
     const id = `profile_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    const now = Date.now();
 
     const cleanedData: UserProfileData = {
       preferences: safeArray(profileData.preferences),
@@ -89,124 +124,202 @@ export class UserProfileManager {
       workflows: safeArray(profileData.workflows),
     };
 
-    const stmt = this.db.prepare(`
-      INSERT INTO user_profiles (
-        id, user_id, display_name, user_name, user_email, 
-        profile_data, version, created_at, last_analyzed_at, 
-        total_prompts_analyzed, is_active
-      )
-      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 1)
-    `);
+    if (CONFIG.databaseType === "sqlite") {
+      if (!this.db) throw new Error("SQLite database not initialized");
+      const now = Date.now();
 
-    stmt.run(
-      id,
-      userId,
-      displayName,
-      userName,
-      userEmail,
-      JSON.stringify(cleanedData),
-      now,
-      now,
-      promptsAnalyzed
-    );
+      const stmt = this.db.prepare(`
+        INSERT INTO user_profiles (
+          id, user_id, display_name, user_name, user_email,
+          profile_data, version, created_at, last_analyzed_at,
+          total_prompts_analyzed, is_active
+        )
+        VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 1)
+      `);
 
-    this.addChangelog(id, 1, "create", "Initial profile creation", cleanedData);
+      stmt.run(
+        id,
+        userId,
+        displayName,
+        userName,
+        userEmail,
+        JSON.stringify(cleanedData),
+        now,
+        now,
+        promptsAnalyzed
+      );
+    } else {
+      const pool = await this.getPool();
+      await pool.query(
+        `INSERT INTO user_profiles (
+          id, user_id, display_name, user_name, user_email,
+          profile_data, version, total_prompts_analyzed, is_active
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, 1, $7, true)`,
+        [id, userId, displayName, userName, userEmail, cleanedData, promptsAnalyzed]
+      );
+    }
+
+    await this.addChangelog(id, 1, "create", "Initial profile creation", cleanedData);
 
     return id;
   }
 
-  updateProfile(
+  async updateProfile(
     profileId: string,
     profileData: UserProfileData,
     additionalPromptsAnalyzed: number,
     changeSummary: string
-  ): void {
-    const now = Date.now();
-
+  ): Promise<void> {
     const cleanedData: UserProfileData = {
       preferences: safeArray(profileData.preferences),
       patterns: safeArray(profileData.patterns),
       workflows: safeArray(profileData.workflows),
     };
 
-    const getVersionStmt = this.db.prepare(`SELECT version FROM user_profiles WHERE id = ?`);
-    const versionRow = getVersionStmt.get(profileId) as any;
-    const newVersion = (versionRow?.version || 0) + 1;
+    let newVersion: number;
 
-    const updateStmt = this.db.prepare(`
-      UPDATE user_profiles 
-      SET profile_data = ?, 
-          version = ?, 
-          last_analyzed_at = ?, 
-          total_prompts_analyzed = total_prompts_analyzed + ?
-      WHERE id = ?
-    `);
+    if (CONFIG.databaseType === "sqlite") {
+      if (!this.db) throw new Error("SQLite database not initialized");
+      const now = Date.now();
 
-    updateStmt.run(
-      JSON.stringify(cleanedData),
-      newVersion,
-      now,
-      additionalPromptsAnalyzed,
-      profileId
-    );
+      const getVersionStmt = this.db.prepare(`SELECT version FROM user_profiles WHERE id = ?`);
+      const versionRow = getVersionStmt.get(profileId) as any;
+      newVersion = (versionRow?.version || 0) + 1;
 
-    this.addChangelog(profileId, newVersion, "update", changeSummary, cleanedData);
+      const updateStmt = this.db.prepare(`
+        UPDATE user_profiles
+        SET profile_data = ?,
+            version = ?,
+            last_analyzed_at = ?,
+            total_prompts_analyzed = total_prompts_analyzed + ?
+        WHERE id = ?
+      `);
 
-    this.cleanupOldChangelogs(profileId);
+      updateStmt.run(JSON.stringify(cleanedData), newVersion, now, additionalPromptsAnalyzed, profileId);
+    } else {
+      const pool = await this.getPool();
+
+      const versionResult = await pool.query(`SELECT version FROM user_profiles WHERE id = $1`, [
+        profileId,
+      ]);
+      newVersion = (versionResult.rows[0]?.version || 0) + 1;
+
+      await pool.query(
+        `UPDATE user_profiles
+         SET profile_data = $1,
+             version = $2,
+             last_analyzed_at = NOW(),
+             total_prompts_analyzed = total_prompts_analyzed + $3
+         WHERE id = $4`,
+        [cleanedData, newVersion, additionalPromptsAnalyzed, profileId]
+      );
+    }
+
+    await this.addChangelog(profileId, newVersion, "update", changeSummary, cleanedData);
+
+    await this.cleanupOldChangelogs(profileId);
   }
 
-  private addChangelog(
+  private async addChangelog(
     profileId: string,
     version: number,
     changeType: string,
     changeSummary: string,
     profileData: UserProfileData
-  ): void {
+  ): Promise<void> {
     const id = `changelog_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    const now = Date.now();
 
-    const stmt = this.db.prepare(`
-      INSERT INTO user_profile_changelogs (
-        id, profile_id, version, change_type, change_summary, 
-        profile_data_snapshot, created_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
+    if (CONFIG.databaseType === "sqlite") {
+      if (!this.db) throw new Error("SQLite database not initialized");
+      const now = Date.now();
 
-    stmt.run(id, profileId, version, changeType, changeSummary, JSON.stringify(profileData), now);
+      const stmt = this.db.prepare(`
+        INSERT INTO user_profile_changelogs (
+          id, profile_id, version, change_type, change_summary,
+          profile_data_snapshot, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      stmt.run(id, profileId, version, changeType, changeSummary, JSON.stringify(profileData), now);
+    } else {
+      const pool = await this.getPool();
+      await pool.query(
+        `INSERT INTO user_profile_changelogs (
+          id, profile_id, version, change_type, change_summary,
+          profile_data_snapshot
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)`,
+        [id, profileId, version, changeType, changeSummary, profileData]
+      );
+    }
   }
 
-  private cleanupOldChangelogs(profileId: string): void {
+  private async cleanupOldChangelogs(profileId: string): Promise<void> {
     const retentionCount = CONFIG.userProfileChangelogRetentionCount;
 
-    const stmt = this.db.prepare(`
-      DELETE FROM user_profile_changelogs 
-      WHERE profile_id = ? 
-      AND id NOT IN (
-        SELECT id FROM user_profile_changelogs 
-        WHERE profile_id = ? 
-        ORDER BY version DESC 
+    if (CONFIG.databaseType === "sqlite") {
+      if (!this.db) throw new Error("SQLite database not initialized");
+      const stmt = this.db.prepare(`
+        DELETE FROM user_profile_changelogs
+        WHERE profile_id = ?
+        AND id NOT IN (
+          SELECT id FROM user_profile_changelogs
+          WHERE profile_id = ?
+          ORDER BY version DESC
+          LIMIT ?
+        )
+      `);
+
+      stmt.run(profileId, profileId, retentionCount);
+    } else {
+      const pool = await this.getPool();
+      await pool.query(
+        `DELETE FROM user_profile_changelogs
+         WHERE profile_id = $1
+         AND id NOT IN (
+           SELECT id FROM user_profile_changelogs
+           WHERE profile_id = $1
+           ORDER BY version DESC
+           LIMIT $2
+         )`,
+        [profileId, retentionCount]
+      );
+    }
+  }
+
+  async getProfileChangelogs(
+    profileId: string,
+    limit: number = 10
+  ): Promise<UserProfileChangelog[]> {
+    if (CONFIG.databaseType === "sqlite") {
+      if (!this.db) throw new Error("SQLite database not initialized");
+      const stmt = this.db.prepare(`
+        SELECT * FROM user_profile_changelogs
+        WHERE profile_id = ?
+        ORDER BY version DESC
         LIMIT ?
-      )
-    `);
+      `);
 
-    stmt.run(profileId, profileId, retentionCount);
+      const rows = stmt.all(profileId, limit) as any[];
+      return rows.map((row) => this.rowToChangelog(row));
+    } else {
+      const pool = await this.getPool();
+      const result = await pool.query(
+        `SELECT * FROM user_profile_changelogs
+         WHERE profile_id = $1
+         ORDER BY version DESC
+         LIMIT $2`,
+        [profileId, limit]
+      );
+
+      return result.rows.map((row) => this.rowToChangelog(row));
+    }
   }
 
-  getProfileChangelogs(profileId: string, limit: number = 10): UserProfileChangelog[] {
-    const stmt = this.db.prepare(`
-      SELECT * FROM user_profile_changelogs 
-      WHERE profile_id = ? 
-      ORDER BY version DESC 
-      LIMIT ?
-    `);
-
-    const rows = stmt.all(profileId, limit) as any[];
-    return rows.map((row) => this.rowToChangelog(row));
-  }
-
-  applyConfidenceDecay(profileId: string): void {
-    const profile = this.getProfileById(profileId);
+  async applyConfidenceDecay(profileId: string): Promise<void> {
+    const profile = await this.getProfileById(profileId);
     if (!profile) return;
 
     const profileData: UserProfileData = JSON.parse(profile.profileData);
@@ -228,53 +341,97 @@ export class UserProfileManager {
       .filter((pref) => pref.confidence >= 0.3);
 
     if (hasChanges) {
-      this.updateProfile(profileId, profileData, 0, "Applied confidence decay to preferences");
+      await this.updateProfile(profileId, profileData, 0, "Applied confidence decay to preferences");
     }
   }
 
-  deleteProfile(profileId: string): void {
-    const stmt = this.db.prepare(`DELETE FROM user_profiles WHERE id = ?`);
-    stmt.run(profileId);
+  async deleteProfile(profileId: string): Promise<void> {
+    if (CONFIG.databaseType === "sqlite") {
+      if (!this.db) throw new Error("SQLite database not initialized");
+      const stmt = this.db.prepare(`DELETE FROM user_profiles WHERE id = ?`);
+      stmt.run(profileId);
+    } else {
+      const pool = await this.getPool();
+      await pool.query(`DELETE FROM user_profiles WHERE id = $1`, [profileId]);
+    }
   }
 
-  getProfileById(profileId: string): UserProfile | null {
-    const stmt = this.db.prepare(`SELECT * FROM user_profiles WHERE id = ?`);
-    const row = stmt.get(profileId) as any;
-    if (!row) return null;
-    return this.rowToProfile(row);
+  async getProfileById(profileId: string): Promise<UserProfile | null> {
+    if (CONFIG.databaseType === "sqlite") {
+      if (!this.db) throw new Error("SQLite database not initialized");
+      const stmt = this.db.prepare(`SELECT * FROM user_profiles WHERE id = ?`);
+      const row = stmt.get(profileId) as any;
+      if (!row) return null;
+      return this.rowToProfile(row);
+    } else {
+      const pool = await this.getPool();
+      const result = await pool.query(`SELECT * FROM user_profiles WHERE id = $1`, [profileId]);
+      if (result.rows.length === 0) return null;
+      return this.rowToProfile(result.rows[0]);
+    }
   }
 
-  getAllActiveProfiles(): UserProfile[] {
-    const stmt = this.db.prepare(`SELECT * FROM user_profiles WHERE is_active = 1`);
-    const rows = stmt.all() as any[];
-    return rows.map((row) => this.rowToProfile(row));
+  async getAllActiveProfiles(): Promise<UserProfile[]> {
+    if (CONFIG.databaseType === "sqlite") {
+      if (!this.db) throw new Error("SQLite database not initialized");
+      const stmt = this.db.prepare(`SELECT * FROM user_profiles WHERE is_active = 1`);
+      const rows = stmt.all() as any[];
+      return rows.map((row) => this.rowToProfile(row));
+    } else {
+      const pool = await this.getPool();
+      const result = await pool.query(`SELECT * FROM user_profiles WHERE is_active = true`);
+      return result.rows.map((row) => this.rowToProfile(row));
+    }
   }
 
   private rowToProfile(row: any): UserProfile {
+    // PostgreSQL returns JSONB as object, SQLite returns TEXT
+    const profileData =
+      typeof row.profile_data === "string" ? row.profile_data : JSON.stringify(row.profile_data);
+
+    // PostgreSQL returns Date objects, SQLite returns integers
+    const createdAt =
+      row.created_at instanceof Date ? row.created_at.getTime() : row.created_at;
+    const lastAnalyzedAt =
+      row.last_analyzed_at instanceof Date ? row.last_analyzed_at.getTime() : row.last_analyzed_at;
+
+    // PostgreSQL returns boolean, SQLite returns 0/1
+    const isActive = typeof row.is_active === "boolean" ? row.is_active : row.is_active === 1;
+
     return {
       id: row.id,
       userId: row.user_id,
       displayName: row.display_name,
       userName: row.user_name,
       userEmail: row.user_email,
-      profileData: row.profile_data,
+      profileData,
       version: row.version,
-      createdAt: row.created_at,
-      lastAnalyzedAt: row.last_analyzed_at,
+      createdAt,
+      lastAnalyzedAt,
       totalPromptsAnalyzed: row.total_prompts_analyzed,
-      isActive: row.is_active === 1,
+      isActive,
     };
   }
 
   private rowToChangelog(row: any): UserProfileChangelog {
+    // PostgreSQL returns JSONB as object, SQLite returns TEXT
+    const profileDataSnapshot =
+      typeof row.profile_data_snapshot === "string"
+        ? row.profile_data_snapshot
+        : JSON.stringify(row.profile_data_snapshot);
+
+    // PostgreSQL returns Date objects, SQLite returns integers
+    const createdAt =
+      row.created_at instanceof Date ? row.created_at.getTime() : row.created_at;
+
     return {
       id: row.id,
       profileId: row.profile_id,
       version: row.version,
       changeType: row.change_type,
       changeSummary: row.change_summary,
-      profileDataSnapshot: row.profile_data_snapshot,
-      createdAt: row.created_at,
+      profileDataSnapshot,
+      createdAt,
     };
   }
 

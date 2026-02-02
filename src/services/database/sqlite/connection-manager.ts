@@ -2,8 +2,8 @@ import { Database } from "bun:sqlite";
 import * as sqliteVec from "sqlite-vec";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { log } from "../logger.js";
-import { CONFIG } from "../../config.js";
+import { log } from "../../logger.js";
+import { CONFIG } from "../../../config.js";
 
 export class ConnectionManager {
   private connections: Map<string, Database> = new Map();

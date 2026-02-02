@@ -1,8 +1,8 @@
 import { Database } from "bun:sqlite";
 import { join, basename, isAbsolute } from "node:path";
-import { CONFIG } from "../../config.js";
+import { CONFIG } from "../../../config.js";
 import { connectionManager } from "./connection-manager.js";
-import { log } from "../logger.js";
+import { log } from "../../logger.js";
 import type { ShardInfo } from "./types.js";
 
 const METADATA_DB_NAME = "metadata.db";

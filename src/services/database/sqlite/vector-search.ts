@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { connectionManager } from "./connection-manager.js";
-import { log } from "../logger.js";
+import { log } from "../../logger.js";
 import type { MemoryRecord, SearchResult, ShardInfo } from "./types.js";
 
 export class VectorSearch {

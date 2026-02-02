@@ -1,6 +1,3 @@
-import { shardManager } from "./sqlite/shard-manager.js";
-import { connectionManager } from "./sqlite/connection-manager.js";
-import { vectorSearch } from "./sqlite/vector-search.js";
 import { embeddingService } from "./embedding.js";
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
@@ -39,6 +36,21 @@ export class MigrationService {
   private progressCallback?: (progress: MigrationProgress) => void;
 
   async detectDimensionMismatch(): Promise<DimensionMismatch> {
+    // Only SQLite supports migration
+    if (CONFIG.databaseType !== "sqlite") {
+      return {
+        needsMigration: false,
+        configDimensions: CONFIG.embeddingDimensions,
+        configModel: CONFIG.embeddingModel,
+        shardMismatches: [],
+      };
+    }
+
+    // Dynamic import for SQLite-specific code
+    const { shardManager } = await import("./database/sqlite/shard-manager.js");
+    const { connectionManager } = await import("./database/sqlite/connection-manager.js");
+    const { vectorSearch } = await import("./database/sqlite/vector-search.js");
+
     const userShards = shardManager.getAllShards("user", "");
     const projectShards = shardManager.getAllShards("project", "");
     const allShards = [...userShards, ...projectShards];
@@ -52,7 +64,7 @@ export class MigrationService {
         const metadataResult = db
           .prepare(
             `
-          SELECT key, value FROM shard_metadata 
+          SELECT key, value FROM shard_metadata
           WHERE key IN ('embedding_dimensions', 'embedding_model')
         `
           )
@@ -98,6 +110,18 @@ export class MigrationService {
       throw new Error("Migration already running");
     }
 
+    // Only SQLite supports migration
+    if (CONFIG.databaseType !== "sqlite") {
+      return {
+        success: false,
+        strategy,
+        deletedShards: 0,
+        reEmbeddedMemories: 0,
+        duration: 0,
+        error: "Migration not supported for PostgreSQL",
+      };
+    }
+
     this.isRunning = true;
     this.progressCallback = progressCallback;
     const startTime = Date.now();
@@ -140,6 +164,9 @@ export class MigrationService {
     mismatch: DimensionMismatch,
     startTime: number
   ): Promise<MigrationResult> {
+    // Dynamic import for SQLite-specific code
+    const { shardManager } = await import("./database/sqlite/shard-manager.js");
+
     this.reportProgress({
       phase: "preparing",
       processed: 0,
@@ -186,6 +213,11 @@ export class MigrationService {
     mismatch: DimensionMismatch,
     startTime: number
   ): Promise<MigrationResult> {
+    // Dynamic import for SQLite-specific code
+    const { shardManager } = await import("./database/sqlite/shard-manager.js");
+    const { connectionManager } = await import("./database/sqlite/connection-manager.js");
+    const { vectorSearch } = await import("./database/sqlite/vector-search.js");
+
     await embeddingService.warmup();
     embeddingService.clearCache();
 

@@ -1,17 +1,21 @@
 import { embeddingService } from "./embedding.js";
-import { shardManager } from "./sqlite/shard-manager.js";
-import { vectorSearch } from "./sqlite/vector-search.js";
-import { connectionManager } from "./sqlite/connection-manager.js";
+import { DatabaseFactory } from "./database/factory.js";
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
 import type { MemoryType } from "../types/index.js";
-import type { MemoryRecord } from "./sqlite/types.js";
+import type { IDatabaseAdapter, IVectorSearch } from "./database/interfaces.js";
+import type { MemoryRecord } from "./database/types.js";
 
 function safeToISOString(timestamp: any): string {
   try {
     if (timestamp === null || timestamp === undefined) {
       return new Date().toISOString();
     }
+
+    if (timestamp instanceof Date) {
+      return timestamp.toISOString();
+    }
+
     const numValue = typeof timestamp === "bigint" ? Number(timestamp) : Number(timestamp);
 
     if (isNaN(numValue) || numValue < 0) {
@@ -26,7 +30,7 @@ function safeToISOString(timestamp: any): string {
 
 function safeJSONParse(jsonString: any): any {
   if (!jsonString || typeof jsonString !== "string") {
-    return undefined;
+    return jsonString; // Return as-is if already an object (PostgreSQL JSONB)
   }
   try {
     return JSON.parse(jsonString);
@@ -35,22 +39,11 @@ function safeJSONParse(jsonString: any): any {
   }
 }
 
-function extractScopeFromContainerTag(containerTag: string): {
-  scope: "user" | "project";
-  hash: string;
-} {
-  const parts = containerTag.split("_");
-  if (parts.length >= 3) {
-    const scope = parts[1] as "user" | "project";
-    const hash = parts.slice(2).join("_");
-    return { scope, hash };
-  }
-  return { scope: "user", hash: containerTag };
-}
-
 export class LocalMemoryClient {
   private initPromise: Promise<void> | null = null;
   private isInitialized: boolean = false;
+  private adapter: IDatabaseAdapter | null = null;
+  private vectorSearch: IVectorSearch | null = null;
 
   constructor() {}
 
@@ -60,10 +53,21 @@ export class LocalMemoryClient {
 
     this.initPromise = (async () => {
       try {
+        this.adapter = await DatabaseFactory.create({
+          databaseType: CONFIG.databaseType,
+          databaseUrl: CONFIG.databaseUrl,
+          storagePath: CONFIG.storagePath,
+          customSqlitePath: CONFIG.customSqlitePath,
+          maxVectorsPerShard: CONFIG.maxVectorsPerShard,
+          embeddingDimensions: CONFIG.embeddingDimensions,
+          embeddingModel: CONFIG.embeddingModel,
+        });
+        this.vectorSearch = this.adapter.getVectorSearch();
         this.isInitialized = true;
+        log(`Database initialized (${CONFIG.databaseType})`);
       } catch (error) {
         this.initPromise = null;
-        log("SQLite initialization failed", { error: String(error) });
+        log("Database initialization failed", { error: String(error) });
         throw error;
       }
     })();
@@ -92,25 +96,26 @@ export class LocalMemoryClient {
     };
   }
 
-  close(): void {
-    connectionManager.closeAll();
+  async close(): Promise<void> {
+    await DatabaseFactory.close();
+    this.adapter = null;
+    this.vectorSearch = null;
+    this.isInitialized = false;
+    this.initPromise = null;
   }
 
   async searchMemories(query: string, containerTag: string) {
     try {
       await this.initialize();
 
-      const queryVector = await embeddingService.embedWithTimeout(query);
-      const { scope, hash } = extractScopeFromContainerTag(containerTag);
-      const shards = shardManager.getAllShards(scope, hash);
-
-      if (shards.length === 0) {
-        return { success: true as const, results: [], total: 0, timing: 0 };
+      if (!this.vectorSearch) {
+        throw new Error("Vector search not initialized");
       }
 
-      const results = await vectorSearch.searchAcrossShards(
-        shards,
-        queryVector,
+      const queryVector = await embeddingService.embedWithTimeout(query);
+
+      const results = await this.vectorSearch.searchMemories(
+        Array.from(queryVector),
         containerTag,
         CONFIG.maxMemories,
         CONFIG.similarityThreshold,
@@ -148,16 +153,18 @@ export class LocalMemoryClient {
     try {
       await this.initialize();
 
-      const tags = metadata?.tags || [];
-      const vector = await embeddingService.embedWithTimeout(content);
-      let tagsVector: Float32Array | undefined = undefined;
-
-      if (tags.length > 0) {
-        tagsVector = await embeddingService.embedWithTimeout(tags.join(", "));
+      if (!this.vectorSearch) {
+        throw new Error("Vector search not initialized");
       }
 
-      const { scope, hash } = extractScopeFromContainerTag(containerTag);
-      const shard = shardManager.getWriteShard(scope, hash);
+      const tags = metadata?.tags || [];
+      const embedding = await embeddingService.embedWithTimeout(content);
+      let tagsEmbedding: number[] | undefined = undefined;
+
+      if (tags.length > 0) {
+        const tagsVector = await embeddingService.embedWithTimeout(tags.join(", "));
+        tagsEmbedding = Array.from(tagsVector);
+      }
 
       const id = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       const now = Date.now();
@@ -177,8 +184,8 @@ export class LocalMemoryClient {
       const record: MemoryRecord = {
         id,
         content,
-        vector,
-        tagsVector,
+        embedding: Array.from(embedding),
+        tagsEmbedding,
         containerTag,
         tags: tags.length > 0 ? tags.join(",") : undefined,
         type,
@@ -194,9 +201,7 @@ export class LocalMemoryClient {
           Object.keys(dynamicMetadata).length > 0 ? JSON.stringify(dynamicMetadata) : undefined,
       };
 
-      const db = connectionManager.getConnection(shard.dbPath);
-      vectorSearch.insertVector(db, record);
-      shardManager.incrementVectorCount(shard.id);
+      await this.vectorSearch.insertMemory(record);
 
       return { success: true as const, id };
     } catch (error) {
@@ -210,19 +215,14 @@ export class LocalMemoryClient {
     try {
       await this.initialize();
 
-      const userShards = shardManager.getAllShards("user", "");
-      const projectShards = shardManager.getAllShards("project", "");
-      const allShards = [...userShards, ...projectShards];
+      if (!this.vectorSearch) {
+        throw new Error("Vector search not initialized");
+      }
 
-      for (const shard of allShards) {
-        const db = connectionManager.getConnection(shard.dbPath);
-        const memory = vectorSearch.getMemoryById(db, memoryId);
+      const deleted = await this.vectorSearch.deleteMemory(memoryId);
 
-        if (memory) {
-          vectorSearch.deleteVector(db, memoryId);
-          shardManager.decrementVectorCount(shard.id);
-          return { success: true };
-        }
+      if (deleted) {
+        return { success: true };
       }
 
       return { success: false, error: "Memory not found" };
@@ -237,28 +237,13 @@ export class LocalMemoryClient {
     try {
       await this.initialize();
 
-      const { scope, hash } = extractScopeFromContainerTag(containerTag);
-      const shards = shardManager.getAllShards(scope, hash);
-
-      if (shards.length === 0) {
-        return {
-          success: true as const,
-          memories: [],
-          pagination: { currentPage: 1, totalItems: 0, totalPages: 0 },
-        };
+      if (!this.vectorSearch) {
+        throw new Error("Vector search not initialized");
       }
 
-      const allMemories: any[] = [];
+      const rows = await this.vectorSearch.listMemories(containerTag, limit);
 
-      for (const shard of shards) {
-        const db = connectionManager.getConnection(shard.dbPath);
-        const memories = vectorSearch.listMemories(db, containerTag, limit);
-        allMemories.push(...memories);
-      }
-
-      allMemories.sort((a, b) => Number(b.created_at) - Number(a.created_at));
-
-      const memories = allMemories.slice(0, limit).map((r: any) => ({
+      const memories = rows.map((r: any) => ({
         id: r.id,
         summary: r.content,
         createdAt: safeToISOString(r.created_at),
@@ -286,6 +271,17 @@ export class LocalMemoryClient {
         pagination: { currentPage: 1, totalItems: 0, totalPages: 0 },
       };
     }
+  }
+
+  /**
+   * Get the database adapter (for advanced operations)
+   */
+  async getAdapter(): Promise<IDatabaseAdapter> {
+    await this.initialize();
+    if (!this.adapter) {
+      throw new Error("Database adapter not initialized");
+    }
+    return this.adapter;
   }
 }
 
