@@ -1,4 +1,4 @@
-export type AIProviderType = "openai-chat" | "openai-responses" | "anthropic";
+export type AIProviderType = "openai-chat" | "openai-responses" | "anthropic" | "github-copilot";
 
 export interface AIMessage {
   id?: number;
