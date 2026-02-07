@@ -79,40 +79,6 @@ function populateTagDropdowns() {
   });
 }
 
-async function loadMemories() {
-  showRefreshIndicator(true);
-
-  let endpoint = `/api/memories?page=${state.currentPage}&pageSize=${state.pageSize}&includePrompts=true`;
-
-  if (state.isSearching && state.searchQuery) {
-    endpoint = `/api/search?q=${encodeURIComponent(state.searchQuery)}&page=${state.currentPage}&pageSize=${state.pageSize}`;
-    if (state.selectedTag) {
-      endpoint += `&tag=${encodeURIComponent(state.selectedTag)}`;
-    }
-  } else {
-    if (state.selectedTag) {
-      endpoint += `&tag=${encodeURIComponent(state.selectedTag)}`;
-    }
-  }
-
-  const result = await fetchAPI(endpoint);
-
-  showRefreshIndicator(false);
-
-  if (result.success) {
-    state.memories = result.data.items;
-    state.totalPages = result.data.totalPages;
-    state.totalItems = result.data.total;
-    state.currentPage = result.data.page;
-
-    renderMemories();
-    updatePagination();
-    updateSectionTitle();
-  } else {
-    showError(result.error || "Failed to load memories");
-  }
-}
-
 function renderMemories() {
   const container = document.getElementById("memories-list");
 
@@ -443,23 +409,6 @@ async function addMemory(e) {
   }
 }
 
-function performSearch() {
-  const input = document.getElementById("search-input").value.trim();
-
-  if (!input) {
-    clearSearch();
-    return;
-  }
-
-  state.searchQuery = input;
-  state.isSearching = true;
-  state.currentPage = 1;
-
-  document.getElementById("clear-search-btn").classList.remove("hidden");
-
-  loadMemories();
-}
-
 async function loadMemories() {
   showRefreshIndicator(true);
 
@@ -661,23 +610,6 @@ function changePage(delta) {
   loadMemories();
 }
 
-function handleAddScopeChange() {
-  const tagDropdown = document.getElementById("add-tag");
-
-  tagDropdown.innerHTML = '<option value="">Select tag</option>';
-
-  const tags = state.tags.project;
-  tags.forEach((tagInfo) => {
-    const displayText = tagInfo.displayName || tagInfo.tag;
-    const shortDisplay =
-      displayText.length > 50 ? displayText.substring(0, 50) + "..." : displayText;
-    const option = document.createElement("option");
-    option.value = tagInfo.tag;
-    option.textContent = shortDisplay;
-    tagDropdown.appendChild(option);
-  });
-}
-
 function showToast(message, type = "success") {
   const toast = document.getElementById("toast");
   toast.textContent = message;
@@ -841,7 +773,7 @@ async function runTagMigration() {
     hasMore = result.data.hasMore;
     const total = result.data.total;
     const percent = total > 0 ? Math.round((totalProcessed / total) * 100) : 0;
-    
+
     progress.style.width = percent + "%";
     status.textContent = `Processing memories... ${totalProcessed}/${total} (${percent}%)`;
 

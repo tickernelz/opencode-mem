@@ -13,7 +13,7 @@ import { startWebServer, WebServer } from "./services/web-server.js";
 
 import { isConfigured, CONFIG } from "./config.js";
 import { log } from "./services/logger.js";
-import type { MemoryScope, MemoryType } from "./types/index.js";
+import type { MemoryType } from "./types/index.js";
 import { getLanguageName } from "./services/language-detector.js";
 
 export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {

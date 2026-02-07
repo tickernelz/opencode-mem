@@ -17,7 +17,6 @@ import {
   handleDetectMigration,
   handleRunMigration,
   handleDetectTagMigration,
-  handleRunTagMigration,
   handleRunTagMigrationBatch,
   handleGetTagMigrationProgress,
   handleDeletePrompt,
@@ -170,11 +169,6 @@ async function handleRequest(req: Request): Promise<Response> {
 
     if (path === "/api/migration/tags/detect" && method === "GET") {
       const result = await handleDetectTagMigration();
-      return jsonResponse(result);
-    }
-
-    if (path === "/api/migration/tags/run" && method === "POST") {
-      const result = await handleRunTagMigration();
       return jsonResponse(result);
     }
 

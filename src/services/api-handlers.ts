@@ -982,10 +982,10 @@ export async function handleRunTagMigrationBatch(
     };
     const provider = AIProviderFactory.createProvider(CONFIG.memoryProvider, providerConfig);
     const projectShards = shardManager.getAllShards("project", "");
-    
+
     let batchProcessed = 0;
     const allMemories: { memory: any; shard: any }[] = [];
-    
+
     for (const shard of projectShards) {
       const db = connectionManager.getConnection(shard.dbPath);
       const memories = db.prepare("SELECT * FROM memories").all() as any[];
@@ -993,22 +993,22 @@ export async function handleRunTagMigrationBatch(
         allMemories.push({ memory: m, shard });
       }
     }
-    
+
     if (migrationProgress.total === 0) {
       migrationProgress.total = allMemories.length;
       migrationProgress.totalBatches = Math.ceil(allMemories.length / batchSize);
       migrationProgress.isComplete = false;
     }
-    
+
     const startIdx = migrationProgress.processed;
     const endIdx = Math.min(startIdx + batchSize, allMemories.length);
-    
+
     for (let i = startIdx; i < endIdx; i++) {
       const item = allMemories[i];
       if (!item) continue;
       const { memory: m, shard } = item;
       const db = connectionManager.getConnection(shard.dbPath);
-      
+
       try {
         let currentTags = m.tags
           ? m.tags
@@ -1052,9 +1052,12 @@ export async function handleRunTagMigrationBatch(
           Date.now(),
           m.id
         );
-        
+
         db.prepare("DELETE FROM vec_memories WHERE memory_id = ?").run(m.id);
-        db.prepare("INSERT INTO vec_memories (memory_id, embedding) VALUES (?, ?)").run(m.id, vectorBuffer);
+        db.prepare("INSERT INTO vec_memories (memory_id, embedding) VALUES (?, ?)").run(
+          m.id,
+          vectorBuffer
+        );
 
         if (currentTags.length > 0) {
           const tagsVector = await embeddingService.embedWithTimeout(currentTags.join(", "));
@@ -1074,106 +1077,18 @@ export async function handleRunTagMigrationBatch(
         log("Migration error for memory", { id: m.id, error: errorMsg });
       }
     }
-    
+
     migrationProgress.currentBatch++;
     const hasMore = migrationProgress.processed < migrationProgress.total;
-    
+
     if (!hasMore) {
       migrationProgress.isComplete = true;
     }
-    
-    return { success: true, data: { processed: migrationProgress.processed, total: migrationProgress.total, hasMore } };
-  } catch (error) {
-    return { success: false, error: String(error) };
-  }
-}
 
-export async function handleRunTagMigration(): Promise<
-  ApiResponse<{ success: boolean; processed: number; duration: number }>
-> {
-  try {
-    const startTime = Date.now();
-    const { AIProviderFactory } = await import("./ai/ai-provider-factory.js");
-    const providerConfig = {
-      model: CONFIG.memoryModel!,
-      apiUrl: CONFIG.memoryApiUrl!,
-      apiKey: CONFIG.memoryApiKey!,
-      maxIterations: 1,
-      iterationTimeout: 30000,
+    return {
+      success: true,
+      data: { processed: migrationProgress.processed, total: migrationProgress.total, hasMore },
     };
-    const provider = AIProviderFactory.createProvider(CONFIG.memoryProvider, providerConfig);
-    const projectShards = shardManager.getAllShards("project", "");
-    let processed = 0;
-
-    for (const shard of projectShards) {
-      const db = connectionManager.getConnection(shard.dbPath);
-      const memories = db.prepare("SELECT * FROM memories").all() as any[];
-
-      for (const m of memories) {
-        try {
-          let currentTags = m.tags
-            ? m.tags
-                .split(",")
-                .map((t: string) => t.trim().toLowerCase())
-                .filter((t: string) => t)
-            : [];
-
-          if (currentTags.length === 0) {
-            const prompt = `Generate 2-4 short technical tags for this memory content:\n\n${m.content}\n\nReturn ONLY a comma-separated list of tags.`;
-            const result = await provider.executeToolCall(
-              "You are a technical tagger.",
-              prompt,
-              {
-                type: "function",
-                function: {
-                  name: "save_tags",
-                  description: "Save generated tags",
-                  parameters: {
-                    type: "object",
-                    properties: { tags: { type: "array", items: { type: "string" } } },
-                    required: ["tags"],
-                  },
-                },
-              },
-              `migration_${m.id}`
-            );
-            if (result.success && result.data?.tags) {
-              currentTags = result.data.tags;
-              db.prepare("UPDATE memories SET tags = ? WHERE id = ?").run(
-                currentTags.join(","),
-                m.id
-              );
-            }
-          }
-
-          const vector = await embeddingService.embedWithTimeout(m.content);
-          const vectorBuffer = new Uint8Array(vector.buffer);
-          db.prepare("UPDATE memories SET vector = ?, updated_at = ? WHERE id = ?").run(
-            vectorBuffer,
-            Date.now(),
-            m.id
-          );
-          
-          db.prepare("DELETE FROM vec_memories WHERE memory_id = ?").run(m.id);
-          db.prepare("INSERT INTO vec_memories (memory_id, embedding) VALUES (?, ?)").run(m.id, vectorBuffer);
-
-          if (currentTags.length > 0) {
-            const tagsVector = await embeddingService.embedWithTimeout(currentTags.join(", "));
-            const tagsVectorBuffer = new Uint8Array(tagsVector.buffer);
-            db.prepare("DELETE FROM vec_tags WHERE memory_id = ?").run(m.id);
-            db.prepare("INSERT INTO vec_tags (memory_id, embedding) VALUES (?, ?)").run(
-              m.id,
-              tagsVectorBuffer
-            );
-          }
-
-          processed++;
-        } catch (e) {
-          log("Migration error for memory", { id: m.id, error: String(e) });
-        }
-      }
-    }
-    return { success: true, data: { success: true, processed, duration: Date.now() - startTime } };
   } catch (error) {
     return { success: false, error: String(error) };
   }
