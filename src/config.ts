@@ -37,7 +37,7 @@ interface OpenCodeMemConfig {
   autoCaptureMaxIterations?: number;
   autoCaptureIterationTimeout?: number;
   autoCaptureLanguage?: string;
-  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic";
+  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic" | "github-copilot";
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
@@ -81,7 +81,7 @@ const DEFAULTS: Required<
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
-  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic";
+  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic" | "github-copilot";
   customSqlitePath?: string;
   autoCaptureLanguage?: string;
   userEmailOverride?: string;
@@ -270,6 +270,12 @@ const CONFIG_TEMPLATE = `{
   //   "memoryApiUrl": "https://api.groq.com/openai/v1"
   //   "memoryApiKey": "gsk_..."
   
+  // GitHub Copilot (uses opencode's stored OAuth tokens, no API key needed):
+  //   "memoryProvider": "github-copilot"
+  //   "memoryModel": "claude-haiku-4.5"
+  //   Available models: claude-opus-4.5, claude-sonnet-4.5, claude-haiku-4.5,
+  //                     gemini-3-pro, gemini-3-flash, gpt-4o, gpt-4o-mini
+  
   // Maximum iterations for multi-turn AI analysis (for openai-responses and anthropic)
   "autoCaptureMaxIterations": 5,
   
@@ -411,7 +417,8 @@ export const CONFIG = {
   memoryProvider: (fileConfig.memoryProvider ?? "openai-chat") as
     | "openai-chat"
     | "openai-responses"
-    | "anthropic",
+    | "anthropic"
+    | "github-copilot",
   memoryModel: fileConfig.memoryModel,
   memoryApiUrl: fileConfig.memoryApiUrl,
   memoryApiKey: resolveSecretValue(fileConfig.memoryApiKey),
