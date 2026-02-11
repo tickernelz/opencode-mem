@@ -72,6 +72,18 @@ Configure at `~/.config/opencode/opencode-mem.jsonc`:
 
   "userProfileAnalysisInterval": 10,
   "maxMemories": 10,
+
+  "compaction": {
+    "enabled": true,
+    "memoryLimit": 10,
+  },
+  "chatMessage": {
+    "enabled": true,
+    "maxMemories": 3,
+    "excludeCurrentSession": true,
+    "maxAgeDays": undefined,
+    "injectOn": "first",
+  },
 }
 ```
 

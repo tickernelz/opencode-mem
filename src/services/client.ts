@@ -287,6 +287,51 @@ export class LocalMemoryClient {
       };
     }
   }
+
+  async searchMemoriesBySessionID(sessionID: string, containerTag: string, limit: number = 10) {
+    try {
+      await this.initialize();
+
+      const { scope, hash } = extractScopeFromContainerTag(containerTag);
+      const shards = shardManager.getAllShards(scope, hash);
+
+      if (shards.length === 0) {
+        return { success: true as const, results: [], total: 0, timing: 0 };
+      }
+
+      const allMemories: any[] = [];
+
+      for (const shard of shards) {
+        const db = connectionManager.getConnection(shard.dbPath);
+        const memories = vectorSearch.getMemoriesBySessionID(db, sessionID);
+        allMemories.push(...memories);
+      }
+
+      allMemories.sort((a, b) => b.created_at - a.created_at);
+
+      const results = allMemories.slice(0, limit).map((row: any) => ({
+        id: row.id,
+        memory: row.content,
+        similarity: 1.0,
+        tags: row.tags || [],
+        metadata: row.metadata || {},
+        containerTag: row.container_tag,
+        displayName: row.display_name,
+        userName: row.user_name,
+        userEmail: row.user_email,
+        projectPath: row.project_path,
+        projectName: row.project_name,
+        gitRepoUrl: row.git_repo_url,
+        createdAt: row.created_at,
+      }));
+
+      return { success: true as const, results, total: results.length, timing: 0 };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log("searchMemoriesBySessionID: error", { error: errorMessage });
+      return { success: false as const, error: errorMessage, results: [], total: 0, timing: 0 };
+    }
+  }
 }
 
 export const memoryClient = new LocalMemoryClient();

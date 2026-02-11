@@ -110,7 +110,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
   return {
     "chat.message": async (input, output) => {
-      if (!isConfigured()) return;
+      if (!isConfigured() || !CONFIG.chatMessage.enabled) return;
 
       try {
         const textParts = output.parts.filter(
@@ -122,46 +122,73 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
         if (!userMessage.trim()) return;
 
         userPromptManager.savePrompt(input.sessionID, output.message.id, directory, userMessage);
-        const searchResult = await memoryClient.searchMemories(userMessage, tags.project.tag);
 
-        if (searchResult.success && searchResult.results.length > 0) {
-          const relevantMemories = searchResult.results
-            .filter((m: any) => {
-              const memorySessionId = m.metadata?.sessionID;
-              const isFromOtherSession = memorySessionId !== input.sessionID;
-              const isRelevant = m.similarity > 0.65;
-              return isFromOtherSession && isRelevant;
-            })
-            .slice(0, 3);
+        const messagesResponse = await ctx.client.session.messages({
+          path: { id: input.sessionID },
+        });
+        const messages = messagesResponse.data || [];
 
-          if (relevantMemories.length > 0) {
-            const projectMemories = {
-              results: relevantMemories.map((m: any) => ({
-                id: m.id,
-                memory: m.memory,
-                similarity: m.similarity,
-                title: m.displayName,
-                metadata: m.metadata,
-              })),
-              total: relevantMemories.length,
-              timing: 0,
-            };
+        const hasNonSyntheticUserMessages = messages.some(
+          (m) =>
+            m.info.role === "user" &&
+            !m.parts.every((p) => p.type !== "text" || p.synthetic === true)
+        );
 
-            const userId = tags.user.userEmail || null;
-            const memoryContext = formatContextForPrompt(userId, projectMemories);
+        const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+        const isAfterCompaction = lastMessage?.info?.summary === true;
 
-            if (memoryContext) {
-              const contextPart: Part = {
-                id: `memory-context-${Date.now()}`,
-                sessionID: input.sessionID,
-                messageID: output.message.id,
-                type: "text",
-                text: memoryContext,
-                synthetic: true,
-              };
-              output.parts.unshift(contextPart);
-            }
-          }
+        const shouldInject =
+          CONFIG.chatMessage.injectOn === "always" ||
+          !hasNonSyntheticUserMessages ||
+          (isAfterCompaction &&
+            messages.filter(
+              (m) =>
+                m.info.role === "user" &&
+                !m.parts.every((p) => p.type !== "text" || p.synthetic === true)
+            ).length === 1);
+
+        if (!shouldInject) return;
+
+        const listResult = await memoryClient.listMemories(
+          tags.project.tag,
+          CONFIG.chatMessage.maxMemories
+        );
+
+        let memories = listResult.success ? listResult.memories : [];
+
+        if (CONFIG.chatMessage.excludeCurrentSession) {
+          memories = memories.filter((m: any) => m.metadata?.sessionID !== input.sessionID);
+        }
+
+        if (CONFIG.chatMessage.maxAgeDays) {
+          const cutoffDate = Date.now() - CONFIG.chatMessage.maxAgeDays * 86400000;
+          memories = memories.filter((m: any) => new Date(m.createdAt).getTime() > cutoffDate);
+        }
+
+        if (memories.length === 0) return;
+
+        const projectMemories = {
+          results: memories.map((m: any) => ({
+            similarity: 1.0,
+            memory: m.summary,
+          })),
+          total: memories.length,
+          timing: 0,
+        };
+
+        const userId = tags.user.userEmail || null;
+        const memoryContext = formatContextForPrompt(userId, projectMemories);
+
+        if (memoryContext) {
+          const contextPart: Part = {
+            id: `memory-context-${Date.now()}`,
+            sessionID: input.sessionID,
+            messageID: output.message.id,
+            type: "text",
+            text: memoryContext,
+            synthetic: true,
+          } as any;
+          output.parts.unshift(contextPart);
         }
       } catch (error) {
         log("chat.message: ERROR", { error: String(error) });
@@ -351,6 +378,57 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           }
         }, 10000);
       }
+
+      if (event.type === "session.compacted") {
+        if (!isConfigured() || !CONFIG.compaction.enabled) return;
+
+        const sessionID = event.properties?.sessionID;
+        if (!sessionID) return;
+
+        try {
+          const tags = getTags(directory);
+
+          const memoriesResult = await memoryClient.searchMemoriesBySessionID(
+            sessionID,
+            tags.project.tag,
+            CONFIG.compaction.memoryLimit
+          );
+
+          if (!memoriesResult.success || memoriesResult.results.length === 0) {
+            return;
+          }
+
+          const memoryContext = formatMemoriesForCompaction(memoriesResult.results);
+
+          await ctx.client.session.prompt({
+            path: { id: sessionID },
+            body: {
+              parts: [{ type: "text", text: memoryContext }],
+              noReply: true,
+            },
+          });
+
+          if (ctx.client?.tui) {
+            await ctx.client.tui
+              .showToast({
+                body: {
+                  title: "Memory Restored",
+                  message: `${memoriesResult.results.length} memories injected after compaction`,
+                  variant: "success",
+                  duration: 3000,
+                },
+              })
+              .catch(() => {});
+          }
+
+          log("Compaction memory injected", {
+            sessionID,
+            count: memoriesResult.results.length,
+          });
+        } catch (error) {
+          log("Compaction handler error", { error: String(error) });
+        }
+      }
     },
   };
 };
@@ -367,4 +445,18 @@ function formatSearchResults(query: string, results: any, limit?: number): strin
       similarity: Math.round(r.similarity * 100),
     })),
   });
+}
+
+function formatMemoriesForCompaction(memories: any[]): string {
+  let output = `## Restored Session Memory\n\n`;
+
+  memories.forEach((m, i) => {
+    output += `### Memory ${i + 1}\n`;
+    output += `${m.memory}\n\n`;
+    if (m.tags && m.tags.length > 0) {
+      output += `Tags: ${m.tags.join(", ")}\n\n`;
+    }
+  });
+
+  return output;
 }

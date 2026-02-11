@@ -216,6 +216,22 @@ export class VectorSearch {
     return stmt.get(memoryId) as any;
   }
 
+  getMemoriesBySessionID(db: Database, sessionID: string): any[] {
+    const stmt = db.prepare(`
+      SELECT * FROM memories 
+      WHERE metadata LIKE ?
+      ORDER BY created_at DESC
+    `);
+
+    const rows = stmt.all(`%"sessionID":"${sessionID}"%`) as any[];
+
+    return rows.map((row: any) => ({
+      ...row,
+      tags: row.tags ? row.tags.split(",") : [],
+      metadata: row.metadata ? JSON.parse(row.metadata) : {},
+    }));
+  }
+
   countVectors(db: Database, containerTag: string): number {
     const stmt = db.prepare(`SELECT COUNT(*) as count FROM memories WHERE container_tag = ?`);
     const result = stmt.get(containerTag) as any;

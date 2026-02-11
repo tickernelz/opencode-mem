@@ -60,6 +60,17 @@ interface OpenCodeMemConfig {
   showAutoCaptureToasts?: boolean;
   showUserProfileToasts?: boolean;
   showErrorToasts?: boolean;
+  compaction?: {
+    enabled?: boolean;
+    memoryLimit?: number;
+  };
+  chatMessage?: {
+    enabled?: boolean;
+    maxMemories?: number;
+    excludeCurrentSession?: boolean;
+    maxAgeDays?: number;
+    injectOn?: "first" | "always";
+  };
 }
 
 const DEFAULTS: Required<
@@ -119,6 +130,17 @@ const DEFAULTS: Required<
   showAutoCaptureToasts: true,
   showUserProfileToasts: true,
   showErrorToasts: true,
+  compaction: {
+    enabled: true,
+    memoryLimit: 10,
+  },
+  chatMessage: {
+    enabled: true,
+    maxMemories: 3,
+    excludeCurrentSession: true,
+    maxAgeDays: undefined,
+    injectOn: "first",
+  },
 };
 
 function expandPath(path: string): string {
@@ -448,6 +470,20 @@ export const CONFIG = {
   showAutoCaptureToasts: fileConfig.showAutoCaptureToasts ?? DEFAULTS.showAutoCaptureToasts,
   showUserProfileToasts: fileConfig.showUserProfileToasts ?? DEFAULTS.showUserProfileToasts,
   showErrorToasts: fileConfig.showErrorToasts ?? DEFAULTS.showErrorToasts,
+  compaction: {
+    enabled: fileConfig.compaction?.enabled ?? DEFAULTS.compaction.enabled,
+    memoryLimit: fileConfig.compaction?.memoryLimit ?? DEFAULTS.compaction.memoryLimit,
+  },
+  chatMessage: {
+    enabled: fileConfig.chatMessage?.enabled ?? DEFAULTS.chatMessage.enabled,
+    maxMemories: fileConfig.chatMessage?.maxMemories ?? DEFAULTS.chatMessage.maxMemories,
+    excludeCurrentSession:
+      fileConfig.chatMessage?.excludeCurrentSession ?? DEFAULTS.chatMessage.excludeCurrentSession,
+    maxAgeDays: fileConfig.chatMessage?.maxAgeDays,
+    injectOn: (fileConfig.chatMessage?.injectOn ?? DEFAULTS.chatMessage.injectOn) as
+      | "first"
+      | "always",
+  },
 };
 
 export function isConfigured(): boolean {
