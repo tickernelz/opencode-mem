@@ -97,10 +97,13 @@ export class LocalMemoryClient {
   }
 
   async searchMemories(query: string, containerTag: string) {
+    return this.hybridSearch(query, containerTag);
+  }
+
+  async fullTextSearch(query: string, containerTag: string) {
     try {
       await this.initialize();
 
-      const queryVector = await embeddingService.embedWithTimeout(query);
       const { scope, hash } = extractScopeFromContainerTag(containerTag);
       const shards = shardManager.getAllShards(scope, hash);
 
@@ -108,19 +111,114 @@ export class LocalMemoryClient {
         return { success: true as const, results: [], total: 0, timing: 0 };
       }
 
-      const results = await vectorSearch.searchAcrossShards(
-        shards,
-        queryVector,
-        containerTag,
-        CONFIG.maxMemories,
-        CONFIG.similarityThreshold,
-        query
+      const shardPromises = shards.map(async (shard) => {
+        try {
+          const db = connectionManager.getConnection(shard.dbPath);
+          return vectorSearch.fullTextSearch(db, query, containerTag, CONFIG.maxMemories);
+        } catch (error) {
+          log("fullTextSearch: shard search error", { shardId: shard.id, error: String(error) });
+          return [];
+        }
+      });
+
+      const results = (await Promise.all(shardPromises)).flat();
+      const dedupedById = new Map<string, any>();
+
+      for (const result of results) {
+        const existing = dedupedById.get(result.id);
+        if (!existing || result.similarity > existing.similarity) {
+          dedupedById.set(result.id, result);
+        }
+      }
+
+      const dedupedResults = Array.from(dedupedById.values()).sort(
+        (a, b) => b.similarity - a.similarity
       );
 
-      return { success: true as const, results, total: results.length, timing: 0 };
+      return {
+        success: true as const,
+        results: dedupedResults.slice(0, CONFIG.maxMemories),
+        total: dedupedResults.length,
+        timing: 0,
+      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      log("searchMemories: error", { error: errorMessage });
+      log("fullTextSearch: error", { error: errorMessage });
+      return { success: false as const, error: errorMessage, results: [], total: 0, timing: 0 };
+    }
+  }
+
+  async hybridSearch(query: string, containerTag: string) {
+    try {
+      await this.initialize();
+
+      const { scope, hash } = extractScopeFromContainerTag(containerTag);
+      const shards = shardManager.getAllShards(scope, hash);
+
+      if (shards.length === 0) {
+        return { success: true as const, results: [], total: 0, timing: 0 };
+      }
+
+      const vectorPromise = (async () => {
+        const queryVector = await embeddingService.embedWithTimeout(query);
+        return vectorSearch.searchAcrossShards(
+          shards,
+          queryVector,
+          containerTag,
+          CONFIG.maxMemories,
+          CONFIG.similarityThreshold,
+          query
+        );
+      })();
+
+      const ftsPromise = this.fullTextSearch(query, containerTag);
+      const [vectorResults, ftsResponse] = await Promise.all([vectorPromise, ftsPromise]);
+      const ftsResults = ftsResponse.success ? ftsResponse.results : [];
+
+      const fusedById = new Map<string, { result: any; score: number }>();
+
+      for (const [i, result] of vectorResults.entries()) {
+        const vectorRank = 1 / (i + 1);
+        fusedById.set(result.id, {
+          result,
+          score: 0.6 * vectorRank,
+        });
+      }
+
+      for (const [i, result] of ftsResults.entries()) {
+        const ftsRank = 1 / (i + 1);
+        const existing = fusedById.get(result.id);
+
+        if (existing) {
+          existing.score += 0.4 * ftsRank;
+          if (result.similarity > existing.result.similarity) {
+            existing.result = result;
+          }
+        } else {
+          fusedById.set(result.id, {
+            result,
+            score: 0.4 * ftsRank,
+          });
+        }
+      }
+
+      const combinedResults = Array.from(fusedById.values())
+        .sort((a, b) => b.score - a.score)
+        .slice(0, CONFIG.maxMemories)
+        .map((entry) => ({
+          ...entry.result,
+          similarity: entry.score,
+        }));
+
+      return {
+        success: true as const,
+        results: combinedResults,
+        total: combinedResults.length,
+        timing: 0,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log("hybridSearch: error", { error: errorMessage });
       return { success: false as const, error: errorMessage, results: [], total: 0, timing: 0 };
     }
   }

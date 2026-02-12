@@ -112,8 +112,9 @@ export class ConnectionManager {
     try {
       const columns = db.prepare("PRAGMA table_info(memories)").all() as any[];
       const hasTags = columns.some((c) => c.name === "tags");
+      const hasMemoriesTable = columns.length > 0;
 
-      if (!hasTags && columns.length > 0) {
+      if (!hasTags && hasMemoriesTable) {
         db.run("ALTER TABLE memories ADD COLUMN tags TEXT");
       }
 
@@ -123,6 +124,32 @@ export class ConnectionManager {
           embedding float32[${CONFIG.embeddingDimensions}] distance_metric=cosine
         )
       `);
+
+      if (hasMemoriesTable) {
+        const hasFtsTable = Boolean(
+          db
+            .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memories_fts'")
+            .get()
+        );
+
+        db.run(`
+          CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+            content,
+            tags,
+            container_tag UNINDEXED,
+            memory_id UNINDEXED,
+            tokenize='porter unicode61'
+          )
+        `);
+
+        if (!hasFtsTable) {
+          db.run(`
+            INSERT INTO memories_fts(content, tags, container_tag, memory_id)
+            SELECT content, COALESCE(tags, ''), container_tag, id
+            FROM memories
+          `);
+        }
+      }
     } catch (error) {
       log("Schema migration error", { error: String(error) });
     }

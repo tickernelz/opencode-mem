@@ -4,6 +4,40 @@ import { log } from "../logger.js";
 import type { MemoryRecord, SearchResult, ShardInfo } from "./types.js";
 
 export class VectorSearch {
+  private sanitizeFtsQuery(query: string): string {
+    const tokens = query
+      .normalize("NFKC")
+      .toLowerCase()
+      .split(/\s+/)
+      .map((token) => token.replace(/[^\p{L}\p{N}_-]/gu, "").trim())
+      .filter(Boolean)
+      .slice(0, 24);
+
+    if (tokens.length === 0) {
+      return "";
+    }
+
+    return tokens.map((token) => `"${token}"*`).join(" AND ");
+  }
+
+  private mapRowToSearchResult(row: any, similarity: number) {
+    return {
+      id: row.id,
+      memory: row.content,
+      similarity,
+      tags: row.tags ? row.tags.split(",") : [],
+      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      containerTag: row.container_tag,
+      displayName: row.display_name,
+      userName: row.user_name,
+      userEmail: row.user_email,
+      projectPath: row.project_path,
+      projectName: row.project_name,
+      gitRepoUrl: row.git_repo_url,
+      isPinned: row.is_pinned,
+    };
+  }
+
   insertVector(db: Database, record: MemoryRecord): void {
     const insertMemory = db.prepare(`
       INSERT INTO memories (
@@ -36,6 +70,11 @@ export class VectorSearch {
       INSERT INTO vec_memories (memory_id, embedding) VALUES (?, ?)
     `);
     insertVec.run(record.id, vectorBuffer);
+
+    const insertFts = db.prepare(`
+      INSERT INTO memories_fts (content, tags, container_tag, memory_id) VALUES (?, ?, ?, ?)
+    `);
+    insertFts.run(record.content, record.tags || "", record.containerTag, record.id);
 
     if (record.tagsVector) {
       const tagsVectorBuffer = new Uint8Array(record.tagsVector.buffer);
@@ -124,21 +163,7 @@ export class VectorSearch {
       const tagSim = Math.max(scores.tagsSim, exactMatchBoost);
       const similarity = tagSim * 0.8 + scores.contentSim * 0.2;
 
-      return {
-        id: row.id,
-        memory: row.content,
-        similarity,
-        tags: memoryTagsStr ? memoryTagsStr.split(",") : [],
-        metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-        containerTag: row.container_tag,
-        displayName: row.display_name,
-        userName: row.user_name,
-        userEmail: row.user_email,
-        projectPath: row.project_path,
-        projectName: row.project_name,
-        gitRepoUrl: row.git_repo_url,
-        isPinned: row.is_pinned,
-      };
+      return this.mapRowToSearchResult(row, similarity);
     });
   }
 
@@ -166,7 +191,35 @@ export class VectorSearch {
     return allResults.filter((r) => r.similarity >= similarityThreshold).slice(0, limit);
   }
 
+  fullTextSearch(db: Database, query: string, containerTag: string, limit: number): SearchResult[] {
+    const sanitizedQuery = this.sanitizeFtsQuery(query);
+
+    if (!sanitizedQuery) {
+      return [];
+    }
+
+    const rows = db
+      .prepare(
+        `
+        SELECT m.*, fts.rank
+        FROM memories_fts fts
+        JOIN memories m ON m.id = fts.memory_id
+        WHERE memories_fts MATCH ? AND fts.container_tag = ?
+        ORDER BY fts.rank
+        LIMIT ?
+      `
+      )
+      .all(sanitizedQuery, containerTag, limit) as any[];
+
+    return rows.map((row: any, index: number) => {
+      const rank = Number(row.rank);
+      const rankSimilarity = Number.isFinite(rank) ? 1 / (1 + Math.max(rank, 0)) : 1 / (index + 1);
+      return this.mapRowToSearchResult(row, rankSimilarity);
+    });
+  }
+
   deleteVector(db: Database, memoryId: string): void {
+    db.prepare(`DELETE FROM memories_fts WHERE memory_id = ?`).run(memoryId);
     db.prepare(`DELETE FROM vec_memories WHERE memory_id = ?`).run(memoryId);
     db.prepare(`DELETE FROM vec_tags WHERE memory_id = ?`).run(memoryId);
     db.prepare(`DELETE FROM memories WHERE id = ?`).run(memoryId);

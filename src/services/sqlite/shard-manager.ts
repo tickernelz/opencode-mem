@@ -182,6 +182,16 @@ export class ShardManager {
       )
     `);
 
+    db.run(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+        content,
+        tags,
+        container_tag UNINDEXED,
+        memory_id UNINDEXED,
+        tokenize='porter unicode61'
+      )
+    `);
+
     db.run(`CREATE INDEX IF NOT EXISTS idx_container_tag ON memories(container_tag)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_type ON memories(type)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_created_at ON memories(created_at DESC)`);
