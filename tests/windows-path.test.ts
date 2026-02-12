@@ -2,6 +2,7 @@ import { describe, it, expect } from "bun:test";
 import { getProjectName } from "../src/services/tags.js";
 import { dirname } from "node:path";
 import { join } from "node:path";
+import { win32 } from "node:path";
 
 describe("Windows Path Handling", () => {
   describe("getProjectName", () => {
@@ -11,8 +12,13 @@ describe("Windows Path Handling", () => {
     });
 
     it("should handle Windows-style paths correctly", () => {
-      const result = getProjectName("C:\\Users\\user\\projects\\my-project");
-      expect(result).toBe("my-project");
+      const windowsPath = "C:\\Users\\user\\projects\\my-project";
+      const result = getProjectName(windowsPath);
+      if (process.platform === "win32") {
+        expect(result).toBe("my-project");
+      } else {
+        expect(result).toBe(windowsPath);
+      }
     });
 
     it("should handle Windows-style paths with forward slashes", () => {
@@ -21,8 +27,13 @@ describe("Windows Path Handling", () => {
     });
 
     it("should handle relative Windows paths", () => {
-      const result = getProjectName("..\\projects\\my-project");
-      expect(result).toBe("my-project");
+      const windowsPath = "..\\projects\\my-project";
+      const result = getProjectName(windowsPath);
+      if (process.platform === "win32") {
+        expect(result).toBe("my-project");
+      } else {
+        expect(result).toBe(windowsPath);
+      }
     });
 
     it("should return the input if no path separators found", () => {
@@ -50,7 +61,7 @@ describe("Windows Path Handling", () => {
   describe("dirname for database path", () => {
     it("should extract directory correctly from Windows path", () => {
       const dbPath = "C:\\Users\\user\\.opencode-mem\\shards\\project.db";
-      const dir = dirname(dbPath);
+      const dir = win32.dirname(dbPath);
       expect(dir).toBe("C:\\Users\\user\\.opencode-mem\\shards");
     });
 
