@@ -10,6 +10,11 @@ import { performAutoCapture } from "./services/auto-capture.js";
 import { performUserProfileLearning } from "./services/user-memory-learning.js";
 import { userPromptManager } from "./services/user-prompt/user-prompt-manager.js";
 import { startWebServer, WebServer } from "./services/web-server.js";
+import {
+  getMemoryTimeline,
+  getOrCreateMemoryMcpServer,
+  searchMemoryHistory,
+} from "./services/mcp-server.js";
 
 import { isConfigured, CONFIG } from "./config.js";
 import { log } from "./services/logger.js";
@@ -90,6 +95,14 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
             .catch(() => {});
         }
       });
+  }
+
+  if (isConfigured()) {
+    try {
+      getOrCreateMemoryMcpServer(directory);
+    } catch (error) {
+      log("MCP server initialization failed", { error: String(error) });
+    }
   }
 
   const shutdownHandler = async () => {
@@ -229,7 +242,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
             memoryId?: string;
             limit?: number;
           },
-          toolCtx: { sessionID: string }
+          _toolCtx: { sessionID: string }
         ) {
           if (!isConfigured()) {
             return JSON.stringify({
@@ -344,6 +357,92 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
               default:
                 return JSON.stringify({ success: false, error: `Unknown mode: ${mode}` });
             }
+          } catch (error) {
+            return JSON.stringify({ success: false, error: String(error) });
+          }
+        },
+      }),
+      memory_search: tool({
+        description:
+          "Semantic memory search for project history with similarity, tags, and timestamps.",
+        args: {
+          query: tool.schema.string(),
+          tag: tool.schema.string().optional(),
+          limit: tool.schema.number().optional(),
+        },
+        async execute(
+          args: {
+            query: string;
+            tag?: string;
+            limit?: number;
+          },
+          _toolCtx: { sessionID: string }
+        ) {
+          if (!isConfigured()) {
+            return JSON.stringify({
+              success: false,
+              error: "Memory system not configured properly.",
+            });
+          }
+
+          const needsWarmup = !(await memoryClient.isReady());
+          if (needsWarmup) {
+            return JSON.stringify({ success: false, error: "Memory system is initializing." });
+          }
+
+          try {
+            const result = await searchMemoryHistory(directory, {
+              query: args.query,
+              tag: args.tag,
+              limit: args.limit,
+            });
+            return JSON.stringify(result);
+          } catch (error) {
+            return JSON.stringify({ success: false, error: String(error) });
+          }
+        },
+      }),
+      memory_timeline: tool({
+        description:
+          "Load chronological context around a memory ID with nearby entries before and after.",
+        args: {
+          memoryId: tool.schema.string(),
+          tag: tool.schema.string().optional(),
+          before: tool.schema.number().optional(),
+          after: tool.schema.number().optional(),
+          scanLimit: tool.schema.number().optional(),
+        },
+        async execute(
+          args: {
+            memoryId: string;
+            tag?: string;
+            before?: number;
+            after?: number;
+            scanLimit?: number;
+          },
+          _toolCtx: { sessionID: string }
+        ) {
+          if (!isConfigured()) {
+            return JSON.stringify({
+              success: false,
+              error: "Memory system not configured properly.",
+            });
+          }
+
+          const needsWarmup = !(await memoryClient.isReady());
+          if (needsWarmup) {
+            return JSON.stringify({ success: false, error: "Memory system is initializing." });
+          }
+
+          try {
+            const result = await getMemoryTimeline(directory, {
+              memoryId: args.memoryId,
+              tag: args.tag,
+              before: args.before,
+              after: args.after,
+              scanLimit: args.scanLimit,
+            });
+            return JSON.stringify(result);
           } catch (error) {
             return JSON.stringify({ success: false, error: String(error) });
           }
