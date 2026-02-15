@@ -32,7 +32,7 @@ Add to your OpenCode configuration at `~/.config/opencode/opencode.json`:
 }
 ```
 
-The plugin downloads automatically on next startup. macOS users with Apple Silicon must install Homebrew SQLite and configure the custom path - see our Wiki for details.
+The plugin downloads automatically on next startup. macOS users with Apple Silicon must install Homebrew SQLite and configure the custom path.
 
 ## Usage Examples
 
@@ -95,14 +95,7 @@ Configure at `~/.config/opencode/opencode-mem.jsonc`:
 "memoryApiKey": "env://OPENAI_API_KEY"
 ```
 
-Full documentation available in our [Configuration Guide](https://github.com/tickernelz/opencode-mem/wiki/Configuration-Guide).
-
-## Documentation
-
-- [Installation Guide](https://github.com/tickernelz/opencode-mem/wiki/Installation-Guide)
-- [API Reference](https://github.com/tickernelz/opencode-mem/wiki/API-Reference)
-- [Troubleshooting](https://github.com/tickernelz/opencode-mem/wiki/Troubleshooting)
-- [Complete Wiki](https://github.com/tickernelz/opencode-mem/wiki)
+Full documentation available in this README.
 
 ## Development & Contribution
 
@@ -122,7 +115,6 @@ This project is actively seeking contributions to become the definitive memory p
 MIT License - see LICENSE file
 
 - **Repository**: https://github.com/tickernelz/opencode-mem
-- **Wiki**: https://github.com/tickernelz/opencode-mem/wiki
 - **Issues**: https://github.com/tickernelz/opencode-mem/issues
 - **OpenCode Platform**: https://opencode.ai
 
