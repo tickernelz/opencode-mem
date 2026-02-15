@@ -28,7 +28,7 @@ Add to your OpenCode configuration at `~/.config/opencode/opencode.json`:
 
 ```jsonc
 {
-  "plugins": ["opencode-mem"],
+  "plugin": ["opencode-mem"],
 }
 ```
 
