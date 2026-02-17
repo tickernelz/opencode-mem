@@ -46,6 +46,21 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
         webServer = server;
         const url = webServer.getUrl();
 
+        webServer.setOnTakeoverCallback(async () => {
+          if (ctx.client?.tui) {
+            ctx.client.tui
+              .showToast({
+                body: {
+                  title: "Memory Explorer",
+                  message: "Took over web server ownership",
+                  variant: "success",
+                  duration: 3000,
+                },
+              })
+              .catch(() => {});
+          }
+        });
+
         if (webServer.isServerOwner()) {
           if (ctx.client?.tui) {
             ctx.client.tui

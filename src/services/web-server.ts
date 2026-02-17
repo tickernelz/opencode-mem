@@ -29,9 +29,15 @@ export class WebServer {
   private config: WebServerConfig;
   private isOwner: boolean = false;
   private startPromise: Promise<void> | null = null;
+  private healthCheckInterval: NodeJS.Timeout | null = null;
+  private onTakeoverCallback: (() => Promise<void>) | null = null;
 
   constructor(config: WebServerConfig) {
     this.config = config;
+  }
+
+  setOnTakeoverCallback(callback: () => Promise<void>): void {
+    this.onTakeoverCallback = callback;
   }
 
   async start(): Promise<void> {
@@ -105,6 +111,10 @@ export class WebServer {
       } as WorkerMessage);
 
       await startedPromise;
+
+      if (!this.isOwner) {
+        this.startHealthCheckLoop();
+      }
     } catch (error) {
       this.isOwner = false;
       if (this.worker) {
@@ -116,7 +126,58 @@ export class WebServer {
     }
   }
 
+  private startHealthCheckLoop(): void {
+    if (this.healthCheckInterval) {
+      return;
+    }
+
+    this.healthCheckInterval = setInterval(async () => {
+      const isAvailable = await this.checkServerAvailable();
+
+      if (!isAvailable) {
+        this.stopHealthCheckLoop();
+        await this.attemptTakeover();
+      }
+    }, 5000);
+  }
+
+  private stopHealthCheckLoop(): void {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
+  }
+
+  private async attemptTakeover(): Promise<void> {
+    // prevent thundering herd: multiple non-owners racing to bind port
+    const jitterMs = 500 + Math.random() * 1000;
+    await new Promise((resolve) => setTimeout(resolve, jitterMs));
+
+    if (await this.checkServerAvailable()) {
+      this.startHealthCheckLoop();
+      return;
+    }
+
+    try {
+      await this._start();
+      this.isOwner = true;
+      log("Web server takeover successful", { port: this.config.port });
+
+      if (this.onTakeoverCallback) {
+        try {
+          await this.onTakeoverCallback();
+        } catch (error) {
+          log("Takeover callback error", { error: String(error) });
+        }
+      }
+    } catch (error) {
+      this.startHealthCheckLoop();
+    }
+  }
+
   async stop(): Promise<void> {
+    this.stopHealthCheckLoop();
+
     if (!this.isOwner || !this.worker) {
       return;
     }
