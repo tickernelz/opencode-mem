@@ -73,7 +73,11 @@ export class WebServer {
           } else if (response.type === "error") {
             const errorMsg = response.error || "Unknown error";
 
-            if (errorMsg.includes("EADDRINUSE") || errorMsg.includes("address already in use")) {
+            if (
+              errorMsg.includes("EADDRINUSE") ||
+              errorMsg.includes("address already in use") ||
+              /^Error: Failed to start server\. Is port \d+ in use\?$/.test(errorMsg)
+            ) {
               this.isOwner = false;
               resolve();
             } else {
