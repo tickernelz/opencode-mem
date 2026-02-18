@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { join, basename, isAbsolute } from "node:path";
+import { existsSync } from "node:fs";
 import { CONFIG } from "../../config.js";
 import { connectionManager } from "./connection-manager.js";
 import { log } from "../logger.js";
@@ -188,11 +189,84 @@ export class ShardManager {
     db.run(`CREATE INDEX IF NOT EXISTS idx_is_pinned ON memories(is_pinned)`);
   }
 
+  /**
+   * Check if the shard DB file exists and contains the required 'memories' table.
+   * Returns false if the file is missing or the table doesn't exist.
+   */
+  private isShardValid(shard: ShardInfo): boolean {
+    if (!existsSync(shard.dbPath)) {
+      log("Shard DB file missing", { dbPath: shard.dbPath, shardId: shard.id });
+      return false;
+    }
+
+    try {
+      const db = connectionManager.getConnection(shard.dbPath);
+      const result = db
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type='table' AND name='memories'`
+        )
+        .get() as any;
+      if (!result) {
+        log("Shard DB missing 'memories' table", {
+          dbPath: shard.dbPath,
+          shardId: shard.id,
+        });
+        return false;
+      }
+      return true;
+    } catch (error) {
+      log("Error validating shard DB", {
+        dbPath: shard.dbPath,
+        error: String(error),
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Ensure the shard DB has all required tables. If tables are missing,
+   * re-initialize them. This handles cases where the DB file exists but
+   * was corrupted or partially created.
+   */
+  private ensureShardTables(shard: ShardInfo): void {
+    try {
+      const db = connectionManager.getConnection(shard.dbPath);
+      this.initShardDb(db);
+    } catch (error) {
+      log("Error ensuring shard tables", {
+        dbPath: shard.dbPath,
+        error: String(error),
+      });
+    }
+  }
+
   getWriteShard(scope: "user" | "project", scopeHash: string): ShardInfo {
     let shard = this.getActiveShard(scope, scopeHash);
 
     if (!shard) {
       return this.createShard(scope, scopeHash, 0);
+    }
+
+    // Validate that the shard DB file exists and has required tables
+    if (!this.isShardValid(shard)) {
+      log("Active shard is invalid, recreating", {
+        scope,
+        scopeHash,
+        shardIndex: shard.shardIndex,
+        dbPath: shard.dbPath,
+      });
+
+      // Close any cached connection to the invalid shard
+      connectionManager.closeConnection(shard.dbPath);
+
+      // Remove the stale metadata record
+      const deleteStmt = this.metadataDb.prepare(
+        `DELETE FROM shards WHERE id = ?`
+      );
+      deleteStmt.run(shard.id);
+
+      // Create a fresh shard with the same index
+      return this.createShard(scope, scopeHash, shard.shardIndex);
     }
 
     if (shard.vectorCount >= CONFIG.maxVectorsPerShard) {
@@ -226,7 +300,9 @@ export class ShardManager {
 
   getShardByPath(dbPath: string): ShardInfo | null {
     const fileName = basename(dbPath);
-    const stmt = this.metadataDb.prepare(`SELECT * FROM shards WHERE db_path LIKE '%' || ?`);
+    const stmt = this.metadataDb.prepare(
+      `SELECT * FROM shards WHERE db_path LIKE '%' || ?`
+    );
     const row = stmt.get(fileName) as any;
     if (!row) return null;
 
@@ -256,10 +332,15 @@ export class ShardManager {
           fs.unlinkSync(fullPath);
         }
       } catch (error) {
-        log("Error deleting shard file", { dbPath: fullPath, error: String(error) });
+        log("Error deleting shard file", {
+          dbPath: fullPath,
+          error: String(error),
+        });
       }
 
-      const deleteStmt = this.metadataDb.prepare(`DELETE FROM shards WHERE id = ?`);
+      const deleteStmt = this.metadataDb.prepare(
+        `DELETE FROM shards WHERE id = ?`
+      );
       deleteStmt.run(shardId);
     }
   }
