@@ -194,25 +194,31 @@ export class ShardManager {
    * Returns false if the file is missing or the table doesn't exist.
    */
   private isShardValid(shard: ShardInfo): boolean {
-    // Check if the DB file exists on disk
     if (!existsSync(shard.dbPath)) {
       log("Shard DB file missing", { dbPath: shard.dbPath, shardId: shard.id });
       return false;
     }
 
-    // Check if the 'memories' table exists
     try {
       const db = connectionManager.getConnection(shard.dbPath);
-      const result = db.prepare(
-        `SELECT name FROM sqlite_master WHERE type='table' AND name='memories'`
-      ).get() as any;
+      const result = db
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type='table' AND name='memories'`
+        )
+        .get() as any;
       if (!result) {
-        log("Shard DB missing 'memories' table", { dbPath: shard.dbPath, shardId: shard.id });
+        log("Shard DB missing 'memories' table", {
+          dbPath: shard.dbPath,
+          shardId: shard.id,
+        });
         return false;
       }
       return true;
     } catch (error) {
-      log("Error validating shard DB", { dbPath: shard.dbPath, error: String(error) });
+      log("Error validating shard DB", {
+        dbPath: shard.dbPath,
+        error: String(error),
+      });
       return false;
     }
   }
@@ -227,21 +233,11 @@ export class ShardManager {
       const db = connectionManager.getConnection(shard.dbPath);
       this.initShardDb(db);
     } catch (error) {
-      log("Error ensuring shard tables", { dbPath: shard.dbPath, error: String(error) });
+      log("Error ensuring shard tables", {
+        dbPath: shard.dbPath,
+        error: String(error),
+      });
     }
-  }
-
-  /**
-   * Remove a stale shard record from metadata.db.
-   * Used when the actual shard DB file has been deleted externally.
-   */
-  private removeStaleShardRecord(shardId: number): void {
-    log("Removing stale shard record from metadata", { shardId });
-    connectionManager.closeConnection(
-      this.metadataDb.prepare(`SELECT db_path FROM shards WHERE id = ?`).get(shardId) as any
-    );
-    const stmt = this.metadataDb.prepare(`DELETE FROM shards WHERE id = ?`);
-    stmt.run(shardId);
   }
 
   getWriteShard(scope: "user" | "project", scopeHash: string): ShardInfo {
@@ -264,7 +260,9 @@ export class ShardManager {
       connectionManager.closeConnection(shard.dbPath);
 
       // Remove the stale metadata record
-      const deleteStmt = this.metadataDb.prepare(`DELETE FROM shards WHERE id = ?`);
+      const deleteStmt = this.metadataDb.prepare(
+        `DELETE FROM shards WHERE id = ?`
+      );
       deleteStmt.run(shard.id);
 
       // Create a fresh shard with the same index
@@ -302,7 +300,9 @@ export class ShardManager {
 
   getShardByPath(dbPath: string): ShardInfo | null {
     const fileName = basename(dbPath);
-    const stmt = this.metadataDb.prepare(`SELECT * FROM shards WHERE db_path LIKE '%' || ?`);
+    const stmt = this.metadataDb.prepare(
+      `SELECT * FROM shards WHERE db_path LIKE '%' || ?`
+    );
     const row = stmt.get(fileName) as any;
     if (!row) return null;
 
@@ -332,10 +332,15 @@ export class ShardManager {
           fs.unlinkSync(fullPath);
         }
       } catch (error) {
-        log("Error deleting shard file", { dbPath: fullPath, error: String(error) });
+        log("Error deleting shard file", {
+          dbPath: fullPath,
+          error: String(error),
+        });
       }
 
-      const deleteStmt = this.metadataDb.prepare(`DELETE FROM shards WHERE id = ?`);
+      const deleteStmt = this.metadataDb.prepare(
+        `DELETE FROM shards WHERE id = ?`
+      );
       deleteStmt.run(shardId);
     }
   }
