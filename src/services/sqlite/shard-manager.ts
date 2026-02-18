@@ -228,7 +228,7 @@ export class ShardManager {
    * re-initialize them. This handles cases where the DB file exists but
    * was corrupted or partially created.
    */
-  ensureShardTables(shard: ShardInfo): void {
+  private ensureShardTables(shard: ShardInfo): void {
     try {
       const db = connectionManager.getConnection(shard.dbPath);
       this.initShardDb(db);
