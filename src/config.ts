@@ -214,6 +214,7 @@ const CONFIG_TEMPLATE = `{
   // Optional: Use OpenAI-compatible API for embeddings
   // "embeddingApiUrl": "https://api.openai.com/v1",
   // "embeddingApiKey": "sk-...",
+  // "embeddingModel": "text-embedding-3-small",  // 1536 dims, auto-detected
   
   // ============================================
   // Web Server Settings
@@ -393,6 +394,7 @@ ensureConfigExists();
 
 function getEmbeddingDimensions(model: string): number {
   const dimensionMap: Record<string, number> = {
+    // Local Xenova models
     "Xenova/nomic-embed-text-v1": 768,
     "Xenova/nomic-embed-text-v1-unsupervised": 768,
     "Xenova/nomic-embed-text-v1-ablated": 768,
@@ -408,6 +410,26 @@ function getEmbeddingDimensions(model: string): number {
     "Xenova/gte-small": 384,
     "Xenova/GIST-small-Embedding-v0": 384,
     "Xenova/text-embedding-ada-002": 1536,
+
+    // OpenAI API models
+    "text-embedding-3-small": 1536,
+    "text-embedding-3-large": 3072,
+    "text-embedding-ada-002": 1536,
+
+    // Cohere API models
+    "embed-english-v3.0": 1024,
+    "embed-multilingual-v3.0": 1024,
+    "embed-english-light-v3.0": 384,
+    "embed-multilingual-light-v3.0": 384,
+
+    // Google API models
+    "text-embedding-004": 768,
+    "text-multilingual-embedding-002": 768,
+
+    // Voyage AI models
+    "voyage-3": 1024,
+    "voyage-3-lite": 512,
+    "voyage-code-3": 1024,
   };
   return dimensionMap[model] || 768;
 }
