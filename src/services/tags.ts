@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { execSync } from "node:child_process";
 import { CONFIG } from "../config.js";
-import { sep, normalize, resolve, isAbsolute } from "node:path";
+import { sep, normalize, resolve, isAbsolute, basename, dirname } from "node:path";
 
 function sha256(input: string): string {
   return createHash("sha256").update(input).digest("hex").slice(0, 16);
@@ -19,7 +19,10 @@ export interface TagInfo {
 
 export function getGitEmail(): string | null {
   try {
-    const email = execSync("git config user.email", { encoding: "utf-8" }).trim();
+    const email = execSync("git config user.email", {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
     return email || null;
   } catch {
     return null;
@@ -28,7 +31,10 @@ export function getGitEmail(): string | null {
 
 export function getGitName(): string | null {
   try {
-    const name = execSync("git config user.name", { encoding: "utf-8" }).trim();
+    const name = execSync("git config user.name", {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
     return name || null;
   } catch {
     return null;
@@ -40,6 +46,7 @@ export function getGitRepoUrl(directory: string): string | null {
     const url = execSync("git config --get remote.origin.url", {
       encoding: "utf-8",
       cwd: directory,
+      stdio: ["ignore", "pipe", "ignore"],
     }).trim();
     return url || null;
   } catch {
@@ -52,6 +59,7 @@ export function getGitCommonDir(directory: string): string | null {
     const commonDir = execSync("git rev-parse --git-common-dir", {
       encoding: "utf-8",
       cwd: directory,
+      stdio: ["ignore", "pipe", "ignore"],
     }).trim();
 
     if (!commonDir) {
@@ -69,11 +77,26 @@ export function getGitTopLevel(directory: string): string | null {
     const topLevel = execSync("git rev-parse --show-toplevel", {
       encoding: "utf-8",
       cwd: directory,
+      stdio: ["ignore", "pipe", "ignore"],
     }).trim();
     return topLevel || null;
   } catch {
     return null;
   }
+}
+
+export function getProjectRoot(directory: string): string {
+  const commonDir = getGitCommonDir(directory);
+  if (commonDir && basename(commonDir) === ".git") {
+    return dirname(commonDir);
+  }
+
+  const topLevel = getGitTopLevel(directory);
+  if (topLevel) {
+    return topLevel;
+  }
+
+  return directory;
 }
 
 export function getProjectIdentity(directory: string): string {
@@ -120,15 +143,15 @@ export function getUserTagInfo(): TagInfo {
 }
 
 export function getProjectTagInfo(directory: string): TagInfo {
-  const topLevel = getGitTopLevel(directory) || directory;
-  const projectName = getProjectName(topLevel);
+  const projectRoot = getProjectRoot(directory);
+  const projectName = getProjectName(projectRoot);
   const gitRepoUrl = getGitRepoUrl(directory);
-  const projectIdentity = getProjectIdentity(directory);
+  const projectIdentity = getProjectIdentity(projectRoot);
 
   return {
     tag: `${CONFIG.containerTagPrefix}_project_${sha256(projectIdentity)}`,
-    displayName: topLevel,
-    projectPath: topLevel,
+    displayName: projectRoot,
+    projectPath: projectRoot,
     projectName,
     gitRepoUrl: gitRepoUrl || undefined,
   };
