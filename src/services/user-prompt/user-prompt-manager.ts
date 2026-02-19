@@ -1,7 +1,10 @@
-import { Database } from "bun:sqlite";
+import { getDatabase } from "../sqlite/sqlite-bootstrap.js";
 import { join } from "node:path";
 import { connectionManager } from "../sqlite/connection-manager.js";
 import { CONFIG } from "../../config.js";
+
+const Database = getDatabase();
+type DatabaseType = typeof Database.prototype;
 
 const USER_PROMPTS_DB_NAME = "user-prompts.db";
 
@@ -18,7 +21,7 @@ export interface UserPrompt {
 }
 
 export class UserPromptManager {
-  private db: Database;
+  private db: DatabaseType;
   private readonly dbPath: string;
 
   constructor() {

@@ -1,10 +1,13 @@
-import { Database } from "bun:sqlite";
+import { getDatabase } from "./sqlite-bootstrap.js";
 import { connectionManager } from "./connection-manager.js";
 import { log } from "../logger.js";
 import type { MemoryRecord, SearchResult, ShardInfo } from "./types.js";
 
+const Database = getDatabase();
+type DatabaseType = typeof Database.prototype;
+
 export class VectorSearch {
-  insertVector(db: Database, record: MemoryRecord): void {
+  insertVector(db: DatabaseType, record: MemoryRecord): void {
     const insertMemory = db.prepare(`
       INSERT INTO memories (
         id, content, vector, container_tag, tags, type, created_at, updated_at,
@@ -166,14 +169,14 @@ export class VectorSearch {
     return allResults.filter((r) => r.similarity >= similarityThreshold).slice(0, limit);
   }
 
-  deleteVector(db: Database, memoryId: string): void {
+  deleteVector(db: DatabaseType, memoryId: string): void {
     db.prepare(`DELETE FROM vec_memories WHERE memory_id = ?`).run(memoryId);
     db.prepare(`DELETE FROM vec_tags WHERE memory_id = ?`).run(memoryId);
     db.prepare(`DELETE FROM memories WHERE id = ?`).run(memoryId);
   }
 
   updateVector(
-    db: Database,
+    db: DatabaseType,
     memoryId: string,
     vector: Float32Array,
     tagsVector?: Float32Array
@@ -195,7 +198,7 @@ export class VectorSearch {
     }
   }
 
-  listMemories(db: Database, containerTag: string, limit: number): any[] {
+  listMemories(db: DatabaseType, containerTag: string, limit: number): any[] {
     const stmt = db.prepare(`
       SELECT * FROM memories 
       WHERE container_tag = ?
@@ -206,17 +209,17 @@ export class VectorSearch {
     return stmt.all(containerTag, limit) as any[];
   }
 
-  getAllMemories(db: Database): any[] {
+  getAllMemories(db: DatabaseType): any[] {
     const stmt = db.prepare(`SELECT * FROM memories ORDER BY created_at DESC`);
     return stmt.all() as any[];
   }
 
-  getMemoryById(db: Database, memoryId: string): any | null {
+  getMemoryById(db: DatabaseType, memoryId: string): any | null {
     const stmt = db.prepare(`SELECT * FROM memories WHERE id = ?`);
     return stmt.get(memoryId) as any;
   }
 
-  getMemoriesBySessionID(db: Database, sessionID: string): any[] {
+  getMemoriesBySessionID(db: DatabaseType, sessionID: string): any[] {
     const stmt = db.prepare(`
       SELECT * FROM memories 
       WHERE metadata LIKE ?
@@ -232,19 +235,19 @@ export class VectorSearch {
     }));
   }
 
-  countVectors(db: Database, containerTag: string): number {
+  countVectors(db: DatabaseType, containerTag: string): number {
     const stmt = db.prepare(`SELECT COUNT(*) as count FROM memories WHERE container_tag = ?`);
     const result = stmt.get(containerTag) as any;
     return result.count;
   }
 
-  countAllVectors(db: Database): number {
+  countAllVectors(db: DatabaseType): number {
     const stmt = db.prepare(`SELECT COUNT(*) as count FROM memories`);
     const result = stmt.get() as any;
     return result.count;
   }
 
-  getDistinctTags(db: Database): any[] {
+  getDistinctTags(db: DatabaseType): any[] {
     const stmt = db.prepare(`
       SELECT DISTINCT 
         container_tag,
@@ -259,12 +262,12 @@ export class VectorSearch {
     return stmt.all() as any[];
   }
 
-  pinMemory(db: Database, memoryId: string): void {
+  pinMemory(db: DatabaseType, memoryId: string): void {
     const stmt = db.prepare(`UPDATE memories SET is_pinned = 1 WHERE id = ?`);
     stmt.run(memoryId);
   }
 
-  unpinMemory(db: Database, memoryId: string): void {
+  unpinMemory(db: DatabaseType, memoryId: string): void {
     const stmt = db.prepare(`UPDATE memories SET is_pinned = 0 WHERE id = ?`);
     stmt.run(memoryId);
   }

@@ -1,14 +1,17 @@
-import { Database } from "bun:sqlite";
+import { getDatabase } from "../sqlite/sqlite-bootstrap.js";
 import { join } from "node:path";
 import { connectionManager } from "../sqlite/connection-manager.js";
 import { CONFIG } from "../../config.js";
 import type { UserProfile, UserProfileChangelog, UserProfileData } from "./types.js";
 import { safeArray, safeObject } from "./profile-utils.js";
 
+const Database = getDatabase();
+type DatabaseType = typeof Database.prototype;
+
 const USER_PROFILES_DB_NAME = "user-profiles.db";
 
 export class UserProfileManager {
-  private db: Database;
+  private db: DatabaseType;
   private readonly dbPath: string;
 
   constructor() {

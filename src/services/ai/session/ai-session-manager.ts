@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { getDatabase } from "../../sqlite/sqlite-bootstrap.js";
 import { join } from "node:path";
 import type {
   AISession,
@@ -10,10 +10,13 @@ import type {
 import { connectionManager } from "../../sqlite/connection-manager.js";
 import { CONFIG } from "../../../config.js";
 
+const Database = getDatabase();
+type DatabaseType = typeof Database.prototype;
+
 const AI_SESSIONS_DB_NAME = "ai-sessions.db";
 
 export class AISessionManager {
-  private db: Database;
+  private db: DatabaseType;
   private readonly dbPath: string;
   private readonly sessionRetentionMs: number;
 

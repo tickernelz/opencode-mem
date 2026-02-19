@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { getDatabase } from "./sqlite-bootstrap.js";
 import { join, basename, isAbsolute } from "node:path";
 import { existsSync } from "node:fs";
 import { CONFIG } from "../../config.js";
@@ -6,10 +6,13 @@ import { connectionManager } from "./connection-manager.js";
 import { log } from "../logger.js";
 import type { ShardInfo } from "./types.js";
 
+const Database = getDatabase();
+type DatabaseType = typeof Database.prototype;
+
 const METADATA_DB_NAME = "metadata.db";
 
 export class ShardManager {
-  private metadataDb: Database;
+  private metadataDb: DatabaseType;
   private metadataPath: string;
 
   constructor() {
@@ -130,7 +133,7 @@ export class ShardManager {
     };
   }
 
-  private initShardDb(db: Database): void {
+  private initShardDb(db: DatabaseType): void {
     db.run(`
       CREATE TABLE IF NOT EXISTS shard_metadata (
         key TEXT PRIMARY KEY,
@@ -202,9 +205,7 @@ export class ShardManager {
     try {
       const db = connectionManager.getConnection(shard.dbPath);
       const result = db
-        .prepare(
-          `SELECT name FROM sqlite_master WHERE type='table' AND name='memories'`
-        )
+        .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='memories'`)
         .get() as any;
       if (!result) {
         log("Shard DB missing 'memories' table", {
@@ -260,9 +261,7 @@ export class ShardManager {
       connectionManager.closeConnection(shard.dbPath);
 
       // Remove the stale metadata record
-      const deleteStmt = this.metadataDb.prepare(
-        `DELETE FROM shards WHERE id = ?`
-      );
+      const deleteStmt = this.metadataDb.prepare(`DELETE FROM shards WHERE id = ?`);
       deleteStmt.run(shard.id);
 
       // Create a fresh shard with the same index
@@ -300,9 +299,7 @@ export class ShardManager {
 
   getShardByPath(dbPath: string): ShardInfo | null {
     const fileName = basename(dbPath);
-    const stmt = this.metadataDb.prepare(
-      `SELECT * FROM shards WHERE db_path LIKE '%' || ?`
-    );
+    const stmt = this.metadataDb.prepare(`SELECT * FROM shards WHERE db_path LIKE '%' || ?`);
     const row = stmt.get(fileName) as any;
     if (!row) return null;
 
@@ -338,9 +335,7 @@ export class ShardManager {
         });
       }
 
-      const deleteStmt = this.metadataDb.prepare(
-        `DELETE FROM shards WHERE id = ?`
-      );
+      const deleteStmt = this.metadataDb.prepare(`DELETE FROM shards WHERE id = ?`);
       deleteStmt.run(shardId);
     }
   }
