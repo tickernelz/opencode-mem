@@ -32,7 +32,7 @@ Add to your OpenCode configuration at `~/.config/opencode/opencode.json`:
 }
 ```
 
-The plugin downloads automatically on next startup. macOS users with Apple Silicon must install Homebrew SQLite and configure the custom path.
+The plugin downloads automatically on next startup. On macOS, the plugin automatically downloads a compatible SQLite library during installation. If the download fails, install Homebrew SQLite as fallback: `brew install sqlite`
 
 ## Usage Examples
 

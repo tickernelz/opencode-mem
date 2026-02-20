@@ -21,7 +21,6 @@ if (!existsSync(DATA_DIR)) {
 
 interface OpenCodeMemConfig {
   storagePath?: string;
-  customSqlitePath?: string;
   userEmailOverride?: string;
   userNameOverride?: string;
   embeddingModel?: string;
@@ -83,7 +82,6 @@ const DEFAULTS: Required<
     | "memoryApiKey"
     | "memoryProvider"
     | "memoryTemperature"
-    | "customSqlitePath"
     | "autoCaptureLanguage"
     | "userEmailOverride"
     | "userNameOverride"
@@ -96,7 +94,6 @@ const DEFAULTS: Required<
   memoryApiKey?: string;
   memoryProvider?: "openai-chat" | "openai-responses" | "anthropic";
   memoryTemperature?: number | false;
-  customSqlitePath?: string;
   autoCaptureLanguage?: string;
   userEmailOverride?: string;
   userNameOverride?: string;
@@ -178,22 +175,6 @@ const CONFIG_TEMPLATE = `{
 
   "userEmailOverride": "",
   "userNameOverride": "",
-  
-  // ============================================
-  // macOS SQLite Extension Loading (REQUIRED FOR macOS)
-  // ============================================
-  
-  // macOS users MUST set this to use Homebrew SQLite instead of Apple's SQLite
-  // Apple's SQLite disables extension loading which breaks sqlite-vec
-  // 
-  // Common paths:
-  // - Homebrew (Intel):      "/usr/local/opt/sqlite/lib/libsqlite3.dylib"
-  // - Homebrew (Apple Silicon): "/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib"
-  // 
-  // To install: brew install sqlite
-  // To find path: brew --prefix sqlite
-  // 
-  // "customSqlitePath": "/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib",
   
   // ============================================
   // Embedding Model (for similarity search)
@@ -436,9 +417,6 @@ function getEmbeddingDimensions(model: string): number {
 
 export const CONFIG = {
   storagePath: expandPath(fileConfig.storagePath ?? DEFAULTS.storagePath),
-  customSqlitePath: fileConfig.customSqlitePath
-    ? expandPath(fileConfig.customSqlitePath)
-    : undefined,
   userEmailOverride: fileConfig.userEmailOverride,
   userNameOverride: fileConfig.userNameOverride,
   embeddingModel: fileConfig.embeddingModel ?? DEFAULTS.embeddingModel,

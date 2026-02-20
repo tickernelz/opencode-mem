@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,js,css,html}\"",
     "format:check": "prettier --check \"src/**/*.{ts,js,css,html}\"",
-    "prepare": "husky"
+    "prepare": "husky",
+    "postinstall": "bun run scripts/download-sqlite.ts"
   },
   "keywords": [
     "opencode",
@@ -56,6 +57,7 @@
   "files": [
     "dist",
     "native",
+    "scripts",
     "package.json"
   ],
   "lint-staged": {

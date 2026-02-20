@@ -26,8 +26,7 @@ export class ConnectionManager {
           `This usually means SQLite extension loading is disabled.\n` +
           `On macOS, you must use Homebrew SQLite instead of Apple's SQLite.\n\n` +
           `Solution:\n` +
-          `1. Install: brew install sqlite\n` +
-          `2. Configure customSqlitePath in ~/.config/opencode/opencode-mem.jsonc`
+          `  brew install sqlite`
       );
     }
 

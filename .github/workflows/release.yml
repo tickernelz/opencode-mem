@@ -6,8 +6,62 @@ on:
       - 'v*'
 
 jobs:
+  build-sqlite:
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            runs-on: macos-15
+          - arch: x64
+            runs-on: macos-15-intel
+    
+    steps:
+      - name: Get latest SQLite version
+        id: sqlite-version
+        run: |
+          VERSION=$(curl -sL https://sqlite.org/download.html | grep -oP 'sqlite-amalgamation-\K[0-9]+' | head -1)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "SQLite version: $VERSION"
+      
+      - name: Download SQLite amalgamation
+        run: |
+          curl -LO "https://sqlite.org/sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}.zip"
+          unzip "sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}.zip"
+      
+      - name: Build dylib
+        run: |
+          cd "sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}"
+          gcc -dynamiclib \
+            -o libsqlite3.dylib \
+            sqlite3.c \
+            -DSQLITE_ENABLE_LOAD_EXTENSION=1 \
+            -DSQLITE_ENABLE_FTS5 \
+            -DSQLITE_ENABLE_RTREE \
+            -DSQLITE_ENABLE_GEOPOLY \
+            -install_name @rpath/libsqlite3.dylib \
+            -lpthread -ldl -lm
+      
+      - name: Verify dylib
+        run: |
+          cd "sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}"
+          echo "Install name:"
+          otool -D libsqlite3.dylib
+          echo "Dependencies:"
+          otool -L libsqlite3.dylib
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libsqlite3-darwin-${{ matrix.arch }}
+          path: "sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}/libsqlite3.dylib"
+          retention-days: 1
+
   release:
+    needs: build-sqlite
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -29,3 +83,20 @@ jobs:
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Download dylib artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          mv artifacts/libsqlite3-darwin-arm64/libsqlite3.dylib release-assets/libsqlite3-darwin-arm64.dylib
+          mv artifacts/libsqlite3-darwin-x64/libsqlite3.dylib release-assets/libsqlite3-darwin-x64.dylib
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release-assets/*.dylib

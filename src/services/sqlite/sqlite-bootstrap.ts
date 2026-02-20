@@ -6,32 +6,20 @@
  * instantiated, which is required for custom SQLite paths to work on macOS.
  *
  * Issue: https://github.com/tickernelz/opencode-mem/issues/34
+ * Issue: https://github.com/tickernelz/opencode-mem/issues/37
  *
  * Loading priority:
- * 1. Bundled dylib (native/darwin-{arch}/libsqlite3.dylib)
+ * 1. Bundled dylib (native/darwin-{arch}/libsqlite3.dylib) - downloaded via postinstall
  * 2. Homebrew SQLite (auto-detected common paths)
- * 3. Custom path from config (customSqlitePath)
  */
 
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { stripJsoncComments } from "../jsonc.js";
 
 let Database: typeof import("bun:sqlite").Database;
 let sqliteConfigured = false;
 let sqliteSource: string | null = null;
-
-const CONFIG_DIR = join(homedir(), ".config", "opencode");
-const CONFIG_FILES = [
-  join(CONFIG_DIR, "opencode-mem.jsonc"),
-  join(CONFIG_DIR, "opencode-mem.json"),
-];
-
-interface SqliteConfig {
-  customSqlitePath?: string;
-}
 
 function getBundledSqlitePath(): string | null {
   if (process.platform !== "darwin") return null;
@@ -57,29 +45,6 @@ function getBundledSqlitePath(): string | null {
   } catch {}
 
   return null;
-}
-
-function loadSqliteConfig(): SqliteConfig {
-  for (const path of CONFIG_FILES) {
-    if (existsSync(path)) {
-      try {
-        const content = require("node:fs").readFileSync(path, "utf-8");
-        const json = stripJsoncComments(content);
-        return JSON.parse(json) as SqliteConfig;
-      } catch {}
-    }
-  }
-  return {};
-}
-
-function expandPath(path: string): string {
-  if (path.startsWith("~/")) {
-    return join(homedir(), path.slice(2));
-  }
-  if (path === "~") {
-    return homedir();
-  }
-  return path;
 }
 
 function getHomebrewSqlitePath(): string | null {
@@ -113,9 +78,6 @@ export function configureSqlite(): void {
     return;
   }
 
-  const config = loadSqliteConfig();
-  const customPath = config.customSqlitePath ? expandPath(config.customSqlitePath) : undefined;
-
   const trySetCustomSQLite = (path: string, source: string): boolean => {
     try {
       Database.setCustomSQLite(path);
@@ -130,7 +92,6 @@ export function configureSqlite(): void {
     }
   };
 
-  // Priority 1: Bundled dylib
   const bundledPath = getBundledSqlitePath();
   if (bundledPath) {
     if (trySetCustomSQLite(bundledPath, "bundled")) {
@@ -139,24 +100,6 @@ export function configureSqlite(): void {
     }
   }
 
-  // Priority 2: Custom path from config
-  if (customPath) {
-    if (!existsSync(customPath)) {
-      throw new Error(
-        `Custom SQLite library not found at: ${customPath}\n` +
-          `Please verify the path or install Homebrew SQLite:\n` +
-          `  brew install sqlite\n` +
-          `  brew --prefix sqlite`
-      );
-    }
-
-    if (trySetCustomSQLite(customPath, "custom")) {
-      sqliteConfigured = true;
-      return;
-    }
-  }
-
-  // Priority 3: Homebrew SQLite
   const homebrewPath = getHomebrewSqlitePath();
   if (homebrewPath) {
     if (trySetCustomSQLite(homebrewPath, "homebrew")) {
@@ -165,19 +108,12 @@ export function configureSqlite(): void {
     }
   }
 
-  // No compatible SQLite found
   throw new Error(
     `macOS detected but no compatible SQLite library found.\n\n` +
       `Apple's default SQLite does not support extension loading.\n` +
-      `Solutions:\n\n` +
-      `Option 1 - Install Homebrew SQLite (recommended):\n` +
+      `Solution:\n\n` +
+      `Install Homebrew SQLite:\n` +
       `  brew install sqlite\n\n` +
-      `Option 2 - Download manually and configure:\n` +
-      `  1. Download SQLite with extension support\n` +
-      `  2. Add to ~/.config/opencode/opencode-mem.jsonc:\n` +
-      `     {\n` +
-      `       "customSqlitePath": "/path/to/libsqlite3.dylib"\n` +
-      `     }\n\n` +
       `Common Homebrew paths:\n` +
       `  - Apple Silicon: /opt/homebrew/opt/sqlite/lib/libsqlite3.dylib\n` +
       `  - Intel Mac:     /usr/local/opt/sqlite/lib/libsqlite3.dylib`
