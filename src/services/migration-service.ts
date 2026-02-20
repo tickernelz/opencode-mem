@@ -259,22 +259,26 @@ export class MigrationService {
             const newShard = shardManager.getWriteShard(scope, hash);
             const newDb = connectionManager.getConnection(newShard.dbPath);
 
-            vectorSearch.insertVector(newDb, {
-              id: memory.id,
-              content: memory.content,
-              vector,
-              containerTag: memory.containerTag,
-              type: memory.type || undefined,
-              createdAt: memory.createdAt,
-              updatedAt: memory.updatedAt,
-              metadata: memory.metadata || undefined,
-              displayName: memory.displayName || undefined,
-              userName: memory.userName || undefined,
-              userEmail: memory.userEmail || undefined,
-              projectPath: memory.projectPath || undefined,
-              projectName: memory.projectName || undefined,
-              gitRepoUrl: memory.gitRepoUrl || undefined,
-            });
+            vectorSearch.insertVector(
+              newDb,
+              {
+                id: memory.id,
+                content: memory.content,
+                vector,
+                containerTag: memory.containerTag,
+                type: memory.type || undefined,
+                createdAt: memory.createdAt,
+                updatedAt: memory.updatedAt,
+                metadata: memory.metadata || undefined,
+                displayName: memory.displayName || undefined,
+                userName: memory.userName || undefined,
+                userEmail: memory.userEmail || undefined,
+                projectPath: memory.projectPath || undefined,
+                projectName: memory.projectName || undefined,
+                gitRepoUrl: memory.gitRepoUrl || undefined,
+              },
+              newShard
+            );
 
             if (memory.isPinned === 1) {
               vectorSearch.pinMemory(newDb, memory.id);

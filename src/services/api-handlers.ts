@@ -327,7 +327,7 @@ export async function handleAddMemory(data: {
       metadata: JSON.stringify({ source: "api" }),
     };
     const db = connectionManager.getConnection(shard.dbPath);
-    vectorSearch.insertVector(db, record);
+    vectorSearch.insertVector(db, record, shard);
     shardManager.incrementVectorCount(shard.id);
     return { success: true, data: { id } };
   } catch (error) {
@@ -352,7 +352,7 @@ export async function handleDeleteMemory(
           const linkedPromptId = metadata?.promptId;
           if (linkedPromptId) userPromptManager.deletePrompt(linkedPromptId);
         }
-        vectorSearch.deleteVector(db, id);
+        await vectorSearch.deleteVector(db, id, shard);
         shardManager.decrementVectorCount(shard.id);
         return {
           success: true,
@@ -406,7 +406,7 @@ export async function handleUpdateMemory(
     }
     if (!foundShard || !existingMemory) return { success: false, error: "Memory not found" };
     const db = connectionManager.getConnection(foundShard.dbPath);
-    vectorSearch.deleteVector(db, id);
+    await vectorSearch.deleteVector(db, id, foundShard);
     shardManager.decrementVectorCount(foundShard.id);
 
     const newContent = data.content || existingMemory.content;
@@ -436,7 +436,7 @@ export async function handleUpdateMemory(
       projectName: existingMemory.project_name,
       gitRepoUrl: existingMemory.git_repo_url,
     };
-    vectorSearch.insertVector(db, updatedRecord);
+    vectorSearch.insertVector(db, updatedRecord, foundShard);
     shardManager.incrementVectorCount(foundShard.id);
     return { success: true };
   } catch (error) {
@@ -497,7 +497,7 @@ export async function handleSearch(
       const shards = shardManager.getAllShards(scope, hash);
       for (const shard of shards) {
         try {
-          const results = vectorSearch.searchInShard(shard, queryVector, tag, pageSize * 2);
+          const results = await vectorSearch.searchInShard(shard, queryVector, tag, pageSize * 2);
           memoryResults.push(...results);
         } catch (error) {
           log("Shard search error", { shardId: shard.id, error: String(error) });
@@ -520,7 +520,12 @@ export async function handleSearch(
         const shards = shardManager.getAllShards(scope, hash);
         for (const shard of shards) {
           try {
-            const results = vectorSearch.searchInShard(shard, queryVector, containerTag, pageSize);
+            const results = await vectorSearch.searchInShard(
+              shard,
+              queryVector,
+              containerTag,
+              pageSize
+            );
             memoryResults.push(...results);
           } catch (error) {
             log("Shard search error", { shardId: shard.id, error: String(error) });
@@ -1053,21 +1058,10 @@ export async function handleRunTagMigrationBatch(
           m.id
         );
 
-        db.prepare("DELETE FROM vec_memories WHERE memory_id = ?").run(m.id);
-        db.prepare("INSERT INTO vec_memories (memory_id, embedding) VALUES (?, ?)").run(
-          m.id,
-          vectorBuffer
-        );
-
-        if (currentTags.length > 0) {
-          const tagsVector = await embeddingService.embedWithTimeout(currentTags.join(", "));
-          const tagsVectorBuffer = new Uint8Array(tagsVector.buffer);
-          db.prepare("DELETE FROM vec_tags WHERE memory_id = ?").run(m.id);
-          db.prepare("INSERT INTO vec_tags (memory_id, embedding) VALUES (?, ?)").run(
-            m.id,
-            tagsVectorBuffer
-          );
-        }
+        const index = vectorSearch
+          .getIndexManager()
+          .getIndex(shard.scope, shard.scopeHash, shard.shardIndex);
+        await index.insert(m.id, vector);
 
         migrationProgress.processed++;
         batchProcessed++;

@@ -1,13 +1,17 @@
 import { getDatabase } from "./sqlite-bootstrap.js";
 import { connectionManager } from "./connection-manager.js";
+import { HNSWIndexManager } from "./hnsw-index.js";
 import { log } from "../logger.js";
+import { CONFIG } from "../../config.js";
 import type { MemoryRecord, SearchResult, ShardInfo } from "./types.js";
 
 const Database = getDatabase();
 type DatabaseType = typeof Database.prototype;
 
+const hnswIndexManager = new HNSWIndexManager(CONFIG.storagePath);
+
 export class VectorSearch {
-  insertVector(db: DatabaseType, record: MemoryRecord): void {
+  insertVector(db: DatabaseType, record: MemoryRecord, shard?: ShardInfo): void {
     const insertMemory = db.prepare(`
       INSERT INTO memories (
         id, content, vector, container_tag, tags, type, created_at, updated_at,
@@ -35,60 +39,30 @@ export class VectorSearch {
       record.gitRepoUrl || null
     );
 
-    const insertVec = db.prepare(`
-      INSERT INTO vec_memories (memory_id, embedding) VALUES (?, ?)
-    `);
-    insertVec.run(record.id, vectorBuffer);
-
-    if (record.tagsVector) {
-      const tagsVectorBuffer = new Uint8Array(record.tagsVector.buffer);
-      const insertTagsVec = db.prepare(`
-        INSERT INTO vec_tags (memory_id, embedding) VALUES (?, ?)
-      `);
-      insertTagsVec.run(record.id, tagsVectorBuffer);
+    if (shard && record.vector) {
+      const index = hnswIndexManager.getIndex(shard.scope, shard.scopeHash, shard.shardIndex);
+      index.insert(record.id, record.vector).catch((err) => {
+        log("HNSW insert error", { memoryId: record.id, error: String(err) });
+      });
     }
   }
 
-  searchInShard(
+  async searchInShard(
     shard: ShardInfo,
     queryVector: Float32Array,
     containerTag: string,
     limit: number,
     queryText?: string
-  ): SearchResult[] {
+  ): Promise<SearchResult[]> {
     const db = connectionManager.getConnection(shard.dbPath);
-    const queryBuffer = new Uint8Array(queryVector.buffer);
+    const index = hnswIndexManager.getIndex(shard.scope, shard.scopeHash, shard.shardIndex);
 
-    const contentResults = db
-      .prepare(
-        `
-      SELECT memory_id, distance FROM vec_memories 
-      WHERE embedding MATCH ? AND k = ?
-      ORDER BY distance
-    `
-      )
-      .all(queryBuffer, limit * 4) as any[];
-
-    const tagsResults = db
-      .prepare(
-        `
-      SELECT memory_id, distance FROM vec_tags 
-      WHERE embedding MATCH ? AND k = ?
-      ORDER BY distance
-    `
-      )
-      .all(queryBuffer, limit * 4) as any[];
+    const contentResults = await index.search(queryVector, limit * 4);
 
     const scoreMap = new Map<string, { contentSim: number; tagsSim: number }>();
 
     for (const r of contentResults) {
-      scoreMap.set(r.memory_id, { contentSim: 1 - r.distance, tagsSim: 0 });
-    }
-
-    for (const r of tagsResults) {
-      const entry = scoreMap.get(r.memory_id) || { contentSim: 0, tagsSim: 0 };
-      entry.tagsSim = 1 - r.distance;
-      scoreMap.set(r.memory_id, entry);
+      scoreMap.set(r.id, { contentSim: 1 - r.distance, tagsSim: 0 });
     }
 
     const ids = Array.from(scoreMap.keys());
@@ -155,7 +129,7 @@ export class VectorSearch {
   ): Promise<SearchResult[]> {
     const shardPromises = shards.map(async (shard) => {
       try {
-        return this.searchInShard(shard, queryVector, containerTag, limit, queryText);
+        return await this.searchInShard(shard, queryVector, containerTag, limit, queryText);
       } catch (error) {
         log("Shard search error", { shardId: shard.id, error: String(error) });
         return [];
@@ -169,32 +143,28 @@ export class VectorSearch {
     return allResults.filter((r) => r.similarity >= similarityThreshold).slice(0, limit);
   }
 
-  deleteVector(db: DatabaseType, memoryId: string): void {
-    db.prepare(`DELETE FROM vec_memories WHERE memory_id = ?`).run(memoryId);
-    db.prepare(`DELETE FROM vec_tags WHERE memory_id = ?`).run(memoryId);
+  async deleteVector(db: DatabaseType, memoryId: string, shard?: ShardInfo): Promise<void> {
     db.prepare(`DELETE FROM memories WHERE id = ?`).run(memoryId);
+
+    if (shard) {
+      const index = hnswIndexManager.getIndex(shard.scope, shard.scopeHash, shard.shardIndex);
+      await index.delete(memoryId);
+    }
   }
 
-  updateVector(
+  async updateVector(
     db: DatabaseType,
     memoryId: string,
     vector: Float32Array,
+    shard?: ShardInfo,
     tagsVector?: Float32Array
-  ): void {
+  ): Promise<void> {
     const vectorBuffer = new Uint8Array(vector.buffer);
-    db.prepare(`DELETE FROM vec_memories WHERE memory_id = ?`).run(memoryId);
-    db.prepare(`INSERT INTO vec_memories (memory_id, embedding) VALUES (?, ?)`).run(
-      memoryId,
-      vectorBuffer
-    );
+    db.prepare(`UPDATE memories SET vector = ? WHERE id = ?`).run(vectorBuffer, memoryId);
 
-    if (tagsVector) {
-      const tagsVectorBuffer = new Uint8Array(tagsVector.buffer);
-      db.prepare(`DELETE FROM vec_tags WHERE memory_id = ?`).run(memoryId);
-      db.prepare(`INSERT INTO vec_tags (memory_id, embedding) VALUES (?, ?)`).run(
-        memoryId,
-        tagsVectorBuffer
-      );
+    if (shard && vector) {
+      const index = hnswIndexManager.getIndex(shard.scope, shard.scopeHash, shard.shardIndex);
+      await index.insert(memoryId, vector);
     }
   }
 
@@ -270,6 +240,19 @@ export class VectorSearch {
   unpinMemory(db: DatabaseType, memoryId: string): void {
     const stmt = db.prepare(`UPDATE memories SET is_pinned = 0 WHERE id = ?`);
     stmt.run(memoryId);
+  }
+
+  async rebuildHNSWIndex(
+    db: DatabaseType,
+    scope: string,
+    scopeHash: string,
+    shardIndex: number
+  ): Promise<void> {
+    await hnswIndexManager.rebuildFromShard(db, scope, scopeHash, shardIndex);
+  }
+
+  getIndexManager(): HNSWIndexManager {
+    return hnswIndexManager;
   }
 }
 

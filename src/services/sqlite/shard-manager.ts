@@ -1,5 +1,5 @@
 import { getDatabase } from "./sqlite-bootstrap.js";
-import { join, basename, isAbsolute } from "node:path";
+import { join, basename } from "node:path";
 import { existsSync } from "node:fs";
 import { CONFIG } from "../../config.js";
 import { connectionManager } from "./connection-manager.js";
@@ -156,6 +156,7 @@ export class ShardManager {
         id TEXT PRIMARY KEY,
         content TEXT NOT NULL,
         vector BLOB NOT NULL,
+        tags_vector BLOB,
         container_tag TEXT NOT NULL,
         tags TEXT,
         type TEXT,
@@ -172,30 +173,12 @@ export class ShardManager {
       )
     `);
 
-    db.run(`
-      CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories USING vec0(
-        memory_id TEXT PRIMARY KEY,
-        embedding float32[${CONFIG.embeddingDimensions}] distance_metric=cosine
-      )
-    `);
-
-    db.run(`
-      CREATE VIRTUAL TABLE IF NOT EXISTS vec_tags USING vec0(
-        memory_id TEXT PRIMARY KEY,
-        embedding float32[${CONFIG.embeddingDimensions}] distance_metric=cosine
-      )
-    `);
-
     db.run(`CREATE INDEX IF NOT EXISTS idx_container_tag ON memories(container_tag)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_type ON memories(type)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_created_at ON memories(created_at DESC)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_is_pinned ON memories(is_pinned)`);
   }
 
-  /**
-   * Check if the shard DB file exists and contains the required 'memories' table.
-   * Returns false if the file is missing or the table doesn't exist.
-   */
   private isShardValid(shard: ShardInfo): boolean {
     if (!existsSync(shard.dbPath)) {
       log("Shard DB file missing", { dbPath: shard.dbPath, shardId: shard.id });
@@ -224,11 +207,6 @@ export class ShardManager {
     }
   }
 
-  /**
-   * Ensure the shard DB has all required tables. If tables are missing,
-   * re-initialize them. This handles cases where the DB file exists but
-   * was corrupted or partially created.
-   */
   private ensureShardTables(shard: ShardInfo): void {
     try {
       const db = connectionManager.getConnection(shard.dbPath);
@@ -248,7 +226,6 @@ export class ShardManager {
       return this.createShard(scope, scopeHash, 0);
     }
 
-    // Validate that the shard DB file exists and has required tables
     if (!this.isShardValid(shard)) {
       log("Active shard is invalid, recreating", {
         scope,
@@ -257,14 +234,11 @@ export class ShardManager {
         dbPath: shard.dbPath,
       });
 
-      // Close any cached connection to the invalid shard
       connectionManager.closeConnection(shard.dbPath);
 
-      // Remove the stale metadata record
       const deleteStmt = this.metadataDb.prepare(`DELETE FROM shards WHERE id = ?`);
       deleteStmt.run(shard.id);
 
-      // Create a fresh shard with the same index
       return this.createShard(scope, scopeHash, shard.shardIndex);
     }
 

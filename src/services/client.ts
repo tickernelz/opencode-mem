@@ -195,7 +195,7 @@ export class LocalMemoryClient {
       };
 
       const db = connectionManager.getConnection(shard.dbPath);
-      vectorSearch.insertVector(db, record);
+      vectorSearch.insertVector(db, record, shard);
       shardManager.incrementVectorCount(shard.id);
 
       return { success: true as const, id };
@@ -219,7 +219,7 @@ export class LocalMemoryClient {
         const memory = vectorSearch.getMemoryById(db, memoryId);
 
         if (memory) {
-          vectorSearch.deleteVector(db, memoryId);
+          await vectorSearch.deleteVector(db, memoryId, shard);
           shardManager.decrementVectorCount(shard.id);
           return { success: true };
         }

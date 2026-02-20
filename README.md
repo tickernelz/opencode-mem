@@ -20,7 +20,7 @@ A persistent memory system for AI coding agents that enables long-term context r
 
 ## Core Features
 
-Local vector database with SQLite, persistent project memories, automatic user profile learning, unified memory-prompt timeline, full-featured web UI, intelligent prompt-based memory extraction, multi-provider AI support (OpenAI, Anthropic), 12+ local embedding models, smart deduplication, and built-in privacy protection.
+Local vector database with SQLite + HNSW (hnswlib-wasm), persistent project memories, automatic user profile learning, unified memory-prompt timeline, full-featured web UI, intelligent prompt-based memory extraction, multi-provider AI support (OpenAI, Anthropic), 12+ local embedding models, smart deduplication, and built-in privacy protection.
 
 ## Getting Started
 
@@ -32,7 +32,7 @@ Add to your OpenCode configuration at `~/.config/opencode/opencode.json`:
 }
 ```
 
-The plugin downloads automatically on next startup. On macOS, the plugin automatically downloads a compatible SQLite library during installation. If the download fails, install Homebrew SQLite as fallback: `brew install sqlite`
+The plugin downloads automatically on next startup. No additional dependencies required - vector search is powered by pure WASM for cross-platform compatibility.
 
 ## Usage Examples
 

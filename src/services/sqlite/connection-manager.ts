@@ -17,19 +17,6 @@ export class ConnectionManager {
     db.run("PRAGMA temp_store = MEMORY");
     db.run("PRAGMA foreign_keys = ON");
 
-    try {
-      const result = db.prepare("SELECT vec_version()").all() as any[];
-      if (!result || result.length === 0) {
-        throw new Error("vec_version() returned no result");
-      }
-    } catch (error) {
-      throw new Error(
-        `sqlite-vec extension not available: ${error}\n\n` +
-          `The bundled SQLite dylib should have sqlite-vec built-in.\n` +
-          `Try reinstalling opencode-mem or report this issue.`
-      );
-    }
-
     this.migrateSchema(db);
   }
 
@@ -41,13 +28,6 @@ export class ConnectionManager {
       if (!hasTags && columns.length > 0) {
         db.run("ALTER TABLE memories ADD COLUMN tags TEXT");
       }
-
-      db.run(`
-        CREATE VIRTUAL TABLE IF NOT EXISTS vec_tags USING vec0(
-          memory_id TEXT PRIMARY KEY,
-          embedding float32[${CONFIG.embeddingDimensions}] distance_metric=cosine
-        )
-      `);
     } catch (error) {
       log("Schema migration error", { error: String(error) });
     }
