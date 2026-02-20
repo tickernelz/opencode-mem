@@ -20,17 +20,20 @@ jobs:
       - name: Get latest SQLite version
         id: sqlite-version
         run: |
-          VERSION=$(curl -sL https://sqlite.org/download.html | grep -o 'sqlite-amalgamation-[0-9]*' | head -1 | sed 's/sqlite-amalgamation-//')
-          if [ -z "$VERSION" ]; then
-            echo "Failed to extract SQLite version"
+          DOWNLOAD_PATH=$(curl -sL https://sqlite.org/download.html | grep -o '[0-9]*/sqlite-amalgamation-[0-9]*\.zip' | head -1)
+          if [ -z "$DOWNLOAD_PATH" ]; then
+            echo "Failed to extract SQLite download path"
             exit 1
           fi
+          VERSION=$(echo "$DOWNLOAD_PATH" | grep -o 'sqlite-amalgamation-[0-9]*' | sed 's/sqlite-amalgamation-//')
+          YEAR=$(echo "$DOWNLOAD_PATH" | cut -d'/' -f1)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "SQLite version: $VERSION"
+          echo "year=$YEAR" >> $GITHUB_OUTPUT
+          echo "SQLite version: $VERSION, year: $YEAR"
       
       - name: Download SQLite amalgamation
         run: |
-          curl -LO "https://sqlite.org/sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}.zip"
+          curl -LO "https://sqlite.org/${{ steps.sqlite-version.outputs.year }}/sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}.zip"
           unzip "sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}.zip"
       
       - name: Build dylib
