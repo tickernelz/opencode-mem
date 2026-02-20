@@ -168,7 +168,7 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
           model: this.config.model,
           messages,
           tools: [toolSchema],
-          tool_choice: { type: "function", function: { name: toolSchema.function.name } },
+          tool_choice: "auto",
         };
 
         if (this.config.memoryTemperature !== false) {
@@ -218,9 +218,26 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
           };
         }
 
-        const data = (await response.json()) as ToolCallResponse;
+        const data = (await response.json()) as any;
+
+        if (data.status && data.msg) {
+          log("API returned error in response body", {
+            status: data.status,
+            msg: data.msg,
+          });
+          return {
+            success: false,
+            error: `API error: ${data.status} - ${data.msg}`,
+            iterations,
+          };
+        }
 
         if (!data.choices || !data.choices[0]) {
+          log("Invalid API response format", {
+            response: JSON.stringify(data).slice(0, 1000),
+            hasChoices: !!data.choices,
+            choicesLength: data.choices?.length,
+          });
           return {
             success: false,
             error: "Invalid API response format",
