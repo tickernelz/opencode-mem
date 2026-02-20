@@ -20,7 +20,11 @@ jobs:
       - name: Get latest SQLite version
         id: sqlite-version
         run: |
-          VERSION=$(curl -sL https://sqlite.org/download.html | grep -oP 'sqlite-amalgamation-\K[0-9]+' | head -1)
+          VERSION=$(curl -sL https://sqlite.org/download.html | grep -o 'sqlite-amalgamation-[0-9]*' | head -1 | sed 's/sqlite-amalgamation-//')
+          if [ -z "$VERSION" ]; then
+            echo "Failed to extract SQLite version"
+            exit 1
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "SQLite version: $VERSION"
       
