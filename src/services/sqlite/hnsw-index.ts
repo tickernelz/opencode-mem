@@ -186,42 +186,75 @@ export class HNSWIndexManager {
     return this.indexes.get(key)!;
   }
 
+  getTagsIndex(scope: string, scopeHash: string, shardIndex: number): HNSWIndex {
+    const key = `${scope}_${scopeHash}_${shardIndex}_tags`;
+
+    if (!this.indexes.has(key)) {
+      const indexPath = join(this.baseDir, scope + "s", `${key}.hnsw`);
+      this.indexes.set(key, new HNSWIndex(CONFIG.embeddingDimensions, indexPath));
+    }
+
+    return this.indexes.get(key)!;
+  }
+
   async rebuildFromShard(
     db: any,
     scope: string,
     scopeHash: string,
     shardIndex: number
   ): Promise<void> {
-    const index = this.getIndex(scope, scopeHash, shardIndex);
+    const contentIndex = this.getIndex(scope, scopeHash, shardIndex);
+    const tagsIndex = this.getTagsIndex(scope, scopeHash, shardIndex);
 
-    const rows = db.prepare("SELECT id, vector FROM memories").all() as any[];
+    const rows = db.prepare("SELECT id, vector, tags_vector FROM memories").all() as any[];
 
-    const items: HNSWIndexData[] = [];
+    const contentItems: HNSWIndexData[] = [];
+    const tagsItems: HNSWIndexData[] = [];
+
     for (const row of rows) {
       if (row.vector) {
         const vector = new Float32Array(row.vector.buffer);
-        items.push({ id: row.id, vector });
+        contentItems.push({ id: row.id, vector });
+      }
+      if (row.tags_vector) {
+        const tagsVector = new Float32Array(row.tags_vector.buffer);
+        tagsItems.push({ id: row.id, vector: tagsVector });
       }
     }
 
-    if (items.length > 0) {
-      await index.insertBatch(items);
-      log("HNSW index rebuilt", { scope, scopeHash, shardIndex, count: items.length });
+    if (contentItems.length > 0) {
+      await contentIndex.insertBatch(contentItems);
     }
+    if (tagsItems.length > 0) {
+      await tagsIndex.insertBatch(tagsItems);
+    }
+
+    log("HNSW indexes rebuilt", {
+      scope,
+      scopeHash,
+      shardIndex,
+      content: contentItems.length,
+      tags: tagsItems.length,
+    });
   }
 
   async deleteIndex(scope: string, scopeHash: string, shardIndex: number): Promise<void> {
-    const key = `${scope}_${scopeHash}_${shardIndex}`;
-    this.indexes.delete(key);
+    const contentKey = `${scope}_${scopeHash}_${shardIndex}`;
+    const tagsKey = `${scope}_${scopeHash}_${shardIndex}_tags`;
 
-    const indexPath = join(this.baseDir, scope + "s", `${key}.hnsw`);
-    const metaPath = indexPath + ".meta";
+    this.indexes.delete(contentKey);
+    this.indexes.delete(tagsKey);
 
-    try {
-      if (existsSync(indexPath)) unlinkSync(indexPath);
-      if (existsSync(metaPath)) unlinkSync(metaPath);
-    } catch (error) {
-      log("Error deleting HNSW index files", { path: indexPath, error: String(error) });
+    for (const key of [contentKey, tagsKey]) {
+      const indexPath = join(this.baseDir, scope + "s", `${key}.hnsw`);
+      const metaPath = indexPath + ".meta";
+
+      try {
+        if (existsSync(indexPath)) unlinkSync(indexPath);
+        if (existsSync(metaPath)) unlinkSync(metaPath);
+      } catch (error) {
+        log("Error deleting HNSW index files", { path: indexPath, error: String(error) });
+      }
     }
   }
 

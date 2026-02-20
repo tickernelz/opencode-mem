@@ -14,17 +14,19 @@ export class VectorSearch {
   insertVector(db: DatabaseType, record: MemoryRecord, shard?: ShardInfo): void {
     const insertMemory = db.prepare(`
       INSERT INTO memories (
-        id, content, vector, container_tag, tags, type, created_at, updated_at,
+        id, content, vector, tags_vector, container_tag, tags, type, created_at, updated_at,
         metadata, display_name, user_name, user_email, project_path, project_name, git_repo_url
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const vectorBuffer = new Uint8Array(record.vector.buffer);
+    const tagsVectorBuffer = record.tagsVector ? new Uint8Array(record.tagsVector.buffer) : null;
 
     insertMemory.run(
       record.id,
       record.content,
       vectorBuffer,
+      tagsVectorBuffer,
       record.containerTag,
       record.tags || null,
       record.type || null,
@@ -40,10 +42,25 @@ export class VectorSearch {
     );
 
     if (shard && record.vector) {
-      const index = hnswIndexManager.getIndex(shard.scope, shard.scopeHash, shard.shardIndex);
-      index.insert(record.id, record.vector).catch((err) => {
-        log("HNSW insert error", { memoryId: record.id, error: String(err) });
+      const contentIndex = hnswIndexManager.getIndex(
+        shard.scope,
+        shard.scopeHash,
+        shard.shardIndex
+      );
+      contentIndex.insert(record.id, record.vector).catch((err) => {
+        log("HNSW content insert error", { memoryId: record.id, error: String(err) });
       });
+
+      if (record.tagsVector) {
+        const tagsIndex = hnswIndexManager.getTagsIndex(
+          shard.scope,
+          shard.scopeHash,
+          shard.shardIndex
+        );
+        tagsIndex.insert(record.id, record.tagsVector).catch((err) => {
+          log("HNSW tags insert error", { memoryId: record.id, error: String(err) });
+        });
+      }
     }
   }
 
@@ -55,14 +72,25 @@ export class VectorSearch {
     queryText?: string
   ): Promise<SearchResult[]> {
     const db = connectionManager.getConnection(shard.dbPath);
-    const index = hnswIndexManager.getIndex(shard.scope, shard.scopeHash, shard.shardIndex);
+    const contentIndex = hnswIndexManager.getIndex(shard.scope, shard.scopeHash, shard.shardIndex);
+    const tagsIndex = hnswIndexManager.getTagsIndex(shard.scope, shard.scopeHash, shard.shardIndex);
 
-    const contentResults = await index.search(queryVector, limit * 4);
+    const contentResults = await contentIndex.search(queryVector, limit * 4);
+    const tagsResults = await tagsIndex.search(queryVector, limit * 4);
 
     const scoreMap = new Map<string, { contentSim: number; tagsSim: number }>();
 
     for (const r of contentResults) {
       scoreMap.set(r.id, { contentSim: 1 - r.distance, tagsSim: 0 });
+    }
+
+    for (const r of tagsResults) {
+      const entry = scoreMap.get(r.id);
+      if (entry) {
+        entry.tagsSim = 1 - r.distance;
+      } else {
+        scoreMap.set(r.id, { contentSim: 0, tagsSim: 1 - r.distance });
+      }
     }
 
     const ids = Array.from(scoreMap.keys());
@@ -98,8 +126,8 @@ export class VectorSearch {
         exactMatchBoost = matches / Math.max(queryWords.length, 1);
       }
 
-      const tagSim = Math.max(scores.tagsSim, exactMatchBoost);
-      const similarity = tagSim * 0.8 + scores.contentSim * 0.2;
+      const finalTagsSim = Math.max(scores.tagsSim, exactMatchBoost);
+      const similarity = scores.contentSim * 0.6 + finalTagsSim * 0.4;
 
       return {
         id: row.id,
@@ -147,8 +175,17 @@ export class VectorSearch {
     db.prepare(`DELETE FROM memories WHERE id = ?`).run(memoryId);
 
     if (shard) {
-      const index = hnswIndexManager.getIndex(shard.scope, shard.scopeHash, shard.shardIndex);
-      await index.delete(memoryId);
+      const contentIndex = hnswIndexManager.getIndex(
+        shard.scope,
+        shard.scopeHash,
+        shard.shardIndex
+      );
+      const tagsIndex = hnswIndexManager.getTagsIndex(
+        shard.scope,
+        shard.scopeHash,
+        shard.shardIndex
+      );
+      await Promise.all([contentIndex.delete(memoryId), tagsIndex.delete(memoryId)]);
     }
   }
 
@@ -160,11 +197,29 @@ export class VectorSearch {
     tagsVector?: Float32Array
   ): Promise<void> {
     const vectorBuffer = new Uint8Array(vector.buffer);
-    db.prepare(`UPDATE memories SET vector = ? WHERE id = ?`).run(vectorBuffer, memoryId);
+    const tagsVectorBuffer = tagsVector ? new Uint8Array(tagsVector.buffer) : null;
+    db.prepare(`UPDATE memories SET vector = ?, tags_vector = ? WHERE id = ?`).run(
+      vectorBuffer,
+      tagsVectorBuffer,
+      memoryId
+    );
 
     if (shard && vector) {
-      const index = hnswIndexManager.getIndex(shard.scope, shard.scopeHash, shard.shardIndex);
-      await index.insert(memoryId, vector);
+      const contentIndex = hnswIndexManager.getIndex(
+        shard.scope,
+        shard.scopeHash,
+        shard.shardIndex
+      );
+      await contentIndex.insert(memoryId, vector);
+
+      if (tagsVector) {
+        const tagsIndex = hnswIndexManager.getTagsIndex(
+          shard.scope,
+          shard.scopeHash,
+          shard.shardIndex
+        );
+        await tagsIndex.insert(memoryId, tagsVector);
+      }
     }
   }
 
