@@ -142,7 +142,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: main
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
 
