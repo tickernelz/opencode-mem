@@ -1,5 +1,4 @@
 import { getDatabase } from "./sqlite-bootstrap.js";
-import * as sqliteVec from "sqlite-vec";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { log } from "../logger.js";
@@ -19,14 +18,15 @@ export class ConnectionManager {
     db.run("PRAGMA foreign_keys = ON");
 
     try {
-      sqliteVec.load(db);
+      const result = db.prepare("SELECT vec_version()").all() as any[];
+      if (!result || result.length === 0) {
+        throw new Error("vec_version() returned no result");
+      }
     } catch (error) {
       throw new Error(
-        `Failed to load sqlite-vec extension: ${error}\n\n` +
-          `This usually means SQLite extension loading is disabled.\n` +
-          `On macOS, you must use Homebrew SQLite instead of Apple's SQLite.\n\n` +
-          `Solution:\n` +
-          `  brew install sqlite`
+        `sqlite-vec extension not available: ${error}\n\n` +
+          `The bundled SQLite dylib should have sqlite-vec built-in.\n` +
+          `Try reinstalling opencode-mem or report this issue.`
       );
     }
 

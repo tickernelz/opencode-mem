@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+env:
+  SQLITE_VEC_VERSION: "0.1.7-alpha.8"
+
 jobs:
   build-sqlite:
     runs-on: ${{ matrix.runs-on }}
@@ -15,9 +18,6 @@ jobs:
             runs-on: macos-15
           - arch: x64
             runs-on: macos-15-intel
-    
-    outputs:
-      needs-update: ${{ steps.check.outputs.needs-update }}
     
     steps:
       - uses: actions/checkout@v4
@@ -31,58 +31,83 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "year=$YEAR" >> $GITHUB_OUTPUT
 
-      - name: Check existing dylib version
+      - name: Check existing dylib
         id: check
         run: |
           DYLIB_PATH="native/darwin-${{ matrix.arch }}/libsqlite3.dylib"
-          LATEST_VERSION="${{ steps.sqlite-version.outputs.version }}"
           
           if [ ! -f "$DYLIB_PATH" ]; then
             echo "needs-update=true" >> $GITHUB_OUTPUT
             echo "Dylib not found, will build"
           else
             EXISTING_SIZE=$(stat -f%z "$DYLIB_PATH" 2>/dev/null || stat -c%s "$DYLIB_PATH" 2>/dev/null || echo "0")
-            if [ "$EXISTING_SIZE" -lt 100000 ]; then
+            if [ "$EXISTING_SIZE" -lt 1400000 ]; then
               echo "needs-update=true" >> $GITHUB_OUTPUT
-              echo "Dylib seems corrupted, will rebuild"
+              echo "Dylib too small (likely missing sqlite-vec), will rebuild"
             else
-              echo "needs-update=false" >> $GITHUB_OUTPUT
-              echo "Dylib exists and looks valid"
+              if strings "$DYLIB_PATH" | grep -q "vec_version"; then
+                echo "needs-update=false" >> $GITHUB_OUTPUT
+                echo "Dylib exists with sqlite-vec"
+              else
+                echo "needs-update=true" >> $GITHUB_OUTPUT
+                echo "Dylib missing sqlite-vec, will rebuild"
+              fi
             fi
           fi
 
-      - name: Download SQLite amalgamation
+      - name: Download SQLite and sqlite-vec
         if: steps.check.outputs.needs-update == 'true'
         run: |
           curl -LO "https://sqlite.org/${{ steps.sqlite-version.outputs.year }}/sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}.zip"
           unzip "sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}.zip"
+          
+          curl -LO "https://github.com/asg017/sqlite-vec/releases/download/v${{ env.SQLITE_VEC_VERSION }}/sqlite-vec-${{ env.SQLITE_VEC_VERSION }}-amalgamation.zip"
+          unzip "sqlite-vec-${{ env.SQLITE_VEC_VERSION }}-amalgamation.zip"
 
-      - name: Build dylib
+      - name: Build combined dylib
         if: steps.check.outputs.needs-update == 'true'
         run: |
-          cd "sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}"
-          gcc -dynamiclib \
-            -o libsqlite3.dylib \
-            sqlite3.c \
-            -DSQLITE_ENABLE_LOAD_EXTENSION=1 \
+          SQLITE_DIR="sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}"
+          
+          gcc -c "$SQLITE_DIR/sqlite3.c" -o sqlite3.o \
             -DSQLITE_ENABLE_FTS5 \
             -DSQLITE_ENABLE_RTREE \
-            -DSQLITE_ENABLE_GEOPOLY \
+            -DSQLITE_ENABLE_GEOPOLY
+          
+          gcc -c sqlite-vec.c -o sqlite-vec.o \
+            -I"$SQLITE_DIR" \
+            -DSQLITE_CORE \
+            -DSQLITE_VEC_STATIC
+          
+          cat > vec_init.c << 'INIT_EOF'
+          #include "sqlite3.h"
+          extern int sqlite3_vec_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *pApi);
+          __attribute__((constructor))
+          static void vec_auto_register(void) {
+              sqlite3_auto_extension((void(*)(void))sqlite3_vec_init);
+          }
+          INIT_EOF
+          
+          gcc -c vec_init.c -o vec_init.o -I"$SQLITE_DIR"
+          
+          gcc -dynamiclib \
+            -o libsqlite3.dylib \
+            sqlite3.o sqlite-vec.o vec_init.o \
             -install_name @rpath/libsqlite3.dylib \
             -lpthread -ldl -lm
 
       - name: Verify dylib
         if: steps.check.outputs.needs-update == 'true'
         run: |
-          cd "sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}"
           otool -D libsqlite3.dylib
           file libsqlite3.dylib
+          ls -la libsqlite3.dylib
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: libsqlite3-darwin-${{ matrix.arch }}
-          path: "sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}/libsqlite3.dylib"
+          path: libsqlite3.dylib
           retention-days: 1
           if-no-files-found: ignore
 
@@ -131,7 +156,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add native/
-          git commit -m "chore: update SQLite dylib [skip ci]"
+          git commit -m "chore: update SQLite+sqlite-vec dylib [skip ci]"
           git push origin main
 
   release:
@@ -144,6 +169,9 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+
+      - name: Pull latest changes
+        run: git pull origin main
 
       - uses: oven-sh/setup-bun@v2
 
@@ -164,15 +192,16 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Verify dylib files exist
+      - name: Prepare release assets
         run: |
-          ls -la native/darwin-arm64/libsqlite3.dylib
-          ls -la native/darwin-x64/libsqlite3.dylib
+          mkdir -p release-assets
+          cp native/darwin-arm64/libsqlite3.dylib release-assets/libsqlite3-darwin-arm64.dylib
+          cp native/darwin-x64/libsqlite3.dylib release-assets/libsqlite3-darwin-x64.dylib
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            native/darwin-arm64/libsqlite3.dylib
-            native/darwin-x64/libsqlite3.dylib
+            release-assets/libsqlite3-darwin-arm64.dylib
+            release-assets/libsqlite3-darwin-x64.dylib

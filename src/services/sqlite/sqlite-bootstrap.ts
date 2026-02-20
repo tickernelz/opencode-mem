@@ -8,8 +8,9 @@
  * Issue: https://github.com/tickernelz/opencode-mem/issues/34
  * Issue: https://github.com/tickernelz/opencode-mem/issues/37
  *
+ * The bundled dylib has sqlite-vec statically linked, so no extension loading needed.
  * Loading priority:
- * 1. Bundled dylib (native/darwin-{arch}/libsqlite3.dylib)
+ * 1. Bundled dylib (native/darwin-{arch}/libsqlite3.dylib) - includes sqlite-vec
  * 2. Homebrew SQLite (auto-detected common paths)
  */
 
@@ -67,6 +68,15 @@ function getHomebrewSqlitePath(): string | null {
   return null;
 }
 
+function checkSqliteVec(db: typeof Database.prototype): boolean {
+  try {
+    const result = db.prepare("SELECT vec_version()").all() as any[];
+    return result && result.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export function configureSqlite(): void {
   if (sqliteConfigured) return;
 
@@ -86,6 +96,7 @@ export function configureSqlite(): void {
     } catch (error) {
       const errorStr = String(error);
       if (errorStr.includes("SQLite already loaded")) {
+        sqliteSource = "already-loaded";
         return true;
       }
       return false;
@@ -110,13 +121,8 @@ export function configureSqlite(): void {
 
   throw new Error(
     `macOS detected but no compatible SQLite library found.\n\n` +
-      `Apple's default SQLite does not support extension loading.\n` +
-      `Solution:\n\n` +
-      `Install Homebrew SQLite:\n` +
-      `  brew install sqlite\n\n` +
-      `Common Homebrew paths:\n` +
-      `  - Apple Silicon: /opt/homebrew/opt/sqlite/lib/libsqlite3.dylib\n` +
-      `  - Intel Mac:     /usr/local/opt/sqlite/lib/libsqlite3.dylib`
+      `The bundled SQLite dylib with sqlite-vec is required.\n` +
+      `Try reinstalling opencode-mem.`
   );
 }
 
@@ -129,4 +135,19 @@ export function getSqliteSource(): string | null {
   return sqliteSource;
 }
 
+export function verifySqliteVec(): void {
+  const db = new Database(":memory:");
+  if (!checkSqliteVec(db)) {
+    db.close();
+    throw new Error(
+      `sqlite-vec extension not available.\n\n` +
+        `This plugin requires SQLite with sqlite-vec built-in.\n` +
+        `The bundled dylib should have sqlite-vec statically linked.\n` +
+        `Try reinstalling opencode-mem.`
+    );
+  }
+  db.close();
+}
+
 configureSqlite();
+verifySqliteVec();
