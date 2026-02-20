@@ -16,27 +16,49 @@ jobs:
           - arch: x64
             runs-on: macos-15-intel
     
+    outputs:
+      needs-update: ${{ steps.check.outputs.needs-update }}
+    
     steps:
+      - uses: actions/checkout@v4
+
       - name: Get latest SQLite version
         id: sqlite-version
         run: |
           DOWNLOAD_PATH=$(curl -sL https://sqlite.org/download.html | grep -o '[0-9]*/sqlite-amalgamation-[0-9]*\.zip' | head -1)
-          if [ -z "$DOWNLOAD_PATH" ]; then
-            echo "Failed to extract SQLite download path"
-            exit 1
-          fi
           VERSION=$(echo "$DOWNLOAD_PATH" | grep -o 'sqlite-amalgamation-[0-9]*' | sed 's/sqlite-amalgamation-//')
           YEAR=$(echo "$DOWNLOAD_PATH" | cut -d'/' -f1)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "year=$YEAR" >> $GITHUB_OUTPUT
-          echo "SQLite version: $VERSION, year: $YEAR"
-      
+
+      - name: Check existing dylib version
+        id: check
+        run: |
+          DYLIB_PATH="native/darwin-${{ matrix.arch }}/libsqlite3.dylib"
+          LATEST_VERSION="${{ steps.sqlite-version.outputs.version }}"
+          
+          if [ ! -f "$DYLIB_PATH" ]; then
+            echo "needs-update=true" >> $GITHUB_OUTPUT
+            echo "Dylib not found, will build"
+          else
+            EXISTING_SIZE=$(stat -f%z "$DYLIB_PATH" 2>/dev/null || stat -c%s "$DYLIB_PATH" 2>/dev/null || echo "0")
+            if [ "$EXISTING_SIZE" -lt 100000 ]; then
+              echo "needs-update=true" >> $GITHUB_OUTPUT
+              echo "Dylib seems corrupted, will rebuild"
+            else
+              echo "needs-update=false" >> $GITHUB_OUTPUT
+              echo "Dylib exists and looks valid"
+            fi
+          fi
+
       - name: Download SQLite amalgamation
+        if: steps.check.outputs.needs-update == 'true'
         run: |
           curl -LO "https://sqlite.org/${{ steps.sqlite-version.outputs.year }}/sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}.zip"
           unzip "sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}.zip"
-      
+
       - name: Build dylib
+        if: steps.check.outputs.needs-update == 'true'
         run: |
           cd "sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}"
           gcc -dynamiclib \
@@ -48,29 +70,76 @@ jobs:
             -DSQLITE_ENABLE_GEOPOLY \
             -install_name @rpath/libsqlite3.dylib \
             -lpthread -ldl -lm
-      
+
       - name: Verify dylib
+        if: steps.check.outputs.needs-update == 'true'
         run: |
           cd "sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}"
-          echo "Install name:"
           otool -D libsqlite3.dylib
-          echo "Dependencies:"
-          otool -L libsqlite3.dylib
-      
+          file libsqlite3.dylib
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: libsqlite3-darwin-${{ matrix.arch }}
           path: "sqlite-amalgamation-${{ steps.sqlite-version.outputs.version }}/libsqlite3.dylib"
           retention-days: 1
+          if-no-files-found: ignore
+
+  commit-dylib:
+    needs: build-sqlite
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      changed: ${{ steps.update.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Update dylib files
+        id: update
+        run: |
+          CHANGED="false"
+          
+          if [ -f "artifacts/libsqlite3-darwin-arm64/libsqlite3.dylib" ]; then
+            mkdir -p native/darwin-arm64
+            cp artifacts/libsqlite3-darwin-arm64/libsqlite3.dylib native/darwin-arm64/
+            CHANGED="true"
+            echo "Updated arm64 dylib"
+          fi
+          
+          if [ -f "artifacts/libsqlite3-darwin-x64/libsqlite3.dylib" ]; then
+            mkdir -p native/darwin-x64
+            cp artifacts/libsqlite3-darwin-x64/libsqlite3.dylib native/darwin-x64/
+            CHANGED="true"
+            echo "Updated x64 dylib"
+          fi
+          
+          echo "changed=$CHANGED" >> $GITHUB_OUTPUT
+
+      - name: Commit and push
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add native/
+          git commit -m "chore: update SQLite dylib [skip ci]"
+          git push
 
   release:
-    needs: build-sqlite
+    needs: [build-sqlite, commit-dylib]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
 
       - uses: oven-sh/setup-bun@v2
 
@@ -91,19 +160,15 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Download dylib artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-      
-      - name: Prepare release assets
+      - name: Verify dylib files exist
         run: |
-          mkdir -p release-assets
-          mv artifacts/libsqlite3-darwin-arm64/libsqlite3.dylib release-assets/libsqlite3-darwin-arm64.dylib
-          mv artifacts/libsqlite3-darwin-x64/libsqlite3.dylib release-assets/libsqlite3-darwin-x64.dylib
-      
+          ls -la native/darwin-arm64/libsqlite3.dylib
+          ls -la native/darwin-x64/libsqlite3.dylib
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: release-assets/*.dylib
+          files: |
+            native/darwin-arm64/libsqlite3.dylib
+            native/darwin-x64/libsqlite3.dylib

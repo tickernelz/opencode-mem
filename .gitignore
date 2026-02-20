@@ -32,6 +32,3 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
-
-# Downloaded SQLite dylibs (built by CI)
-native/**/*.dylib

@@ -9,7 +9,7 @@
  * Issue: https://github.com/tickernelz/opencode-mem/issues/37
  *
  * Loading priority:
- * 1. Bundled dylib (native/darwin-{arch}/libsqlite3.dylib) - downloaded via postinstall
+ * 1. Bundled dylib (native/darwin-{arch}/libsqlite3.dylib)
  * 2. Homebrew SQLite (auto-detected common paths)
  */
 

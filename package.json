@@ -1,6 +1,6 @@
 {
   "name": "opencode-mem",
-  "version": "2.9.0",
+  "version": "2.9.1",
   "description": "OpenCode plugin that gives coding agents persistent memory using local vector database",
   "type": "module",
   "main": "dist/plugin.js",
@@ -11,8 +11,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,js,css,html}\"",
     "format:check": "prettier --check \"src/**/*.{ts,js,css,html}\"",
-    "prepare": "husky",
-    "postinstall": "bun run scripts/download-sqlite.ts"
+    "prepare": "husky"
   },
   "keywords": [
     "opencode",
@@ -57,7 +56,6 @@
   "files": [
     "dist",
     "native",
-    "scripts",
     "package.json"
   ],
   "lint-staged": {
