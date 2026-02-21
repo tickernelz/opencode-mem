@@ -70,6 +70,14 @@ interface OpenCodeMemConfig {
     maxAgeDays?: number;
     injectOn?: "first" | "always";
   };
+  // Team Knowledge
+  teamKnowledgeEnabled?: boolean;
+  teamKnowledgeSyncOnIdle?: boolean;
+  teamKnowledgeInjectOverview?: boolean;
+  teamKnowledgeInjectRelevant?: boolean;
+  teamKnowledgeMaxInject?: number;
+  teamKnowledgeStaleRetentionDays?: number;
+  teamKnowledgeExtractors?: string[];
 }
 
 const DEFAULTS: Required<
@@ -138,6 +146,20 @@ const DEFAULTS: Required<
     maxAgeDays: undefined,
     injectOn: "first",
   },
+  // Team Knowledge
+  teamKnowledgeEnabled: true,
+  teamKnowledgeSyncOnIdle: true,
+  teamKnowledgeInjectOverview: true,
+  teamKnowledgeInjectRelevant: true,
+  teamKnowledgeMaxInject: 3,
+  teamKnowledgeStaleRetentionDays: 7,
+  teamKnowledgeExtractors: [
+    "tech-stack",
+    "architecture",
+    "coding-standard",
+    "lesson",
+    "business-logic",
+  ],
 };
 
 function expandPath(path: string): string {
@@ -411,6 +433,11 @@ function getEmbeddingDimensions(model: string): number {
     "voyage-3": 1024,
     "voyage-3-lite": 512,
     "voyage-code-3": 1024,
+
+    // Chinese AI provider models
+    "aiplat/Qwen3-Embedding-8B": 4096,
+    "volcengine/Doubao-embedding-text": 1024,
+    "aliyun/qwen2.5-vl-embedding": 1536,
   };
   return dimensionMap[model] || 768;
 }
@@ -484,6 +511,17 @@ export const CONFIG = {
       | "first"
       | "always",
   },
+  // Team Knowledge
+  teamKnowledgeEnabled: fileConfig.teamKnowledgeEnabled ?? DEFAULTS.teamKnowledgeEnabled,
+  teamKnowledgeSyncOnIdle: fileConfig.teamKnowledgeSyncOnIdle ?? DEFAULTS.teamKnowledgeSyncOnIdle,
+  teamKnowledgeInjectOverview:
+    fileConfig.teamKnowledgeInjectOverview ?? DEFAULTS.teamKnowledgeInjectOverview,
+  teamKnowledgeInjectRelevant:
+    fileConfig.teamKnowledgeInjectRelevant ?? DEFAULTS.teamKnowledgeInjectRelevant,
+  teamKnowledgeMaxInject: fileConfig.teamKnowledgeMaxInject ?? DEFAULTS.teamKnowledgeMaxInject,
+  teamKnowledgeStaleRetentionDays:
+    fileConfig.teamKnowledgeStaleRetentionDays ?? DEFAULTS.teamKnowledgeStaleRetentionDays,
+  teamKnowledgeExtractors: fileConfig.teamKnowledgeExtractors ?? DEFAULTS.teamKnowledgeExtractors,
 };
 
 export function isConfigured(): boolean {

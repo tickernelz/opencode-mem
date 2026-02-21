@@ -13,13 +13,21 @@ export async function performUserProfileLearning(
   ctx: PluginInput,
   directory: string
 ): Promise<void> {
-  if (isLearningRunning) return;
+  log("performUserProfileLearning: started", { directory });
+
+  if (isLearningRunning) {
+    log("performUserProfileLearning: already running, skipping");
+    return;
+  }
   isLearningRunning = true;
   try {
     const count = userPromptManager.countUnanalyzedForUserLearning();
     const threshold = CONFIG.userProfileAnalysisInterval;
 
+    log("performUserProfileLearning: checking threshold", { count, threshold });
+
     if (count < threshold) {
+      log("performUserProfileLearning: below threshold, skipping");
       return;
     }
 

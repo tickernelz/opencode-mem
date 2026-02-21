@@ -1612,3 +1612,174 @@ textarea:focus-visible {
   font-size: 11px;
   font-weight: bold;
 }
+
+/* Team Knowledge Styles */
+.knowledge-section {
+  border: 1px solid #333;
+  padding: 20px;
+  margin-bottom: 20px;
+  background: #111;
+}
+
+.knowledge-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding: 0.5rem;
+  background: #0a0a0a;
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+.knowledge-filters {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.knowledge-stats {
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.knowledge-stats span {
+  margin-left: 1rem;
+}
+
+.knowledge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 200px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.knowledge-item {
+  padding: 0.75rem;
+  background: #0a0a0a;
+  border: 1px solid #333;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.knowledge-item:hover {
+  background: #111;
+  border-color: #00ff00;
+}
+
+.knowledge-item-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.knowledge-title {
+  font-weight: 500;
+  color: #e0e0e0;
+}
+
+.knowledge-item-meta {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.knowledge-item-meta span {
+  margin-right: 1rem;
+}
+
+.knowledge-type {
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.knowledge-type-tech-stack {
+  background: rgba(0, 204, 255, 0.2);
+  color: #00ccff;
+  border: 1px solid rgba(0, 204, 255, 0.4);
+}
+
+.knowledge-type-architecture {
+  background: rgba(255, 0, 255, 0.2);
+  color: #ff00ff;
+  border: 1px solid rgba(255, 0, 255, 0.4);
+}
+
+.knowledge-type-coding-standard {
+  background: rgba(0, 255, 0, 0.2);
+  color: #00ff00;
+  border: 1px solid rgba(0, 255, 0, 0.4);
+}
+
+.knowledge-type-lesson {
+  background: rgba(255, 170, 0, 0.2);
+  color: #ffaa00;
+  border: 1px solid rgba(255, 170, 0, 0.4);
+}
+
+.knowledge-type-business-logic {
+  background: rgba(255, 68, 68, 0.2);
+  color: #ff4444;
+  border: 1px solid rgba(255, 68, 68, 0.4);
+}
+
+.knowledge-detail {
+  padding: 1rem;
+  background: #0a0a0a;
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+.knowledge-detail-content {
+  padding: 1rem 0;
+}
+
+.knowledge-detail-content h3 {
+  color: #00ff00;
+  margin-bottom: 0.5rem;
+  font-size: 16px;
+}
+
+.knowledge-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.knowledge-content {
+  padding: 1rem;
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.knowledge-tags {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 1rem;
+}
+
+.btn-back {
+  margin-bottom: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.knowledge-confidence {
+  color: #00ff00;
+  font-weight: bold;
+}
+
+.knowledge-source {
+  color: #00ccff;
+}

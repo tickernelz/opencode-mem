@@ -14,6 +14,8 @@ const state = {
   selectedMemories: new Set(),
   autoRefreshInterval: null,
   userProfile: null,
+  currentTag: "",
+  currentProjectPath: "",
 };
 
 marked.setOptions({
@@ -56,9 +58,11 @@ async function loadTags() {
 function populateTagDropdowns() {
   const tagFilter = document.getElementById("tag-filter");
   const addTag = document.getElementById("add-tag");
+  const knowledgeProjectFilter = document.getElementById("knowledge-project-filter");
 
   tagFilter.innerHTML = '<option value="">All Tags</option>';
   addTag.innerHTML = '<option value="">Select tag</option>';
+  knowledgeProjectFilter.innerHTML = '<option value="">Select Project</option>';
 
   const scopeTags = state.tags.project;
 
@@ -70,12 +74,19 @@ function populateTagDropdowns() {
     const option1 = document.createElement("option");
     option1.value = tagInfo.tag;
     option1.textContent = shortDisplay;
+    option1.dataset.projectPath = tagInfo.projectPath || "";
     tagFilter.appendChild(option1);
 
     const option2 = document.createElement("option");
     option2.value = tagInfo.tag;
     option2.textContent = shortDisplay;
     addTag.appendChild(option2);
+
+    const option3 = document.createElement("option");
+    option3.value = tagInfo.tag;
+    option3.textContent = shortDisplay;
+    option3.dataset.projectPath = tagInfo.projectPath || "";
+    knowledgeProjectFilter.appendChild(option3);
   });
 }
 
@@ -1118,15 +1129,30 @@ function switchView(view) {
     document.getElementById("tab-project").classList.add("active");
     document.getElementById("project-section").classList.remove("hidden");
     document.getElementById("profile-section").classList.add("hidden");
+    document.getElementById("knowledge-section").classList.add("hidden");
     document.querySelector(".controls").classList.remove("hidden");
     document.querySelector(".add-section").classList.remove("hidden");
   } else if (view === "profile") {
     document.getElementById("tab-profile").classList.add("active");
     document.getElementById("project-section").classList.add("hidden");
     document.getElementById("profile-section").classList.remove("hidden");
+    document.getElementById("knowledge-section").classList.add("hidden");
     document.querySelector(".controls").classList.add("hidden");
     document.querySelector(".add-section").classList.add("hidden");
     loadUserProfile();
+  } else if (view === "knowledge") {
+    document.getElementById("tab-knowledge").classList.add("active");
+    document.getElementById("project-section").classList.add("hidden");
+    document.getElementById("profile-section").classList.add("hidden");
+    document.getElementById("knowledge-section").classList.remove("hidden");
+    document.querySelector(".controls").classList.add("hidden");
+    document.querySelector(".add-section").classList.add("hidden");
+    // Only load if a project is already selected
+    const projectFilter = document.getElementById("knowledge-project-filter");
+    if (projectFilter?.value) {
+      loadTeamKnowledge();
+      loadKnowledgeStats();
+    }
   }
 }
 
@@ -1136,16 +1162,216 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// Team Knowledge Functions
+async function loadTeamKnowledge() {
+  const type = document.getElementById("knowledge-type-filter")?.value || "";
+  const projectFilter = document.getElementById("knowledge-project-filter");
+  const tag = projectFilter?.value || "";
+
+  if (!tag) {
+    document.getElementById("knowledge-list").innerHTML =
+      '<div class="empty-state">Select a project to view team knowledge</div>';
+    document.getElementById("knowledge-stats").innerHTML = "";
+    return;
+  }
+
+  // Update state for sync
+  const selectedOption = projectFilter.options[projectFilter.selectedIndex];
+  state.currentTag = tag;
+  state.currentProjectPath = selectedOption?.dataset?.projectPath || tag;
+
+  try {
+    const params = new URLSearchParams({ tag, pageSize: "50" });
+    if (type) params.append("type", type);
+
+    const response = await fetchAPI(`/api/team-knowledge?${params}`);
+
+    if (response.success && response.data?.items) {
+      renderKnowledgeList(response.data.items);
+    } else {
+      document.getElementById("knowledge-list").innerHTML =
+        '<div class="empty-state">No knowledge found. Click "Sync Now" to extract knowledge from your codebase.</div>';
+    }
+  } catch (error) {
+    console.error("Failed to load knowledge:", error);
+    document.getElementById("knowledge-list").innerHTML =
+      '<div class="error-state">Failed to load knowledge</div>';
+  }
+}
+
+function renderKnowledgeList(items) {
+  const container = document.getElementById("knowledge-list");
+
+  if (!items.length) {
+    container.innerHTML =
+      '<div class="empty-state">No knowledge items found. Click "Sync Now" to extract knowledge from your codebase.</div>';
+    return;
+  }
+
+  container.innerHTML = items
+    .map(
+      (item) => `
+    <div class="knowledge-item" data-id="${item.id}">
+      <div class="knowledge-item-header">
+        <span class="knowledge-type knowledge-type-${item.type}">${item.type}</span>
+        <span class="knowledge-title">${escapeHtml(item.title)}</span>
+      </div>
+      <div class="knowledge-item-meta">
+        <span class="knowledge-source">${item.sourceFile || "N/A"}</span>
+        <span class="knowledge-confidence">${Math.round(item.confidence * 100)}%</span>
+      </div>
+    </div>
+  `
+    )
+    .join("");
+
+  // Add click handlers
+  container.querySelectorAll(".knowledge-item").forEach((el) => {
+    el.addEventListener("click", () =>
+      showKnowledgeDetail(items.find((i) => i.id === el.dataset.id))
+    );
+  });
+
+  lucide.createIcons();
+}
+
+function showKnowledgeDetail(item) {
+  const detail = document.getElementById("knowledge-detail");
+  const list = document.getElementById("knowledge-list");
+
+  detail.innerHTML = `
+    <button class="btn btn-back" onclick="hideKnowledgeDetail()">
+      <i data-lucide="arrow-left" class="icon"></i> Back
+    </button>
+    <div class="knowledge-detail-content">
+      <h3>${escapeHtml(item.title)}</h3>
+      <div class="knowledge-meta">
+        <span class="knowledge-type knowledge-type-${item.type}">${item.type}</span>
+        <span>Source: ${item.sourceFile || "N/A"}</span>
+        <span>Confidence: ${Math.round(item.confidence * 100)}%</span>
+        <span>Version: ${item.version}</span>
+        <span>Updated: ${new Date(item.updatedAt).toLocaleString()}</span>
+      </div>
+      <div class="knowledge-content markdown-content">${renderMarkdown(item.content)}</div>
+      <div class="knowledge-tags">Tags: ${item.tags?.join(", ") || "None"}</div>
+      <button class="btn-delete" onclick="deleteKnowledge('${item.id}')">
+        <i data-lucide="trash-2" class="icon"></i> Delete
+      </button>
+    </div>
+  `;
+
+  list.style.display = "none";
+  detail.style.display = "block";
+  lucide.createIcons();
+}
+
+function hideKnowledgeDetail() {
+  document.getElementById("knowledge-list").style.display = "flex";
+  document.getElementById("knowledge-detail").style.display = "none";
+}
+
+async function syncKnowledge() {
+  const btn = document.getElementById("sync-knowledge-btn");
+  const projectFilter = document.getElementById("knowledge-project-filter");
+  const selectedOption = projectFilter?.options[projectFilter.selectedIndex];
+  const projectPath = selectedOption?.dataset?.projectPath || state.currentProjectPath;
+
+  if (!projectPath || projectFilter?.value === "") {
+    showToast("Select a project first", "error");
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i data-lucide="loader" class="icon icon-spin"></i> Syncing...';
+  lucide.createIcons();
+
+  try {
+    const response = await fetchAPI("/api/team-knowledge/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectPath }),
+    });
+
+    if (response.success) {
+      showToast(
+        `Synced: +${response.data.added}, ~${response.data.updated}, -${response.data.stale}`,
+        "success"
+      );
+      loadTeamKnowledge();
+      loadKnowledgeStats();
+    } else {
+      showToast(response.error || "Sync failed", "error");
+    }
+  } catch (error) {
+    showToast("Sync failed: " + error.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i data-lucide="refresh-cw" class="icon"></i> Sync Now';
+    lucide.createIcons();
+  }
+}
+
+async function loadKnowledgeStats() {
+  const projectFilter = document.getElementById("knowledge-project-filter");
+  const tag = projectFilter?.value || state.currentTag;
+  if (!tag) return;
+
+  try {
+    const response = await fetchAPI(`/api/team-knowledge/stats?tag=${encodeURIComponent(tag)}`);
+
+    if (response.success && response.data) {
+      const stats = response.data;
+      document.getElementById("knowledge-stats").innerHTML = `
+        <span>Total: ${stats.total}</span>
+        <span>Last sync: ${stats.lastSync ? new Date(stats.lastSync).toLocaleString() : "Never"}</span>
+      `;
+    }
+  } catch (error) {
+    console.error("Failed to load stats:", error);
+  }
+}
+
+async function deleteKnowledge(id) {
+  if (!confirm("Delete this knowledge item?")) return;
+
+  try {
+    const response = await fetchAPI(`/api/team-knowledge/${id}`, { method: "DELETE" });
+
+    if (response.success) {
+      showToast("Deleted", "success");
+      hideKnowledgeDetail();
+      loadTeamKnowledge();
+    } else {
+      showToast(response.error || "Delete failed", "error");
+    }
+  } catch (error) {
+    showToast("Delete failed", "error");
+  }
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("tab-project").addEventListener("click", () => switchView("project"));
   document.getElementById("tab-profile").addEventListener("click", () => switchView("profile"));
+  document.getElementById("tab-knowledge").addEventListener("click", () => switchView("knowledge"));
   document.getElementById("refresh-profile-btn")?.addEventListener("click", refreshProfile);
   document.getElementById("changelog-close")?.addEventListener("click", () => {
     document.getElementById("changelog-modal").classList.add("hidden");
   });
 
+  // Team Knowledge event listeners
+  document.getElementById("knowledge-project-filter")?.addEventListener("change", () => {
+    loadTeamKnowledge();
+    loadKnowledgeStats();
+  });
+  document.getElementById("knowledge-type-filter")?.addEventListener("change", loadTeamKnowledge);
+  document.getElementById("sync-knowledge-btn")?.addEventListener("click", syncKnowledge);
+
   document.getElementById("tag-filter").addEventListener("change", () => {
     state.selectedTag = document.getElementById("tag-filter").value;
+    state.currentTag = state.selectedTag;
+    // Try to get project path from tag info
+    const tagInfo = state.tags.project.find((t) => t.tag === state.selectedTag);
+    state.currentProjectPath = tagInfo?.projectPath || state.selectedTag;
     state.currentPage = 1;
     state.isSearching = false;
     state.searchQuery = "";

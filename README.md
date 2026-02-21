@@ -22,6 +22,99 @@ A persistent memory system for AI coding agents that enables long-term context r
 
 Local vector database with SQLite + HNSW (hnswlib-wasm), persistent project memories, automatic user profile learning, unified memory-prompt timeline, full-featured web UI, intelligent prompt-based memory extraction, multi-provider AI support (OpenAI, Anthropic), 12+ local embedding models, smart deduplication, and built-in privacy protection.
 
+## Team Knowledge Base
+
+The Team Knowledge Base automatically extracts and manages technical knowledge from your codebase, providing AI agents with rich context about project architecture, tech stack, coding standards, and lessons learned.
+
+### Knowledge Categories
+
+| Type                | Description                                      | Source                                             |
+| ------------------- | ------------------------------------------------ | -------------------------------------------------- |
+| **tech-stack**      | Runtime dependencies, frameworks, engines        | package.json, go.mod, requirements.txt, Dockerfile |
+| **architecture**    | Project structure, design patterns, entry points | Directory structure analysis                       |
+| **coding-standard** | Linting rules, formatting, compiler options      | ESLint, Prettier, TSConfig, Biome, EditorConfig    |
+| **lesson**          | Lessons learned from bug fixes and discussions   | AI analysis of project memories                    |
+| **business-logic**  | Core business concepts and domain logic          | JSDoc comments from service/domain files           |
+
+### Using the Team Knowledge Tool
+
+```typescript
+// Search knowledge base
+team_knowledge({ mode: "search", query: "authentication flow" });
+
+// List all knowledge items
+team_knowledge({ mode: "list" });
+
+// List by type
+team_knowledge({ mode: "list", type: "architecture" });
+
+// Get statistics
+team_knowledge({ mode: "stats" });
+
+// Manually trigger sync
+team_knowledge({ mode: "sync" });
+```
+
+### Automatic Knowledge Sync
+
+Knowledge extraction runs automatically when your session goes idle (configurable). The sync process:
+
+1. Runs rule-based extractors (zero AI cost) for tech-stack, architecture, coding-standard
+2. Runs AI-enhanced extractors for lessons and business-logic (requires AI provider config)
+3. Computes incremental diff based on source keys
+4. Updates only changed entries, preserving version history
+5. Marks removed entries as stale (cleaned after retention period)
+
+### Context Injection
+
+Team knowledge is automatically injected into AI conversations:
+
+- **First message**: Overview context (tech-stack summary, coding standards)
+- **Subsequent messages**: Semantically relevant knowledge based on query
+
+### Team Knowledge Configuration
+
+```jsonc
+{
+  // Enable/disable team knowledge feature
+  "teamKnowledgeEnabled": true,
+
+  // Auto-sync when session goes idle
+  "teamKnowledgeSyncOnIdle": true,
+
+  // Inject overview context on first message
+  "teamKnowledgeInjectOverview": true,
+
+  // Inject relevant knowledge based on semantic search
+  "teamKnowledgeInjectRelevant": true,
+
+  // Max knowledge items to inject per message
+  "teamKnowledgeMaxInject": 5,
+
+  // Days to retain stale entries before deletion
+  "teamKnowledgeStaleRetentionDays": 7,
+
+  // Which extractors to run
+  "teamKnowledgeExtractors": [
+    "tech-stack",
+    "architecture",
+    "coding-standard",
+    "lesson",
+    "business-logic",
+  ],
+}
+```
+
+### Web UI
+
+The Team Knowledge tab in the web interface (`http://127.0.0.1:4747`) provides:
+
+- Filter by knowledge type
+- View knowledge details with source info
+- Manual sync trigger
+- Statistics dashboard
+- Delete individual entries
+
 ## Prerequisites
 
 This plugin uses `hnswlib-node` for fast vector similarity search, which requires native compilation. Ensure you have:

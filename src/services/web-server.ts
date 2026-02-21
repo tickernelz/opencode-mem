@@ -26,7 +26,13 @@ import {
   handleGetProfileChangelog,
   handleGetProfileSnapshot,
   handleRefreshProfile,
+  handleListTeamKnowledge,
+  handleTeamKnowledgeStats,
+  handleTeamKnowledgeSync,
+  handleDeleteTeamKnowledge,
+  handleSearchTeamKnowledge,
 } from "./api-handlers.js";
+import type { KnowledgeType } from "../types/team-knowledge.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -381,6 +387,56 @@ export class WebServer {
         const body = (await req.json().catch(() => ({}))) as any;
         const userId = body.userId || undefined;
         const result = await handleRefreshProfile(userId);
+        return this.jsonResponse(result);
+      }
+
+      // Team Knowledge API Routes
+      if (path === "/api/team-knowledge" && method === "GET") {
+        const tag = url.searchParams.get("tag") || undefined;
+        const type = (url.searchParams.get("type") || undefined) as KnowledgeType | undefined;
+        const page = parseInt(url.searchParams.get("page") || "1");
+        const pageSize = parseInt(url.searchParams.get("pageSize") || "20");
+        const result = await handleListTeamKnowledge(tag, type, page, pageSize);
+        return this.jsonResponse(result);
+      }
+
+      if (path === "/api/team-knowledge/stats" && method === "GET") {
+        const tag = url.searchParams.get("tag");
+        if (!tag) {
+          return this.jsonResponse({ success: false, error: "tag parameter required" });
+        }
+        const result = await handleTeamKnowledgeStats(tag);
+        return this.jsonResponse(result);
+      }
+
+      if (path === "/api/team-knowledge/sync" && method === "POST") {
+        const body = (await req.json()) as any;
+        const projectPath = body.projectPath;
+        if (!projectPath) {
+          return this.jsonResponse({ success: false, error: "projectPath parameter required" });
+        }
+        const result = await handleTeamKnowledgeSync(projectPath);
+        return this.jsonResponse(result);
+      }
+
+      if (path === "/api/team-knowledge/search" && method === "GET") {
+        const tag = url.searchParams.get("tag");
+        const query = url.searchParams.get("q");
+        const type = (url.searchParams.get("type") || undefined) as KnowledgeType | undefined;
+        const limit = parseInt(url.searchParams.get("limit") || "10");
+        if (!tag || !query) {
+          return this.jsonResponse({ success: false, error: "tag and q parameters required" });
+        }
+        const result = await handleSearchTeamKnowledge(tag, query, type, limit);
+        return this.jsonResponse(result);
+      }
+
+      if (path.startsWith("/api/team-knowledge/") && method === "DELETE") {
+        const id = path.split("/").pop();
+        if (!id || id === "team-knowledge") {
+          return this.jsonResponse({ success: false, error: "Invalid ID" });
+        }
+        const result = await handleDeleteTeamKnowledge(id);
         return this.jsonResponse(result);
       }
 
