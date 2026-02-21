@@ -43,6 +43,10 @@
           <i data-lucide="user" class="icon"></i>
           USER PROFILE
         </button>
+        <button id="tab-knowledge" class="tab-btn">
+          <i data-lucide="library" class="icon"></i>
+          TEAM KNOWLEDGE
+        </button>
       </div>
 
       <div class="controls">
@@ -138,6 +142,35 @@
         <div id="profile-content" class="profile-content">
           <div class="loading">Loading profile...</div>
         </div>
+      </div>
+
+      <div class="knowledge-section hidden" id="knowledge-section">
+        <div class="section-header">
+          <h2>└─ TEAM KNOWLEDGE ──</h2>
+        </div>
+        <div class="knowledge-header">
+          <div class="knowledge-filters">
+            <select id="knowledge-project-filter">
+              <option value="">Select Project</option>
+            </select>
+            <select id="knowledge-type-filter">
+              <option value="">All Types</option>
+              <option value="tech-stack">Tech Stack</option>
+              <option value="architecture">Architecture</option>
+              <option value="coding-standard">Coding Standards</option>
+              <option value="lesson">Lessons</option>
+              <option value="business-logic">Business Logic</option>
+            </select>
+            <button id="sync-knowledge-btn" class="btn-primary">
+              <i data-lucide="refresh-cw" class="icon"></i> Sync Now
+            </button>
+          </div>
+          <div id="knowledge-stats" class="knowledge-stats"></div>
+        </div>
+        <div id="knowledge-list" class="knowledge-list">
+          <div class="empty-state">Select a project to view team knowledge</div>
+        </div>
+        <div id="knowledge-detail" class="knowledge-detail" style="display: none"></div>
       </div>
 
       <div class="add-section">

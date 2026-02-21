@@ -6,6 +6,8 @@ import { log } from "./logger.js";
 import { CONFIG } from "../config.js";
 import type { MemoryType } from "../types/index.js";
 import { userPromptManager } from "./user-prompt/user-prompt-manager.js";
+import { knowledgeStore, syncTeamKnowledge, getTeamContainerTag } from "./team-knowledge/index.js";
+import type { KnowledgeType } from "../types/team-knowledge.js";
 
 interface ApiResponse<T = any> {
   success: boolean;
@@ -912,18 +914,169 @@ export async function handleRefreshProfile(userId?: string): Promise<ApiResponse
   try {
     const { getTags } = await import("./tags.js");
     const { userPromptManager } = await import("./user-prompt/user-prompt-manager.js");
+    const { userProfileManager } = await import("./user-profile/user-profile-manager.js");
+    const { CONFIG } = await import("../config.js");
+
     let targetUserId = userId;
     if (!targetUserId) {
       const tags = getTags(process.cwd());
       targetUserId = tags.user.userEmail || "unknown";
     }
+
     const unanalyzedCount = userPromptManager.countUnanalyzedForUserLearning();
+    const threshold = CONFIG.userProfileAnalysisInterval;
+
+    // Actually trigger profile learning if threshold is met
+    if (unanalyzedCount >= threshold) {
+      const { AIProviderFactory } = await import("./ai/ai-provider-factory.js");
+
+      if (!CONFIG.memoryModel || !CONFIG.memoryApiUrl) {
+        return {
+          success: false,
+          error: "External API not configured for user profile learning",
+        };
+      }
+
+      const prompts = userPromptManager.getPromptsForUserLearning(threshold);
+      if (prompts.length === 0) {
+        return {
+          success: true,
+          data: {
+            message: "No prompts available for analysis",
+            unanalyzedPrompts: unanalyzedCount,
+          },
+        };
+      }
+
+      const tags = getTags(process.cwd());
+      const existingProfile = userProfileManager.getActiveProfile(targetUserId);
+
+      // Build context
+      const existingProfileSection = existingProfile
+        ? `## Existing User Profile\n\n${existingProfile.profileData}\n\n**Instructions**: Merge new insights with the existing profile.`
+        : `**Instructions**: Create a new user profile from scratch.`;
+
+      const context = `# User Profile Analysis\n\nAnalyze ${prompts.length} user prompts.\n\n${existingProfileSection}\n\n## Recent Prompts\n\n${prompts.map((p, i) => `${i + 1}. ${p.content}`).join("\n\n")}`;
+
+      const providerConfig = {
+        model: CONFIG.memoryModel,
+        apiUrl: CONFIG.memoryApiUrl,
+        apiKey: CONFIG.memoryApiKey,
+        maxIterations: CONFIG.autoCaptureMaxIterations,
+        iterationTimeout: CONFIG.autoCaptureIterationTimeout,
+      };
+
+      const provider = AIProviderFactory.createProvider(CONFIG.memoryProvider, providerConfig);
+
+      const systemPrompt = `You are a user behavior analyst. Analyze user prompts and ${existingProfile ? "update" : "create"} a user profile. Output in the SAME language as the user's prompts.`;
+
+      const toolSchema = {
+        type: "function" as const,
+        function: {
+          name: "update_user_profile",
+          description: existingProfile ? "Update existing user profile" : "Create new user profile",
+          parameters: {
+            type: "object",
+            properties: {
+              preferences: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    category: { type: "string" },
+                    description: { type: "string" },
+                    confidence: { type: "number", minimum: 0, maximum: 1 },
+                    evidence: { type: "array", items: { type: "string" }, maxItems: 3 },
+                  },
+                  required: ["category", "description", "confidence", "evidence"],
+                },
+              },
+              patterns: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    category: { type: "string" },
+                    description: { type: "string" },
+                  },
+                  required: ["category", "description"],
+                },
+              },
+              workflows: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    description: { type: "string" },
+                    steps: { type: "array", items: { type: "string" } },
+                  },
+                  required: ["description", "steps"],
+                },
+              },
+            },
+            required: ["preferences", "patterns", "workflows"],
+          },
+        },
+      };
+
+      const result = await provider.executeToolCall(
+        systemPrompt,
+        context,
+        toolSchema,
+        `user-profile-refresh-${Date.now()}`
+      );
+
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          error: result.error || "Failed to analyze user profile",
+        };
+      }
+
+      const rawData = result.data;
+      let profileData = rawData;
+
+      if (existingProfile) {
+        profileData = userProfileManager.mergeProfileData(
+          JSON.parse(existingProfile.profileData),
+          rawData
+        );
+        userProfileManager.updateProfile(
+          existingProfile.id,
+          profileData,
+          prompts.length,
+          "Manual refresh via API"
+        );
+      } else {
+        userProfileManager.createProfile(
+          targetUserId,
+          tags.user.displayName || "Unknown",
+          tags.user.userName || "unknown",
+          tags.user.userEmail || "unknown",
+          profileData,
+          prompts.length
+        );
+      }
+
+      userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
+
+      return {
+        success: true,
+        data: {
+          message: "Profile updated successfully",
+          analyzedPrompts: prompts.length,
+          profile: profileData,
+        },
+      };
+    }
+
     return {
       success: true,
       data: {
         message: "Profile refresh queued",
         unanalyzedPrompts: unanalyzedCount,
-        note: "Profile will be updated when threshold is reached",
+        threshold: threshold,
+        note: `Need ${threshold - unanalyzedCount} more prompts to trigger analysis`,
       },
     };
   } catch (error) {
@@ -1084,6 +1237,158 @@ export async function handleRunTagMigrationBatch(
       data: { processed: migrationProgress.processed, total: migrationProgress.total, hasMore },
     };
   } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+// Team Knowledge API Handlers
+
+export async function handleListTeamKnowledge(
+  tag?: string,
+  type?: KnowledgeType,
+  page: number = 1,
+  pageSize: number = 20
+): Promise<ApiResponse<PaginatedResponse<any>>> {
+  try {
+    await embeddingService.warmup();
+
+    if (!tag) {
+      return { success: false, error: "tag parameter required" };
+    }
+
+    const items = await knowledgeStore.list(tag, type, pageSize * page);
+
+    // Paginate
+    const startIdx = (page - 1) * pageSize;
+    const paginatedItems = items.slice(startIdx, startIdx + pageSize);
+
+    return {
+      success: true,
+      data: {
+        items: paginatedItems.map((item) => ({
+          id: item.id,
+          type: item.type,
+          title: item.title,
+          content: item.content,
+          sourceFile: item.sourceFile,
+          sourceType: item.sourceType,
+          confidence: item.confidence,
+          version: item.version,
+          tags: item.tags,
+          createdAt: safeToISOString(item.createdAt),
+          updatedAt: safeToISOString(item.updatedAt),
+        })),
+        total: items.length,
+        page,
+        pageSize,
+        totalPages: Math.ceil(items.length / pageSize),
+      },
+    };
+  } catch (error) {
+    log("handleListTeamKnowledge: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleTeamKnowledgeStats(tag: string): Promise<ApiResponse<any>> {
+  try {
+    await embeddingService.warmup();
+
+    const stats = await knowledgeStore.getStats(tag);
+
+    return {
+      success: true,
+      data: {
+        total: stats.total,
+        byType: stats.byType,
+        stale: stats.stale,
+        lastSync: stats.lastSync ? safeToISOString(stats.lastSync) : null,
+      },
+    };
+  } catch (error) {
+    log("handleTeamKnowledgeStats: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleTeamKnowledgeSync(projectPath: string): Promise<ApiResponse<any>> {
+  try {
+    await embeddingService.warmup();
+
+    const result = await syncTeamKnowledge(projectPath);
+
+    return {
+      success: result.errors.length === 0,
+      data: {
+        added: result.added,
+        updated: result.updated,
+        stale: result.stale,
+        errors: result.errors,
+      },
+    };
+  } catch (error) {
+    log("handleTeamKnowledgeSync: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleDeleteTeamKnowledge(id: string): Promise<ApiResponse<void>> {
+  try {
+    await embeddingService.warmup();
+
+    // Find and delete the knowledge item
+    const projectShards = shardManager.getAllShards("project", "");
+
+    for (const shard of projectShards) {
+      const db = connectionManager.getConnection(shard.dbPath);
+      const existing = vectorSearch.getMemoryById(db, id);
+
+      if (existing) {
+        await vectorSearch.deleteVector(db, id, shard);
+        shardManager.decrementVectorCount(shard.id);
+        return { success: true };
+      }
+    }
+
+    return { success: false, error: "Knowledge item not found" };
+  } catch (error) {
+    log("handleDeleteTeamKnowledge: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleSearchTeamKnowledge(
+  tag: string,
+  query: string,
+  type?: KnowledgeType,
+  limit: number = 10
+): Promise<ApiResponse<any>> {
+  try {
+    await embeddingService.warmup();
+
+    const results = await knowledgeStore.search(query, tag, {
+      limit,
+      type,
+      threshold: 0.5,
+    });
+
+    return {
+      success: true,
+      data: {
+        results: results.map((r) => ({
+          id: r.item.id,
+          type: r.item.type,
+          title: r.item.title,
+          content: r.item.content,
+          sourceFile: r.item.sourceFile,
+          similarity: r.similarity,
+          tags: r.item.tags,
+        })),
+        total: results.length,
+      },
+    };
+  } catch (error) {
+    log("handleSearchTeamKnowledge: error", { error: String(error) });
     return { success: false, error: String(error) };
   }
 }

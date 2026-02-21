@@ -10,10 +10,17 @@ import { performAutoCapture } from "./services/auto-capture.js";
 import { performUserProfileLearning } from "./services/user-memory-learning.js";
 import { userPromptManager } from "./services/user-prompt/user-prompt-manager.js";
 import { startWebServer, WebServer } from "./services/web-server.js";
+import {
+  knowledgeStore,
+  syncTeamKnowledge,
+  getOverviewContext,
+  getRelevantKnowledge,
+} from "./services/team-knowledge/index.js";
 
 import { isConfigured, CONFIG } from "./config.js";
 import { log } from "./services/logger.js";
 import type { MemoryType } from "./types/index.js";
+import type { KnowledgeType } from "./types/team-knowledge.js";
 import { getLanguageName } from "./services/language-detector.js";
 
 export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
@@ -205,6 +212,35 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           } as any;
           output.parts.unshift(contextPart);
         }
+
+        // Team Knowledge injection
+        if (CONFIG.teamKnowledgeEnabled) {
+          try {
+            let teamContext = "";
+
+            if (shouldInject && CONFIG.teamKnowledgeInjectOverview) {
+              teamContext = await getOverviewContext(tags.project.tag);
+            } else if (CONFIG.teamKnowledgeInjectRelevant && userMessage.length > 10) {
+              teamContext = await getRelevantKnowledge(userMessage, tags.project.tag, {
+                limit: CONFIG.teamKnowledgeMaxInject,
+              });
+            }
+
+            if (teamContext) {
+              const teamPart: Part = {
+                id: `team-knowledge-${Date.now()}`,
+                sessionID: input.sessionID,
+                messageID: output.message.id,
+                type: "text",
+                text: teamContext,
+                synthetic: true,
+              } as any;
+              output.parts.unshift(teamPart);
+            }
+          } catch (e) {
+            log("Team knowledge injection error", { error: String(e) });
+          }
+        }
       } catch (error) {
         log("chat.message: ERROR", { error: String(error) });
         if (ctx.client?.tui && CONFIG.showErrorToasts) {
@@ -364,6 +400,104 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           }
         },
       }),
+
+      team_knowledge: tool({
+        description:
+          "Query and manage team knowledge base (tech stack, architecture, coding standards, lessons, business logic)",
+        args: {
+          mode: tool.schema.enum(["search", "list", "stats", "sync"]),
+          query: tool.schema.string().optional(),
+          type: tool.schema
+            .enum(["tech-stack", "architecture", "coding-standard", "lesson", "business-logic"])
+            .optional(),
+          limit: tool.schema.number().optional(),
+        },
+        async execute(
+          args: {
+            mode: "search" | "list" | "stats" | "sync";
+            query?: string;
+            type?: KnowledgeType;
+            limit?: number;
+          },
+          toolCtx: { sessionID: string }
+        ) {
+          if (!isConfigured() || !CONFIG.teamKnowledgeEnabled) {
+            return JSON.stringify({
+              success: false,
+              error: "Team knowledge system not enabled",
+            });
+          }
+
+          const projectTags = getTags(directory);
+
+          try {
+            switch (args.mode) {
+              case "search":
+                if (!args.query) {
+                  return JSON.stringify({ success: false, error: "query required for search" });
+                }
+                const searchResults = await knowledgeStore.search(
+                  args.query,
+                  projectTags.project.tag,
+                  {
+                    limit: args.limit || 10,
+                    type: args.type,
+                  }
+                );
+                return JSON.stringify({
+                  success: true,
+                  count: searchResults.length,
+                  results: searchResults.map((r) => ({
+                    id: r.item.id,
+                    type: r.item.type,
+                    title: r.item.title,
+                    similarity: Math.round(r.similarity * 100),
+                    content:
+                      r.item.content.slice(0, 200) + (r.item.content.length > 200 ? "..." : ""),
+                  })),
+                });
+
+              case "list":
+                const listResults = await knowledgeStore.list(
+                  projectTags.project.tag,
+                  args.type,
+                  args.limit || 20
+                );
+                return JSON.stringify({
+                  success: true,
+                  count: listResults.length,
+                  items: listResults.map((item) => ({
+                    id: item.id,
+                    type: item.type,
+                    title: item.title,
+                    sourceFile: item.sourceFile,
+                    updatedAt: new Date(item.updatedAt).toISOString(),
+                  })),
+                });
+
+              case "stats":
+                const stats = await knowledgeStore.getStats(projectTags.project.tag);
+                return JSON.stringify({
+                  success: true,
+                  ...stats,
+                  lastSync: stats.lastSync ? new Date(stats.lastSync).toISOString() : null,
+                });
+
+              case "sync":
+                const syncResult = await syncTeamKnowledge(directory);
+                return JSON.stringify({
+                  success: syncResult.errors.length === 0,
+                  ...syncResult,
+                });
+
+              default:
+                return JSON.stringify({ success: false, error: `Unknown mode: ${args.mode}` });
+            }
+          } catch (error) {
+            return JSON.stringify({ success: false, error: String(error) });
+          }
+        },
+      }),
     },
 
     event: async (input: { event: { type: string; properties?: any } }) => {
@@ -373,13 +507,31 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
         const sessionID = event.properties?.sessionID;
         if (!sessionID) return;
 
+        log("session.idle received", { sessionID, isServerOwner: webServer?.isServerOwner() });
+
         if (idleTimeout) clearTimeout(idleTimeout);
 
         idleTimeout = setTimeout(async () => {
           try {
+            log("idle timeout fired, starting auto capture", { sessionID });
             await performAutoCapture(ctx, sessionID, directory);
 
+            // Team knowledge sync
+            if (CONFIG.teamKnowledgeEnabled && CONFIG.teamKnowledgeSyncOnIdle) {
+              try {
+                await syncTeamKnowledge(directory);
+              } catch (e) {
+                log("Team knowledge sync error", { error: String(e) });
+              }
+            }
+
+            log("checking if should run user profile learning", {
+              isServerOwner: webServer?.isServerOwner(),
+              webServerExists: !!webServer,
+            });
+
             if (webServer?.isServerOwner()) {
+              log("running user profile learning");
               await performUserProfileLearning(ctx, directory);
               const { cleanupService } = await import("./services/cleanup-service.js");
               if (await cleanupService.shouldRunCleanup()) await cleanupService.runCleanup();
