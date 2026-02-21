@@ -22,6 +22,24 @@ A persistent memory system for AI coding agents that enables long-term context r
 
 Local vector database with SQLite + HNSW (hnswlib-wasm), persistent project memories, automatic user profile learning, unified memory-prompt timeline, full-featured web UI, intelligent prompt-based memory extraction, multi-provider AI support (OpenAI, Anthropic), 12+ local embedding models, smart deduplication, and built-in privacy protection.
 
+## Prerequisites
+
+This plugin uses `hnswlib-node` for fast vector similarity search, which requires native compilation. Ensure you have:
+
+**All platforms:**
+
+- Python 3.x
+- A C++ compiler (gcc, clang, or MSVC)
+- `make` or CMake
+
+**Platform-specific setup:**
+
+| Platform    | Requirements                                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **macOS**   | Xcode Command Line Tools: `xcode-select --install`                                                                        |
+| **Linux**   | Build essentials: `sudo apt install build-essential python3` (Debian/Ubuntu) or `sudo pacman -S base-devel python` (Arch) |
+| **Windows** | Visual Studio Build Tools with C++ workload, or Windows Build Tools: `npm install -g windows-build-tools`                 |
+
 ## Getting Started
 
 Add to your OpenCode configuration at `~/.config/opencode/opencode.json`:
@@ -32,7 +50,7 @@ Add to your OpenCode configuration at `~/.config/opencode/opencode.json`:
 }
 ```
 
-The plugin downloads automatically on next startup. No additional dependencies required - vector search is powered by pure WASM for cross-platform compatibility.
+The plugin downloads automatically on next startup.
 
 ## Usage Examples
 
