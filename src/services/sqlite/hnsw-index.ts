@@ -9,7 +9,16 @@ import {
 import { join, dirname, basename } from "node:path";
 import { log } from "../logger.js";
 import { CONFIG } from "../../config.js";
-import { HierarchicalNSW } from "hnswlib-node";
+
+let HNSWLib: any = null;
+
+async function loadHNSWLib(): Promise<any> {
+  if (!HNSWLib) {
+    const module = await import("hnswlib-wasm");
+    HNSWLib = module;
+  }
+  return HNSWLib;
+}
 
 export interface HNSWIndexData {
   id: string;
@@ -17,7 +26,7 @@ export interface HNSWIndexData {
 }
 
 export class HNSWIndex {
-  private index: HierarchicalNSW | null = null;
+  private index: any = null;
   private idMap: Map<number, string> = new Map();
   private reverseMap: Map<string, number> = new Map();
   private nextId: number = 0;
@@ -34,6 +43,8 @@ export class HNSWIndex {
   private async ensureInitialized(): Promise<void> {
     if (this.initialized) return;
 
+    const hnsw = await loadHNSWLib();
+
     const dir = dirname(this.indexPath);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
@@ -41,8 +52,8 @@ export class HNSWIndex {
 
     if (existsSync(this.indexPath)) {
       try {
-        this.index = new HierarchicalNSW("cosine", this.dimensions);
-        await this.index.readIndex(this.indexPath);
+        this.index = new hnsw.HierarchicalNSW("cosine", this.dimensions);
+        this.index.readIndex(this.indexPath);
 
         const metaPath = this.indexPath + ".meta";
         if (existsSync(metaPath)) {
@@ -60,20 +71,14 @@ export class HNSWIndex {
           path: this.indexPath,
           error: String(error),
         });
-        this.index = new HierarchicalNSW("cosine", this.dimensions);
-        await this.index.initIndex(this.maxElements);
+        this.index = new hnsw.HierarchicalNSW("cosine", this.dimensions, this.maxElements);
       }
     } else {
-      this.index = new HierarchicalNSW("cosine", this.dimensions);
-      await this.index.initIndex(this.maxElements);
+      this.index = new hnsw.HierarchicalNSW("cosine", this.dimensions, this.maxElements);
       log("HNSW index created", { path: this.indexPath, dimensions: this.dimensions });
     }
 
     this.initialized = true;
-  }
-
-  private vectorToArray(vector: Float32Array): number[] {
-    return Array.from(vector);
   }
 
   async insert(id: string, vector: Float32Array): Promise<void> {
@@ -85,7 +90,7 @@ export class HNSWIndex {
     }
 
     const internalId = this.nextId++;
-    await this.index!.addPoint(this.vectorToArray(vector), internalId);
+    this.index!.addPoint(vector, internalId);
     this.idMap.set(internalId, id);
     this.reverseMap.set(id, internalId);
 
@@ -102,7 +107,7 @@ export class HNSWIndex {
       }
 
       const internalId = this.nextId++;
-      await this.index!.addPoint(this.vectorToArray(item.vector), internalId);
+      this.index!.addPoint(item.vector, internalId);
       this.idMap.set(internalId, item.id);
       this.reverseMap.set(item.id, internalId);
     }
@@ -114,7 +119,7 @@ export class HNSWIndex {
     await this.ensureInitialized();
 
     try {
-      const results = await this.index!.searchKnn(this.vectorToArray(queryVector), k);
+      const results = this.index!.searchKnn(queryVector, k);
 
       return results.neighbors
         .map((internalId: number, idx: number) => ({
@@ -148,7 +153,7 @@ export class HNSWIndex {
       mkdirSync(dir, { recursive: true });
     }
 
-    await this.index.writeIndex(this.indexPath);
+    this.index.writeIndex(this.indexPath);
 
     const metaPath = this.indexPath + ".meta";
     const meta = {
