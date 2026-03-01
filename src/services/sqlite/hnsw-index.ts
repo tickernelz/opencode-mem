@@ -52,7 +52,7 @@ export class HNSWIndex {
     // exported FS API for bridging to real filesystem. HNSW indexes are kept
     // purely in-memory and rebuilt from SQLite vectors on process restart.
     // Constructor requires 3 args: (spaceName, numDimensions, autoSaveFilename)
-    this.index = new hnsw.HierarchicalNSW("cosine", this.dimensions, "index.hnsw");
+    this.index = new hnsw.HierarchicalNSW("cosine", this.dimensions, "");
     // initIndex requires 4 args: (maxElements, m, efConstruction, randomSeed)
     this.index.initIndex(this.maxElements, 16, 200, 100);
 
