@@ -10,12 +10,14 @@
     <script src="https://cdn.jsdelivr.net/npm/marked@17.0.1/lib/marked.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.2/dist/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsonrepair@latest/lib/umd/jsonrepair.min.js"></script>
+    <script src="/i18n.js"></script>
   </head>
   <body>
     <div class="container">
       <header class="header">
         <div class="header-top">
-          <h1 class="title">┌─ OPENCODE MEMORY EXPLORER ─┐</h1>
+          <h1 class="title" data-i18n="title">┌─ OPENCODE MEMORY EXPLORER ─┐</h1>
+          <button id="lang-toggle" class="lang-toggle" title="Switch Language">EN</button>
           <a
             href="https://github.com/tickernelz/opencode-mem"
             target="_blank"
@@ -35,11 +37,11 @@
       </header>
 
       <div class="scope-tabs">
-        <button id="tab-project" class="tab-btn active">
+        <button id="tab-project" class="tab-btn active" data-i18n="tab-project">
           <i data-lucide="folder" class="icon"></i>
           PROJECT MEMORIES
         </button>
-        <button id="tab-profile" class="tab-btn">
+        <button id="tab-profile" class="tab-btn" data-i18n="tab-profile">
           <i data-lucide="user" class="icon"></i>
           USER PROFILE
         </button>
@@ -47,52 +49,68 @@
 
       <div class="controls">
         <div class="filter-group">
-          <label>Tag:</label>
+          <label data-i18n="label-tag">Tag:</label>
           <select id="tag-filter">
-            <option value="">All Tags</option>
+            <option value="" data-i18n="opt-all-tags">All Tags</option>
           </select>
         </div>
 
         <div class="search-group">
-          <input type="text" id="search-input" placeholder="Search memories..." />
+          <input
+            type="text"
+            id="search-input"
+            data-i18n-placeholder="placeholder-search"
+            placeholder="Search memories..."
+          />
           <button id="search-btn"><i data-lucide="search" class="icon"></i></button>
           <button id="clear-search-btn" class="hidden"><i data-lucide="x" class="icon"></i></button>
         </div>
 
         <div class="maintenance-actions">
-          <button id="cleanup-btn" class="btn-maintenance">
+          <button id="cleanup-btn" class="btn-maintenance" data-i18n="btn-cleanup">
             <i data-lucide="trash" class="icon"></i> Cleanup
           </button>
-          <button id="deduplicate-btn" class="btn-maintenance">
+          <button id="deduplicate-btn" class="btn-maintenance" data-i18n="btn-deduplicate">
             <i data-lucide="refresh-cw" class="icon"></i> Deduplicate
           </button>
         </div>
 
         <div class="bulk-actions hidden" id="bulk-actions">
-          <span id="selected-count">0 selected</span>
-          <button id="bulk-delete-btn">
+          <span id="selected-count" data-i18n="text-selected">0 selected</span>
+          <button id="bulk-delete-btn" data-i18n="btn-delete-selected">
             <i data-lucide="trash-2" class="icon"></i> Delete Selected
           </button>
-          <button id="deselect-all-btn"><i data-lucide="x" class="icon"></i> Deselect All</button>
+          <button id="deselect-all-btn" data-i18n="btn-deselect-all">
+            <i data-lucide="x" class="icon"></i> Deselect All
+          </button>
         </div>
       </div>
 
       <div class="migration-section hidden" id="migration-section">
         <div class="migration-warning">
           <i data-lucide="alert-triangle" class="icon"></i>
-          <span id="migration-message">Model dimension mismatch detected!</span>
+          <span id="migration-message" data-i18n="migration-mismatch"
+            >Model dimension mismatch detected!</span
+          >
         </div>
         <div class="migration-info">
           <label>
             <input type="checkbox" id="migration-confirm-checkbox" />
-            I understand this operation is irreversible and will affect all stored memories
+            <span data-i18n="migration-understand"
+              >I understand this operation is irreversible and will affect all stored memories</span
+            >
           </label>
         </div>
         <div class="migration-actions">
-          <button id="migration-fresh-btn" class="btn-migration" disabled>
+          <button
+            id="migration-fresh-btn"
+            class="btn-migration"
+            disabled
+            data-i18n="btn-fresh-start"
+          >
             <i data-lucide="trash" class="icon"></i> Fresh Start (Delete All)
           </button>
-          <button id="migration-reembed-btn" class="btn-migration" disabled>
+          <button id="migration-reembed-btn" class="btn-migration" disabled data-i18n="btn-reembed">
             <i data-lucide="refresh-cw" class="icon"></i> Re-embed (Preserve Data)
           </button>
         </div>
@@ -100,12 +118,12 @@
 
       <div class="memories-section" id="project-section">
         <div class="section-header">
-          <h2 id="section-title">└─ PROJECT MEMORIES (0) ──</h2>
+          <h2 id="section-title" data-i18n="section-project">└─ PROJECT MEMORIES (0) ──</h2>
           <div class="pagination" id="pagination-top">
             <button id="prev-page-top" disabled>
               <i data-lucide="chevron-left" class="icon"></i>
             </button>
-            <span id="page-info-top">Page 1 of 1</span>
+            <span id="page-info-top" data-i18n="text-page">Page 1 of 1</span>
             <button id="next-page-top" disabled>
               <i data-lucide="chevron-right" class="icon"></i>
             </button>
@@ -113,14 +131,14 @@
         </div>
 
         <div id="memories-list" class="memories-list">
-          <div class="loading">Initializing...</div>
+          <div class="loading" data-i18n="loading-init">Initializing...</div>
         </div>
 
         <div class="pagination" id="pagination-bottom">
           <button id="prev-page-bottom" disabled>
             <i data-lucide="chevron-left" class="icon"></i>
           </button>
-          <span id="page-info-bottom">Page 1 of 1</span>
+          <span id="page-info-bottom" data-i18n="text-page">Page 1 of 1</span>
           <button id="next-page-bottom" disabled>
             <i data-lucide="chevron-right" class="icon"></i>
           </button>
@@ -129,61 +147,67 @@
 
       <div class="profile-section hidden" id="profile-section">
         <div class="section-header">
-          <h2>└─ USER PROFILE ──</h2>
-          <button id="refresh-profile-btn" class="btn-secondary">
+          <h2 data-i18n="section-profile">└─ USER PROFILE ──</h2>
+          <button id="refresh-profile-btn" class="btn-secondary" data-i18n="btn-refresh">
             <i data-lucide="refresh-cw" class="icon"></i> Refresh
           </button>
         </div>
 
         <div id="profile-content" class="profile-content">
-          <div class="loading">Loading profile...</div>
+          <div class="loading" data-i18n="loading-profile">Loading profile...</div>
         </div>
       </div>
 
       <div class="add-section">
-        <h2>└─ ADD NEW MEMORY ──</h2>
+        <h2 data-i18n="section-add">└─ ADD NEW MEMORY ──</h2>
         <form id="add-form">
           <div class="form-row">
             <div class="form-group">
-              <label>Tag:</label>
+              <label data-i18n="label-tag">Tag:</label>
               <select id="add-tag" required>
-                <option value="">Select tag</option>
+                <option value="" data-i18n="opt-select-tag">Select tag</option>
               </select>
             </div>
 
             <div class="form-group">
-              <label>Type:</label>
+              <label data-i18n="label-type">Type:</label>
               <select id="add-type">
-                <option value="">other</option>
-                <option value="feature">feature</option>
-                <option value="bug-fix">bug-fix</option>
-                <option value="refactor">refactor</option>
-                <option value="architecture">architecture</option>
-                <option value="rule">rule</option>
-                <option value="documentation">documentation</option>
-                <option value="discussion">discussion</option>
-                <option value="analysis">analysis</option>
-                <option value="configuration">configuration</option>
+                <option value="" data-i18n="opt-other">other</option>
+                <option value="feature" data-i18n="opt-feature">feature</option>
+                <option value="bug-fix" data-i18n="opt-bug-fix">bug-fix</option>
+                <option value="refactor" data-i18n="opt-refactor">refactor</option>
+                <option value="architecture" data-i18n="opt-architecture">architecture</option>
+                <option value="rule" data-i18n="opt-rule">rule</option>
+                <option value="documentation" data-i18n="opt-documentation">documentation</option>
+                <option value="discussion" data-i18n="opt-discussion">discussion</option>
+                <option value="analysis" data-i18n="opt-analysis">analysis</option>
+                <option value="configuration" data-i18n="opt-configuration">configuration</option>
               </select>
             </div>
 
             <div class="form-group">
-              <label>Tags:</label>
-              <input type="text" id="add-tags" placeholder="react, hooks, auth (comma separated)" />
+              <label data-i18n="label-tags">Tags:</label>
+              <input
+                type="text"
+                id="add-tags"
+                data-i18n-placeholder="placeholder-tags"
+                placeholder="react, hooks, auth (comma separated)"
+              />
             </div>
           </div>
 
           <div class="form-group">
-            <label>Content:</label>
+            <label data-i18n="label-content">Content:</label>
             <textarea
               id="add-content"
               rows="4"
+              data-i18n-placeholder="placeholder-content"
               placeholder="Enter memory content..."
               required
             ></textarea>
           </div>
 
-          <button type="submit" class="btn-primary">
+          <button type="submit" class="btn-primary" data-i18n="btn-add-memory">
             <i data-lucide="plus" class="icon"></i> Add Memory
           </button>
         </form>
@@ -193,20 +217,20 @@
     <div id="edit-modal" class="modal hidden">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>Edit Memory</h3>
+          <h3 data-i18n="modal-edit-title">Edit Memory</h3>
           <button class="modal-close" id="modal-close"><i data-lucide="x" class="icon"></i></button>
         </div>
         <form id="edit-form">
           <input type="hidden" id="edit-id" />
           <div class="form-group">
-            <label>Content:</label>
+            <label data-i18n="label-content">Content:</label>
             <textarea id="edit-content" rows="6" required></textarea>
           </div>
           <div class="modal-actions">
-            <button type="button" class="btn-secondary" id="cancel-edit">
+            <button type="button" class="btn-secondary" id="cancel-edit" data-i18n="btn-cancel">
               <i data-lucide="x" class="icon"></i> Cancel
             </button>
-            <button type="submit" class="btn-primary">
+            <button type="submit" class="btn-primary" data-i18n="btn-save">
               <i data-lucide="check" class="icon"></i> Save Changes
             </button>
           </div>
@@ -219,20 +243,22 @@
     <div id="tag-migration-overlay" class="modal hidden">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>Memory Tagging Migration</h3>
+          <h3 data-i18n="modal-migration-title">Memory Tagging Migration</h3>
         </div>
         <div class="migration-progress-body">
-          <p id="tag-migration-status">Initializing migration...</p>
+          <p id="tag-migration-status" data-i18n="status-migration-init">
+            Initializing migration...
+          </p>
           <div class="progress-bar-container">
             <div id="tag-migration-progress" class="progress-bar" style="width: 0%"></div>
           </div>
-          <p class="migration-note">
+          <p class="migration-note" data-i18n="migration-note">
             Please don't close the browser. This will re-vectorize your memories with technical tags
             to improve search accuracy.
           </p>
         </div>
         <div class="modal-actions" id="tag-migration-actions">
-          <button id="start-tag-migration-btn" class="btn-primary">
+          <button id="start-tag-migration-btn" class="btn-primary" data-i18n="btn-start-migration">
             <i data-lucide="play" class="icon"></i> Start Migration
           </button>
         </div>
@@ -242,13 +268,13 @@
     <div id="changelog-modal" class="modal hidden">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>Profile Version History</h3>
+          <h3 data-i18n="modal-changelog-title">Profile Version History</h3>
           <button class="modal-close" id="changelog-close">
             <i data-lucide="x" class="icon"></i>
           </button>
         </div>
         <div id="changelog-list" class="changelog-list">
-          <div class="loading">Loading changelog...</div>
+          <div class="loading" data-i18n="loading-changelog">Loading changelog...</div>
         </div>
       </div>
     </div>
