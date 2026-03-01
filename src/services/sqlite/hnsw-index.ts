@@ -14,10 +14,14 @@ let HNSWLib: any = null;
 
 async function loadHNSWLib(): Promise<any> {
   if (!HNSWLib) {
-    const module = await import("hnswlib-wasm");
-    HNSWLib = module;
+    const { loadHnswlib } = await import("hnswlib-wasm");
+    HNSWLib = await loadHnswlib();
   }
   return HNSWLib;
+}
+
+function getVirtualFilename(indexPath: string): string {
+  return basename(indexPath);
 }
 
 export interface HNSWIndexData {
@@ -53,7 +57,10 @@ export class HNSWIndex {
     if (existsSync(this.indexPath)) {
       try {
         this.index = new hnsw.HierarchicalNSW("cosine", this.dimensions);
-        this.index.readIndex(this.indexPath);
+        const vFilename = getVirtualFilename(this.indexPath);
+        const fileData = readFileSync(this.indexPath);
+        hnsw.FS.writeFile(vFilename, new Uint8Array(fileData));
+        this.index.readIndex(vFilename, this.maxElements);
 
         const metaPath = this.indexPath + ".meta";
         if (existsSync(metaPath)) {
@@ -71,10 +78,12 @@ export class HNSWIndex {
           path: this.indexPath,
           error: String(error),
         });
-        this.index = new hnsw.HierarchicalNSW("cosine", this.dimensions, this.maxElements);
+        this.index = new hnsw.HierarchicalNSW("cosine", this.dimensions);
+        this.index.initIndex(this.maxElements);
       }
     } else {
-      this.index = new hnsw.HierarchicalNSW("cosine", this.dimensions, this.maxElements);
+      this.index = new hnsw.HierarchicalNSW("cosine", this.dimensions);
+      this.index.initIndex(this.maxElements);
       log("HNSW index created", { path: this.indexPath, dimensions: this.dimensions });
     }
 
@@ -153,7 +162,11 @@ export class HNSWIndex {
       mkdirSync(dir, { recursive: true });
     }
 
-    this.index.writeIndex(this.indexPath);
+    const hnsw = await loadHNSWLib();
+    const vFilename = getVirtualFilename(this.indexPath);
+    this.index.writeIndex(vFilename);
+    const data = hnsw.FS.readFile(vFilename);
+    writeFileSync(this.indexPath, data);
 
     const metaPath = this.indexPath + ".meta";
     const meta = {
