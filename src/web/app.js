@@ -57,8 +57,8 @@ function populateTagDropdowns() {
   const tagFilter = document.getElementById("tag-filter");
   const addTag = document.getElementById("add-tag");
 
-  tagFilter.innerHTML = '<option value="">All Tags</option>';
-  addTag.innerHTML = '<option value="">Select tag</option>';
+  tagFilter.innerHTML = `<option value="">${t("opt-all-tags")}</option>`;
+  addTag.innerHTML = `<option value="">${t("opt-select-tag")}</option>`;
 
   const scopeTags = state.tags.project;
 
@@ -83,7 +83,7 @@ function renderMemories() {
   const container = document.getElementById("memories-list");
 
   if (state.memories.length === 0) {
-    container.innerHTML = '<div class="empty-state">No memories found</div>';
+    container.innerHTML = `<div class="empty-state">${t("empty-memories")}</div>`;
     return;
   }
 
@@ -162,14 +162,13 @@ function renderCombinedCard(pair) {
     memory.updatedAt && memory.updatedAt !== memory.createdAt ? formatDate(memory.updatedAt) : null;
 
   const dateInfo = updatedDate
-    ? `<span>Created: ${createdDate}</span><span>Updated: ${updatedDate}</span>`
-    : `<span>Created: ${createdDate}</span>`;
-
+    ? `<span>${t("date-created")} ${createdDate}</span><span>${t("date-updated")} ${updatedDate}</span>`
+    : `<span>${t("date-created")} ${createdDate}</span>`;
   return `
     <div class="combined-card ${isSelected ? "selected" : ""} ${isPinned ? "pinned" : ""}" data-id="${memory.id}">
       <div class="combined-prompt-section">
         <div class="combined-header">
-          <span class="badge badge-prompt">USER PROMPT</span>
+          <span class="badge badge-prompt">${t("badge-prompt")}</span>
           <span class="prompt-date">${formatDate(prompt.createdAt)}</span>
         </div>
         <div class="prompt-content">${escapeHtml(prompt.content)}</div>
@@ -183,17 +182,17 @@ function renderCombinedCard(pair) {
         <div class="memory-header">
           <div class="meta">
             <input type="checkbox" class="memory-checkbox" data-id="${memory.id}" ${isSelected ? "checked" : ""} />
-            <span class="badge badge-memory">MEMORY</span>
+            <span class="badge badge-memory">${t("badge-memory")}</span>
             ${memory.memoryType ? `<span class="badge badge-type">${memory.memoryType}</span>` : ""}
             ${similarityHtml}
-            ${isPinned ? '<span class="badge badge-pinned">PINNED</span>' : ""}
+            ${isPinned ? `<span class="badge badge-pinned">${t("badge-pinned")}</span>` : ""}
             <span class="memory-display-name">${escapeHtml(memory.displayName || memory.id)}</span>
           </div>
           <div class="memory-actions">
             ${pinButton}
             <button class="btn-edit" onclick="editMemory('${memory.id}')"><i data-lucide="edit-3" class="icon"></i></button>
             <button class="btn-delete" onclick="deleteMemoryWithLink('${memory.id}', true)">
-              <i data-lucide="trash-2" class="icon"></i> Delete Pair
+              <i data-lucide="trash-2" class="icon"></i> ${t("btn-delete-pair")}
             </button>
           </div>
         </div>
@@ -219,21 +218,21 @@ function renderPromptCard(prompt) {
         <div class="meta">
           <input type="checkbox" class="memory-checkbox" data-id="${prompt.id}" ${isSelected ? "checked" : ""} />
           <i data-lucide="message-circle" class="icon"></i>
-          <span class="badge badge-prompt">USER PROMPT</span>
-          ${isLinked ? '<span class="badge badge-linked"><i data-lucide="link" class="icon-sm"></i> LINKED</span>' : ""}
+          <span class="badge badge-prompt">${t("badge-prompt")}</span>
+          ${isLinked ? `<span class="badge badge-linked"><i data-lucide="link" class="icon-sm"></i> ${t("badge-linked")}</span>` : ""}
           <span class="prompt-date">${promptDate}</span>
         </div>
         <div class="prompt-actions">
           <button class="btn-delete" onclick="deletePromptWithLink('${prompt.id}', ${isLinked})">
             <i data-lucide="trash-2" class="icon"></i>
-            ${isLinked ? "Delete Pair" : "Delete"}
+            ${isLinked ? t("btn-delete-pair") : t("btn-delete")}
           </button>
         </div>
       </div>
       <div class="prompt-content">
         ${escapeHtml(prompt.content)}
       </div>
-      ${isLinked ? '<div class="link-indicator"><i data-lucide="arrow-down" class="icon-sm"></i> Generated memory above <i data-lucide="arrow-up" class="icon-sm"></i></div>' : ""}
+      ${isLinked ? `<div class="link-indicator"><i data-lucide="arrow-down" class="icon-sm"></i> ${t("text-generated-above")} <i data-lucide="arrow-up" class="icon-sm"></i></div>` : ""}
     </div>
   `;
 }
@@ -270,9 +269,8 @@ function renderMemoryCard(memory) {
     memory.updatedAt && memory.updatedAt !== memory.createdAt ? formatDate(memory.updatedAt) : null;
 
   const dateInfo = updatedDate
-    ? `<span>Created: ${createdDate}</span><span>Updated: ${updatedDate}</span>`
-    : `<span>Created: ${createdDate}</span>`;
-
+    ? `<span>${t("date-created")} ${createdDate}</span><span>${t("date-updated")} ${updatedDate}</span>`
+    : `<span>${t("date-created")} ${createdDate}</span>`;
   const tagsHtml =
     memory.tags && memory.tags.length > 0
       ? `<div class="tags-list">${memory.tags.map((t) => `<span class="tag-badge">${escapeHtml(t)}</span>`).join("")}</div>`
@@ -284,9 +282,9 @@ function renderMemoryCard(memory) {
         <div class="meta">
           <input type="checkbox" class="memory-checkbox" data-id="${memory.id}" ${isSelected ? "checked" : ""} />
           ${memory.memoryType ? `<span class="badge badge-type">${memory.memoryType}</span>` : ""}
-          ${isLinked ? '<span class="badge badge-linked"><i data-lucide="link" class="icon-sm"></i> LINKED</span>' : ""}
+          ${isLinked ? `<span class="badge badge-linked"><i data-lucide="link" class="icon-sm"></i> ${t("badge-linked")}</span>` : ""}
           ${similarityHtml}
-          ${isPinned ? '<span class="badge badge-pinned">PINNED</span>' : ""}
+          ${isPinned ? `<span class="badge badge-pinned">${t("badge-pinned")}</span>` : ""}
           <span class="memory-display-name">${escapeHtml(displayInfo)}</span>
           ${subtitle}
         </div>
@@ -295,13 +293,13 @@ function renderMemoryCard(memory) {
           <button class="btn-edit" onclick="editMemory('${memory.id}')"><i data-lucide="edit-3" class="icon"></i></button>
           <button class="btn-delete" onclick="deleteMemoryWithLink('${memory.id}', ${isLinked})">
             <i data-lucide="trash-2" class="icon"></i>
-            ${isLinked ? "Delete Pair" : "Delete"}
+            ${isLinked ? t("btn-delete-pair") : t("btn-delete")}
           </button>
         </div>
       </div>
       ${tagsHtml}
       <div class="memory-content markdown-content">${renderMarkdown(memory.content)}</div>
-      ${isLinked ? '<div class="link-indicator"><i data-lucide="arrow-up" class="icon-sm"></i> From prompt below <i data-lucide="arrow-down" class="icon-sm"></i></div>' : ""}
+      ${isLinked ? `<div class="link-indicator"><i data-lucide="arrow-up" class="icon-sm"></i> ${t("text-from-below")} <i data-lucide="arrow-down" class="icon-sm"></i></div>` : ""}
       <div class="memory-footer">
         ${dateInfo}
         <span>ID: ${memory.id}</span>
@@ -340,17 +338,16 @@ function updateBulkActions() {
 
   if (state.selectedMemories.size > 0) {
     bulkActions.classList.remove("hidden");
-    selectedCount.textContent = `${state.selectedMemories.size} selected`;
+    selectedCount.textContent = t("text-selected", { count: state.selectedMemories.size });
   } else {
     bulkActions.classList.add("hidden");
   }
 }
 
 function updatePagination() {
-  const pageInfo = `Page ${state.currentPage} of ${state.totalPages}`;
+  const pageInfo = t("text-page", { current: state.currentPage, total: state.totalPages });
   document.getElementById("page-info-top").textContent = pageInfo;
   document.getElementById("page-info-bottom").textContent = pageInfo;
-
   const hasPrev = state.currentPage > 1;
   const hasNext = state.currentPage < state.totalPages;
 
@@ -363,14 +360,16 @@ function updatePagination() {
 function updateSectionTitle() {
   const title = state.isSearching
     ? `└─ SEARCH RESULTS (${state.totalItems}) ──`
-    : `└─ PROJECT MEMORIES (${state.totalItems}) ──`;
+    : t("section-project", { count: state.totalItems });
   document.getElementById("section-title").textContent = title;
 }
 
 async function loadStats() {
   const result = await fetchAPI("/api/stats");
   if (result.success) {
-    document.getElementById("stats-total").textContent = `Total: ${result.data.total}`;
+    document.getElementById("stats-total").textContent = t("text-total", {
+      count: result.data.total,
+    });
   }
 }
 
@@ -389,7 +388,7 @@ async function addMemory(e) {
     : [];
 
   if (!content || !containerTag) {
-    showToast("Content and tag are required", "error");
+    showToast(t("toast-add-error"), "error");
     return;
   }
 
@@ -400,12 +399,12 @@ async function addMemory(e) {
   });
 
   if (result.success) {
-    showToast("Memory added successfully", "success");
+    showToast(t("toast-add-success"), "success");
     document.getElementById("add-form").reset();
     await loadMemories();
     await loadStats();
   } else {
-    showToast(result.error || "Failed to add memory", "error");
+    showToast(result.error || t("toast-add-failed"), "error");
   }
 }
 
@@ -439,13 +438,12 @@ async function loadMemories() {
     updatePagination();
     updateSectionTitle();
   } else {
-    showError(result.error || "Failed to load memories");
+    showError(result.error || t("toast-update-failed"));
   }
 }
 
 async function deleteMemoryWithLink(id, isLinked) {
-  const message = isLinked ? "Delete this memory AND its linked prompt?" : "Delete this memory?";
-
+  const message = isLinked ? t("confirm-delete-pair") : t("confirm-delete");
   if (!confirm(message)) return;
 
   const result = await fetchAPI(`/api/memories/${id}?cascade=true`, {
@@ -453,22 +451,18 @@ async function deleteMemoryWithLink(id, isLinked) {
   });
 
   if (result.success) {
-    const msg = result.data?.deletedPrompt ? "Memory and linked prompt deleted" : "Memory deleted";
-    showToast(msg, "success");
+    showToast(t("toast-delete-success"), "success");
 
     state.selectedMemories.delete(id);
     await loadMemories();
     await loadStats();
   } else {
-    showToast(result.error || "Failed to delete", "error");
+    showToast(result.error || t("toast-delete-failed"), "error");
   }
 }
 
 async function deletePromptWithLink(id, isLinked) {
-  const message = isLinked
-    ? "Delete this prompt AND its linked memory summary?"
-    : "Delete this prompt?";
-
+  const message = isLinked ? t("confirm-delete-prompt") : t("confirm-delete");
   if (!confirm(message)) return;
 
   const result = await fetchAPI(`/api/prompts/${id}?cascade=true`, {
@@ -476,21 +470,20 @@ async function deletePromptWithLink(id, isLinked) {
   });
 
   if (result.success) {
-    const msg = result.data?.deletedMemory ? "Prompt and linked memory deleted" : "Prompt deleted";
-    showToast(msg, "success");
+    showToast(t("toast-delete-success"), "success");
 
     state.selectedMemories.delete(id);
     await loadMemories();
     await loadStats();
   } else {
-    showToast(result.error || "Failed to delete", "error");
+    showToast(result.error || t("toast-delete-failed"), "error");
   }
 }
 
 async function bulkDelete() {
   if (state.selectedMemories.size === 0) return;
 
-  const message = `Delete ${state.selectedMemories.size} selected items (including linked pairs)?`;
+  const message = t("confirm-bulk-delete", { count: state.selectedMemories.size });
   if (!confirm(message)) return;
 
   const ids = Array.from(state.selectedMemories);
@@ -518,7 +511,7 @@ async function bulkDelete() {
     if (result.success) deletedCount += result.data.deleted;
   }
 
-  showToast(`Deleted ${deletedCount} items (including linked pairs)`, "success");
+  showToast(t("toast-bulk-delete-success"), "success");
   state.selectedMemories.clear();
   await loadMemories();
   await loadStats();
@@ -551,7 +544,7 @@ async function saveEdit(e) {
   const content = document.getElementById("edit-content").value.trim();
 
   if (!content) {
-    showToast("Content is required", "error");
+    showToast(t("toast-add-error"), "error");
     return;
   }
 
@@ -562,11 +555,11 @@ async function saveEdit(e) {
   });
 
   if (result.success) {
-    showToast("Memory updated", "success");
+    showToast(t("toast-update-success"), "success");
     closeModal();
     await loadMemories();
   } else {
-    showToast(result.error || "Failed to update memory", "error");
+    showToast(result.error || t("toast-update-failed"), "error");
   }
 }
 
@@ -637,7 +630,8 @@ function showRefreshIndicator(show) {
 
 function formatDate(isoString) {
   const date = new Date(isoString);
-  return date.toLocaleString("en-US", {
+  const locale = getLanguage() === "zh" ? "zh-CN" : "en-US";
+  return date.toLocaleString(locale, {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -650,10 +644,10 @@ async function pinMemory(id) {
   const result = await fetchAPI(`/api/memories/${id}/pin`, { method: "POST" });
 
   if (result.success) {
-    showToast("Memory pinned", "success");
+    showToast(t("toast-update-success"), "success");
     await loadMemories();
   } else {
-    showToast(result.error || "Failed to pin memory", "error");
+    showToast(result.error || t("toast-update-failed"), "error");
   }
 }
 
@@ -661,49 +655,40 @@ async function unpinMemory(id) {
   const result = await fetchAPI(`/api/memories/${id}/unpin`, { method: "POST" });
 
   if (result.success) {
-    showToast("Memory unpinned", "success");
+    showToast(t("toast-update-success"), "success");
     await loadMemories();
   } else {
-    showToast(result.error || "Failed to unpin memory", "error");
+    showToast(result.error || t("toast-update-failed"), "error");
   }
 }
 
 async function runCleanup() {
-  if (!confirm("Run cleanup? This will delete old memories (respects pinned memories).")) return;
+  if (!confirm(t("confirm-cleanup"))) return;
 
-  showToast("Running cleanup...", "info");
+  showToast(t("status-cleanup"), "info");
   const result = await fetchAPI("/api/cleanup", { method: "POST" });
 
   if (result.success) {
-    const data = result.data;
-    showToast(
-      `Cleanup complete: ${data.deletedCount} deleted (user: ${data.userCount}, project: ${data.projectCount})`,
-      "success"
-    );
+    showToast(t("toast-cleanup-success"), "success");
     await loadMemories();
     await loadStats();
   } else {
-    showToast(result.error || "Cleanup failed", "error");
+    showToast(result.error || t("toast-cleanup-failed"), "error");
   }
 }
 
 async function runDeduplication() {
-  if (!confirm("Run deduplication? This will find and remove duplicate memories.")) return;
+  if (!confirm(t("confirm-dedup"))) return;
 
-  showToast("Running deduplication...", "info");
+  showToast(t("status-dedup"), "info");
   const result = await fetchAPI("/api/deduplicate", { method: "POST" });
 
   if (result.success) {
-    const data = result.data;
-    let message = `Deduplication complete: ${data.exactDuplicatesDeleted} exact duplicates deleted`;
-    if (data.nearDuplicateGroups.length > 0) {
-      message += `, ${data.nearDuplicateGroups.length} near-duplicate groups found`;
-    }
-    showToast(message, "success");
+    showToast(t("toast-dedup-success"), "success");
     await loadMemories();
     await loadStats();
   } else {
-    showToast(result.error || "Deduplication failed", "error");
+    showToast(result.error || t("toast-dedup-failed"), "error");
   }
 }
 
@@ -735,8 +720,7 @@ async function checkMigrationStatus() {
 function showTagMigrationModal(count) {
   const overlay = document.getElementById("tag-migration-overlay");
   const status = document.getElementById("tag-migration-status");
-  status.textContent = `Found ${count} memories needing technical tags.`;
-  overlay.classList.remove("hidden");
+  status.textContent = t("migration-found-tags", { count });
 
   document.getElementById("start-tag-migration-btn").onclick = runTagMigration;
 }
@@ -747,7 +731,7 @@ async function runTagMigration() {
   const progress = document.getElementById("tag-migration-progress");
 
   actions.classList.add("hidden");
-  status.textContent = "Starting migration...";
+  status.textContent = t("status-migration-init");
   progress.style.width = "0%";
 
   let totalProcessed = 0;
@@ -764,8 +748,7 @@ async function runTagMigration() {
     });
 
     if (!result.success) {
-      status.textContent = "Migration failed: " + result.error;
-      actions.classList.remove("hidden");
+      status.textContent = t("toast-migration-failed") + ": " + result.error;
       return;
     }
 
@@ -775,22 +758,20 @@ async function runTagMigration() {
     const percent = total > 0 ? Math.round((totalProcessed / total) * 100) : 0;
 
     progress.style.width = percent + "%";
-    status.textContent = `Processing memories... ${totalProcessed}/${total} (${percent}%)`;
-
+    status.textContent = t("status-migration-progress", { current: totalProcessed, total: total });
     if (hasMore) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
 
   if (attempts >= maxAttempts) {
-    status.textContent = "Migration stopped: maximum attempts reached";
-    actions.classList.remove("hidden");
+    status.textContent = t("migration-stopped");
     return;
   }
 
   progress.style.width = "100%";
-  status.textContent = `Successfully tagged ${totalProcessed} memories!`;
-  showToast("Migration complete", "success");
+  status.textContent = t("toast-migration-success");
+  showToast(t("toast-migration-success"), "success");
   setTimeout(() => {
     document.getElementById("tag-migration-overlay").classList.add("hidden");
     loadMemories();
@@ -804,11 +785,14 @@ function showMigrationWarning(data) {
 
   const shardInfo =
     data.shardMismatches.length > 0
-      ? `${data.shardMismatches.length} shard(s) have different dimensions`
-      : "dimension mismatch detected";
+      ? t("migration-shards-mismatch", { count: data.shardMismatches.length })
+      : t("migration-dimension-mismatch");
 
-  message.textContent = `Model mismatch: Config uses ${data.configDimensions}D (${data.configModel}), but ${shardInfo}.`;
-  section.classList.remove("hidden");
+  message.textContent = t("migration-mismatch-details", {
+    configDimensions: data.configDimensions,
+    configModel: data.configModel,
+    shardInfo,
+  });
 
   lucide.createIcons();
 }
@@ -826,7 +810,7 @@ async function runMigration(strategy) {
   const checkbox = document.getElementById("migration-confirm-checkbox");
 
   if (!checkbox.checked) {
-    showToast("Please confirm you understand this operation is irreversible", "error");
+    showToast(t("toast-migration-failed"), "error");
     return;
   }
 
@@ -841,8 +825,7 @@ async function runMigration(strategy) {
     return;
   }
 
-  showToast("Running migration... This may take a while.", "info");
-
+  showToast(t("status-migration-init"), "info");
   const result = await fetchAPI("/api/migration/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -859,15 +842,14 @@ async function runMigration(strategy) {
       message += `Re-embedded ${data.reEmbeddedMemories} memories. Duration: ${(data.duration / 1000).toFixed(2)}s`;
     }
 
-    showToast(message, "success");
-
+    showToast(t("toast-migration-success"), "success");
     document.getElementById("migration-section").classList.add("hidden");
     document.getElementById("migration-confirm-checkbox").checked = false;
 
     await loadMemories();
     await loadStats();
   } else {
-    showToast(result.error || "Migration failed", "error");
+    showToast(result.error || t("toast-migration-failed"), "error");
   }
 }
 
@@ -877,7 +859,7 @@ async function loadUserProfile() {
     state.userProfile = result.data;
     renderUserProfile();
   } else {
-    showError(result.error || "Failed to load profile");
+    showError(result.error || t("toast-update-failed"));
   }
 }
 
@@ -937,15 +919,15 @@ function renderUserProfile() {
         <h3>${profile.displayName || profile.userId}</h3>
         <div class="profile-stats">
           <div class="stat-pill">
-            <span class="label">VERSION</span>
+            <span class="label">${t("profile-version")}</span>
             <span class="value">${profile.version}</span>
           </div>
           <div class="stat-pill">
-            <span class="label">PROMPTS</span>
+            <span class="label">${t("profile-prompts")}</span>
             <span class="value">${profile.totalPromptsAnalyzed}</span>
           </div>
           <div class="stat-pill">
-            <span class="label">LAST UPDATED</span>
+            <span class="label">${t("profile-updated")}</span>
             <span class="value">${formatDate(profile.lastAnalyzedAt)}</span>
           </div>
         </div>
@@ -957,10 +939,10 @@ function renderUserProfile() {
 
     <div class="dashboard-grid">
       <div class="dashboard-section preferences-section">
-        <h4><i data-lucide="heart" class="icon"></i> PREFERENCES <span class="count">${preferences.length}</span></h4>
+        <h4><i data-lucide="heart" class="icon"></i> ${t("profile-preferences")} <span class="count">${preferences.length}</span></h4>
         ${
           preferences.length === 0
-            ? '<p class="empty-text">No preferences learned yet</p>'
+            ? `<p class="empty-text">${t("empty-preferences")}</p>`
             : `
           <div class="cards-grid">
             ${preferences
@@ -997,10 +979,10 @@ function renderUserProfile() {
       </div>
 
       <div class="dashboard-section patterns-section">
-        <h4><i data-lucide="activity" class="icon"></i> PATTERNS <span class="count">${patterns.length}</span></h4>
+        <h4><i data-lucide="activity" class="icon"></i> ${t("profile-patterns")} <span class="count">${patterns.length}</span></h4>
         ${
           patterns.length === 0
-            ? '<p class="empty-text">No patterns detected yet</p>'
+            ? `<p class="empty-text">${t("empty-patterns")}</p>`
             : `
           <div class="cards-grid">
             ${patterns
@@ -1023,10 +1005,10 @@ function renderUserProfile() {
       </div>
 
       <div class="dashboard-section workflows-section full-width">
-        <h4><i data-lucide="workflow" class="icon"></i> WORKFLOWS <span class="count">${workflows.length}</span></h4>
+        <h4><i data-lucide="workflow" class="icon"></i> ${t("profile-workflows")} <span class="count">${workflows.length}</span></h4>
         ${
           workflows.length === 0
-            ? '<p class="empty-text">No workflows identified yet</p>'
+            ? `<p class="empty-text">${t("empty-workflows")}</p>`
             : `
           <div class="workflows-grid">
             ${workflows
@@ -1067,8 +1049,7 @@ async function showChangelog() {
   const list = document.getElementById("changelog-list");
 
   modal.classList.remove("hidden");
-  list.innerHTML = '<div class="loading">Loading changelog...</div>';
-
+  list.innerHTML = `<div class="loading">${t("loading-changelog")}</div>`;
   const result = await fetchAPI(
     `/api/user-profile/changelog?profileId=${state.userProfile.id}&limit=10`
   );
@@ -1089,12 +1070,12 @@ async function showChangelog() {
       )
       .join("");
   } else {
-    list.innerHTML = '<div class="empty-state">No changelog available</div>';
+    list.innerHTML = `<div class="empty-state">${t("empty-changelog")}</div>`;
   }
 }
 
 async function refreshProfile() {
-  showToast("Refreshing profile...", "info");
+  showToast(t("loading-profile"), "info");
   const result = await fetchAPI("/api/user-profile/refresh", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1105,7 +1086,7 @@ async function refreshProfile() {
     showToast(result.data.message, "success");
     await loadUserProfile();
   } else {
-    showToast(result.error || "Failed to refresh profile", "error");
+    showToast(result.error || t("toast-update-failed"), "error");
   }
 }
 
@@ -1143,6 +1124,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("changelog-close")?.addEventListener("click", () => {
     document.getElementById("changelog-modal").classList.add("hidden");
   });
+
+  document.getElementById("lang-toggle").addEventListener("click", () => {
+    const newLang = getLanguage() === "en" ? "zh" : "en";
+    setLanguage(newLang);
+    document.getElementById("lang-toggle").textContent = newLang.toUpperCase();
+    // Re-render dynamic content
+    loadMemories();
+    loadStats();
+    if (state.currentView === "profile") loadUserProfile();
+  });
+
+  document.getElementById("lang-toggle").textContent = getLanguage().toUpperCase();
 
   document.getElementById("tag-filter").addEventListener("change", () => {
     state.selectedTag = document.getElementById("tag-filter").value;
