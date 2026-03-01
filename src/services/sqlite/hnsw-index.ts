@@ -1,11 +1,4 @@
-import {
-  mkdirSync,
-  existsSync,
-  writeFileSync,
-  readFileSync,
-  unlinkSync,
-  readdirSync,
-} from "node:fs";
+import { mkdirSync, existsSync, writeFileSync, unlinkSync, readdirSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { log } from "../logger.js";
 import { CONFIG } from "../../config.js";
@@ -14,14 +7,15 @@ let HNSWLib: any = null;
 
 async function loadHNSWLib(): Promise<any> {
   if (!HNSWLib) {
+    // hnswlib-wasm is compiled with Emscripten -sENVIRONMENT=web and requires
+    // a browser-like global. This monkey-patch allows it to load in Node.js/Bun.
+    if (typeof globalThis.window === "undefined") {
+      (globalThis as any).window = globalThis;
+    }
     const { loadHnswlib } = await import("hnswlib-wasm");
     HNSWLib = await loadHnswlib();
   }
   return HNSWLib;
-}
-
-function getVirtualFilename(indexPath: string): string {
-  return basename(indexPath);
 }
 
 export interface HNSWIndexData {
@@ -54,40 +48,19 @@ export class HNSWIndex {
       mkdirSync(dir, { recursive: true });
     }
 
-    if (existsSync(this.indexPath)) {
-      try {
-        this.index = new hnsw.HierarchicalNSW("cosine", this.dimensions);
-        const vFilename = getVirtualFilename(this.indexPath);
-        const fileData = readFileSync(this.indexPath);
-        hnsw.FS.writeFile(vFilename, new Uint8Array(fileData));
-        this.index.readIndex(vFilename, this.maxElements);
-
-        const metaPath = this.indexPath + ".meta";
-        if (existsSync(metaPath)) {
-          const meta = JSON.parse(readFileSync(metaPath, "utf-8"));
-          this.nextId = meta.nextId || 0;
-          this.idMap = new Map(
-            Object.entries(meta.idMap || {}).map(([k, v]) => [Number(k), v as string])
-          );
-          this.reverseMap = new Map(Object.entries(meta.reverseMap || {}) as [string, number][]);
-        }
-
-        log("HNSW index loaded", { path: this.indexPath, count: this.nextId });
-      } catch (error) {
-        log("Failed to load HNSW index, creating new", {
-          path: this.indexPath,
-          error: String(error),
-        });
-        this.index = new hnsw.HierarchicalNSW("cosine", this.dimensions);
-        this.index.initIndex(this.maxElements);
-      }
-    } else {
-      this.index = new hnsw.HierarchicalNSW("cosine", this.dimensions);
-      this.index.initIndex(this.maxElements);
-      log("HNSW index created", { path: this.indexPath, dimensions: this.dimensions });
-    }
+    // hnswlib-wasm uses Emscripten MEMFS (in-memory virtual FS) and has no
+    // exported FS API for bridging to real filesystem. HNSW indexes are kept
+    // purely in-memory and rebuilt from SQLite vectors on process restart.
+    // Constructor requires 3 args: (spaceName, numDimensions, autoSaveFilename)
+    this.index = new hnsw.HierarchicalNSW("cosine", this.dimensions, "index.hnsw");
+    // initIndex requires 4 args: (maxElements, m, efConstruction, randomSeed)
+    this.index.initIndex(this.maxElements, 16, 200, 100);
 
     this.initialized = true;
+    log("HNSW index initialized (in-memory)", {
+      path: this.indexPath,
+      dimensions: this.dimensions,
+    });
   }
 
   async insert(id: string, vector: Float32Array): Promise<void> {
@@ -99,7 +72,8 @@ export class HNSWIndex {
     }
 
     const internalId = this.nextId++;
-    this.index!.addPoint(vector, internalId);
+    // hnswlib-wasm addPoint requires 3 args: (point, label, replaceDeleted)
+    this.index!.addPoint(vector, internalId, false);
     this.idMap.set(internalId, id);
     this.reverseMap.set(id, internalId);
 
@@ -116,7 +90,8 @@ export class HNSWIndex {
       }
 
       const internalId = this.nextId++;
-      this.index!.addPoint(item.vector, internalId);
+      // hnswlib-wasm addPoint requires 3 args: (point, label, replaceDeleted)
+      this.index!.addPoint(item.vector, internalId, false);
       this.idMap.set(internalId, item.id);
       this.reverseMap.set(item.id, internalId);
     }
@@ -128,7 +103,10 @@ export class HNSWIndex {
     await this.ensureInitialized();
 
     try {
-      const results = this.index!.searchKnn(queryVector, k);
+      // hnswlib-wasm searchKnn requires 3 args: (queryPoint, numNeighbors, filter)
+      const actualK = Math.min(k, this.reverseMap.size);
+      if (actualK === 0) return [];
+      const results = this.index!.searchKnn(queryVector, actualK, null);
 
       return results.neighbors
         .map((internalId: number, idx: number) => ({
@@ -162,12 +140,8 @@ export class HNSWIndex {
       mkdirSync(dir, { recursive: true });
     }
 
-    const hnsw = await loadHNSWLib();
-    const vFilename = getVirtualFilename(this.indexPath);
-    this.index.writeIndex(vFilename);
-    const data = hnsw.FS.readFile(vFilename);
-    writeFileSync(this.indexPath, data);
-
+    // Only persist id mapping (.meta file). HNSW index data lives in-memory
+    // and is rebuilt from SQLite vectors on process restart.
     const metaPath = this.indexPath + ".meta";
     const meta = {
       nextId: this.nextId,
@@ -179,6 +153,10 @@ export class HNSWIndex {
 
   getCount(): number {
     return this.reverseMap.size;
+  }
+
+  isPopulated(): boolean {
+    return this.reverseMap.size > 0;
   }
 }
 
