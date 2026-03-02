@@ -75,6 +75,12 @@ export class VectorSearch {
     const contentIndex = hnswIndexManager.getIndex(shard.scope, shard.scopeHash, shard.shardIndex);
     const tagsIndex = hnswIndexManager.getTagsIndex(shard.scope, shard.scopeHash, shard.shardIndex);
 
+    // HNSW indexes are in-memory only (hnswlib-wasm has no real FS bridging).
+    // Auto-rebuild from SQLite vectors if indexes are empty after process restart.
+    if (!contentIndex.isPopulated()) {
+      await hnswIndexManager.rebuildFromShard(db, shard.scope, shard.scopeHash, shard.shardIndex);
+    }
+
     const contentResults = await contentIndex.search(queryVector, limit * 4);
     const tagsResults = await tagsIndex.search(queryVector, limit * 4);
 

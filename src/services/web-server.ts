@@ -203,6 +203,10 @@ export class WebServer {
         return this.serveStaticFile("app.js", "application/javascript");
       }
 
+      if (path === "/i18n.js") {
+        return this.serveStaticFile("i18n.js", "application/javascript");
+      }
+
       if (path === "/favicon.ico") {
         return this.serveStaticFile("favicon.ico", "image/x-icon");
       }
