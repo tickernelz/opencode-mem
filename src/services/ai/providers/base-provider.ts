@@ -13,6 +13,7 @@ export interface ProviderConfig {
   iterationTimeout?: number;
   maxTokens?: number;
   memoryTemperature?: number | false;
+  extraParams?: Record<string, unknown>;
 }
 
 export abstract class BaseAIProvider {

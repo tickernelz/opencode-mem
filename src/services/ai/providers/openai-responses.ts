@@ -80,6 +80,10 @@ export class OpenAIResponsesProvider extends BaseAIProvider {
           requestBody.instructions = systemPrompt;
         }
 
+        if (this.config.extraParams) {
+          Object.assign(requestBody, this.config.extraParams);
+        }
+
         const response = await fetch(`${this.config.apiUrl}/responses`, {
           method: "POST",
           headers: {

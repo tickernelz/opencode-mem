@@ -175,6 +175,10 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
           requestBody.temperature = this.config.memoryTemperature ?? 0.3;
         }
 
+        if (this.config.extraParams) {
+          Object.assign(requestBody, this.config.extraParams);
+        }
+
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
         };

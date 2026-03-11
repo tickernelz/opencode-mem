@@ -41,6 +41,7 @@ interface OpenCodeMemConfig {
   memoryApiUrl?: string;
   memoryApiKey?: string;
   memoryTemperature?: number | false;
+  memoryExtraParams?: Record<string, unknown>;
   vectorBackend?: "usearch-first" | "usearch" | "exact-scan";
   aiSessionRetentionDays?: number;
   webServerEnabled?: boolean;
@@ -83,6 +84,7 @@ const DEFAULTS: Required<
     | "memoryApiKey"
     | "memoryProvider"
     | "memoryTemperature"
+    | "memoryExtraParams"
     | "autoCaptureLanguage"
     | "userEmailOverride"
     | "userNameOverride"
@@ -95,6 +97,7 @@ const DEFAULTS: Required<
   memoryApiKey?: string;
   memoryProvider?: "openai-chat" | "openai-responses" | "anthropic";
   memoryTemperature?: number | false;
+  memoryExtraParams?: Record<string, unknown>;
   vectorBackend?: "usearch-first" | "usearch" | "exact-scan";
   autoCaptureLanguage?: string;
   userEmailOverride?: string;
@@ -294,6 +297,12 @@ const CONFIG_TEMPLATE = `{
   // Set to false and add "memoryTemperature": false in config when using such models
   "memoryTemperature": 0.3,
 
+  // Extra parameters to include in API request body
+  // Useful for local inference servers (e.g. llama-server with --jinja) that support
+  // additional parameters like disabling thinking/reasoning mode
+  // Example for Qwen3 models: { "enable_thinking": false }
+  // "memoryExtraParams": {},
+
   // Language for auto-capture summaries (default: "auto" for auto-detection)
   // Options: "auto", "en", "id", "zh", "ja", "es", "fr", "de", "ru", "pt", "ar", "ko"
   // "autoCaptureLanguage": "auto",
@@ -449,6 +458,7 @@ export const CONFIG = {
   memoryApiUrl: fileConfig.memoryApiUrl,
   memoryApiKey: resolveSecretValue(fileConfig.memoryApiKey),
   memoryTemperature: fileConfig.memoryTemperature,
+  memoryExtraParams: fileConfig.memoryExtraParams,
   vectorBackend: (fileConfig.vectorBackend ?? "usearch-first") as
     | "usearch-first"
     | "usearch"
