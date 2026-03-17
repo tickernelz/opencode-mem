@@ -162,8 +162,8 @@ function expandPath(path: string): string {
   return path;
 }
 
-function loadConfig(): OpenCodeMemConfig {
-  for (const path of CONFIG_FILES) {
+function loadConfigFromPaths(paths: string[]): OpenCodeMemConfig {
+  for (const path of paths) {
     if (existsSync(path)) {
       try {
         const content = readFileSync(path, "utf-8");
@@ -174,8 +174,6 @@ function loadConfig(): OpenCodeMemConfig {
   }
   return {};
 }
-
-const fileConfig = loadConfig();
 
 const CONFIG_TEMPLATE = `{
   // ============================================
@@ -451,83 +449,99 @@ function getEmbeddingDimensions(model: string): number {
   return dimensionMap[model] || 768;
 }
 
-export const CONFIG = {
-  storagePath: expandPath(fileConfig.storagePath ?? DEFAULTS.storagePath),
-  userEmailOverride: fileConfig.userEmailOverride,
-  userNameOverride: fileConfig.userNameOverride,
-  embeddingModel: fileConfig.embeddingModel ?? DEFAULTS.embeddingModel,
-  embeddingDimensions:
-    fileConfig.embeddingDimensions ??
-    getEmbeddingDimensions(fileConfig.embeddingModel ?? DEFAULTS.embeddingModel),
-  embeddingApiUrl: fileConfig.embeddingApiUrl,
-  embeddingApiKey: fileConfig.embeddingApiUrl
-    ? resolveSecretValue(fileConfig.embeddingApiKey ?? process.env.OPENAI_API_KEY)
-    : undefined,
-  similarityThreshold: fileConfig.similarityThreshold ?? DEFAULTS.similarityThreshold,
-  maxMemories: fileConfig.maxMemories ?? DEFAULTS.maxMemories,
-  maxProfileItems: fileConfig.maxProfileItems ?? DEFAULTS.maxProfileItems,
-  injectProfile: fileConfig.injectProfile ?? DEFAULTS.injectProfile,
-  containerTagPrefix: fileConfig.containerTagPrefix ?? DEFAULTS.containerTagPrefix,
-  autoCaptureEnabled: fileConfig.autoCaptureEnabled ?? DEFAULTS.autoCaptureEnabled,
-  autoCaptureMaxIterations:
-    fileConfig.autoCaptureMaxIterations ?? DEFAULTS.autoCaptureMaxIterations,
-  autoCaptureIterationTimeout:
-    fileConfig.autoCaptureIterationTimeout ?? DEFAULTS.autoCaptureIterationTimeout,
-  autoCaptureLanguage: fileConfig.autoCaptureLanguage,
-  memoryProvider: (fileConfig.memoryProvider ?? "openai-chat") as
-    | "openai-chat"
-    | "openai-responses"
-    | "anthropic",
-  memoryModel: fileConfig.memoryModel,
-  memoryApiUrl: fileConfig.memoryApiUrl,
-  memoryApiKey: resolveSecretValue(fileConfig.memoryApiKey),
-  memoryTemperature: fileConfig.memoryTemperature,
-  memoryExtraParams: fileConfig.memoryExtraParams,
-  opencodeProvider: fileConfig.opencodeProvider,
-  opencodeModel: fileConfig.opencodeModel,
-  vectorBackend: (fileConfig.vectorBackend ?? "usearch-first") as
-    | "usearch-first"
-    | "usearch"
-    | "exact-scan",
-  aiSessionRetentionDays: fileConfig.aiSessionRetentionDays ?? DEFAULTS.aiSessionRetentionDays,
-  webServerEnabled: fileConfig.webServerEnabled ?? DEFAULTS.webServerEnabled,
-  webServerPort: fileConfig.webServerPort ?? DEFAULTS.webServerPort,
-  webServerHost: fileConfig.webServerHost ?? DEFAULTS.webServerHost,
-  maxVectorsPerShard: fileConfig.maxVectorsPerShard ?? DEFAULTS.maxVectorsPerShard,
-  autoCleanupEnabled: fileConfig.autoCleanupEnabled ?? DEFAULTS.autoCleanupEnabled,
-  autoCleanupRetentionDays:
-    fileConfig.autoCleanupRetentionDays ?? DEFAULTS.autoCleanupRetentionDays,
-  deduplicationEnabled: fileConfig.deduplicationEnabled ?? DEFAULTS.deduplicationEnabled,
-  deduplicationSimilarityThreshold:
-    fileConfig.deduplicationSimilarityThreshold ?? DEFAULTS.deduplicationSimilarityThreshold,
-  userProfileAnalysisInterval:
-    fileConfig.userProfileAnalysisInterval ?? DEFAULTS.userProfileAnalysisInterval,
-  userProfileMaxPreferences:
-    fileConfig.userProfileMaxPreferences ?? DEFAULTS.userProfileMaxPreferences,
-  userProfileMaxPatterns: fileConfig.userProfileMaxPatterns ?? DEFAULTS.userProfileMaxPatterns,
-  userProfileMaxWorkflows: fileConfig.userProfileMaxWorkflows ?? DEFAULTS.userProfileMaxWorkflows,
-  userProfileConfidenceDecayDays:
-    fileConfig.userProfileConfidenceDecayDays ?? DEFAULTS.userProfileConfidenceDecayDays,
-  userProfileChangelogRetentionCount:
-    fileConfig.userProfileChangelogRetentionCount ?? DEFAULTS.userProfileChangelogRetentionCount,
-  showAutoCaptureToasts: fileConfig.showAutoCaptureToasts ?? DEFAULTS.showAutoCaptureToasts,
-  showUserProfileToasts: fileConfig.showUserProfileToasts ?? DEFAULTS.showUserProfileToasts,
-  showErrorToasts: fileConfig.showErrorToasts ?? DEFAULTS.showErrorToasts,
-  compaction: {
-    enabled: fileConfig.compaction?.enabled ?? DEFAULTS.compaction.enabled,
-    memoryLimit: fileConfig.compaction?.memoryLimit ?? DEFAULTS.compaction.memoryLimit,
-  },
-  chatMessage: {
-    enabled: fileConfig.chatMessage?.enabled ?? DEFAULTS.chatMessage.enabled,
-    maxMemories: fileConfig.chatMessage?.maxMemories ?? DEFAULTS.chatMessage.maxMemories,
-    excludeCurrentSession:
-      fileConfig.chatMessage?.excludeCurrentSession ?? DEFAULTS.chatMessage.excludeCurrentSession,
-    maxAgeDays: fileConfig.chatMessage?.maxAgeDays,
-    injectOn: (fileConfig.chatMessage?.injectOn ?? DEFAULTS.chatMessage.injectOn) as
-      | "first"
-      | "always",
-  },
-};
+function buildConfig(fileConfig: OpenCodeMemConfig) {
+  return {
+    storagePath: expandPath(fileConfig.storagePath ?? DEFAULTS.storagePath),
+    userEmailOverride: fileConfig.userEmailOverride,
+    userNameOverride: fileConfig.userNameOverride,
+    embeddingModel: fileConfig.embeddingModel ?? DEFAULTS.embeddingModel,
+    embeddingDimensions:
+      fileConfig.embeddingDimensions ??
+      getEmbeddingDimensions(fileConfig.embeddingModel ?? DEFAULTS.embeddingModel),
+    embeddingApiUrl: fileConfig.embeddingApiUrl,
+    embeddingApiKey: fileConfig.embeddingApiUrl
+      ? resolveSecretValue(fileConfig.embeddingApiKey ?? process.env.OPENAI_API_KEY)
+      : undefined,
+    similarityThreshold: fileConfig.similarityThreshold ?? DEFAULTS.similarityThreshold,
+    maxMemories: fileConfig.maxMemories ?? DEFAULTS.maxMemories,
+    maxProfileItems: fileConfig.maxProfileItems ?? DEFAULTS.maxProfileItems,
+    injectProfile: fileConfig.injectProfile ?? DEFAULTS.injectProfile,
+    containerTagPrefix: fileConfig.containerTagPrefix ?? DEFAULTS.containerTagPrefix,
+    autoCaptureEnabled: fileConfig.autoCaptureEnabled ?? DEFAULTS.autoCaptureEnabled,
+    autoCaptureMaxIterations:
+      fileConfig.autoCaptureMaxIterations ?? DEFAULTS.autoCaptureMaxIterations,
+    autoCaptureIterationTimeout:
+      fileConfig.autoCaptureIterationTimeout ?? DEFAULTS.autoCaptureIterationTimeout,
+    autoCaptureLanguage: fileConfig.autoCaptureLanguage,
+    memoryProvider: (fileConfig.memoryProvider ?? "openai-chat") as
+      | "openai-chat"
+      | "openai-responses"
+      | "anthropic",
+    memoryModel: fileConfig.memoryModel,
+    memoryApiUrl: fileConfig.memoryApiUrl,
+    memoryApiKey: resolveSecretValue(fileConfig.memoryApiKey),
+    memoryTemperature: fileConfig.memoryTemperature,
+    memoryExtraParams: fileConfig.memoryExtraParams,
+    opencodeProvider: fileConfig.opencodeProvider,
+    opencodeModel: fileConfig.opencodeModel,
+    vectorBackend: (fileConfig.vectorBackend ?? "usearch-first") as
+      | "usearch-first"
+      | "usearch"
+      | "exact-scan",
+    aiSessionRetentionDays: fileConfig.aiSessionRetentionDays ?? DEFAULTS.aiSessionRetentionDays,
+    webServerEnabled: fileConfig.webServerEnabled ?? DEFAULTS.webServerEnabled,
+    webServerPort: fileConfig.webServerPort ?? DEFAULTS.webServerPort,
+    webServerHost: fileConfig.webServerHost ?? DEFAULTS.webServerHost,
+    maxVectorsPerShard: fileConfig.maxVectorsPerShard ?? DEFAULTS.maxVectorsPerShard,
+    autoCleanupEnabled: fileConfig.autoCleanupEnabled ?? DEFAULTS.autoCleanupEnabled,
+    autoCleanupRetentionDays:
+      fileConfig.autoCleanupRetentionDays ?? DEFAULTS.autoCleanupRetentionDays,
+    deduplicationEnabled: fileConfig.deduplicationEnabled ?? DEFAULTS.deduplicationEnabled,
+    deduplicationSimilarityThreshold:
+      fileConfig.deduplicationSimilarityThreshold ?? DEFAULTS.deduplicationSimilarityThreshold,
+    userProfileAnalysisInterval:
+      fileConfig.userProfileAnalysisInterval ?? DEFAULTS.userProfileAnalysisInterval,
+    userProfileMaxPreferences:
+      fileConfig.userProfileMaxPreferences ?? DEFAULTS.userProfileMaxPreferences,
+    userProfileMaxPatterns: fileConfig.userProfileMaxPatterns ?? DEFAULTS.userProfileMaxPatterns,
+    userProfileMaxWorkflows: fileConfig.userProfileMaxWorkflows ?? DEFAULTS.userProfileMaxWorkflows,
+    userProfileConfidenceDecayDays:
+      fileConfig.userProfileConfidenceDecayDays ?? DEFAULTS.userProfileConfidenceDecayDays,
+    userProfileChangelogRetentionCount:
+      fileConfig.userProfileChangelogRetentionCount ?? DEFAULTS.userProfileChangelogRetentionCount,
+    showAutoCaptureToasts: fileConfig.showAutoCaptureToasts ?? DEFAULTS.showAutoCaptureToasts,
+    showUserProfileToasts: fileConfig.showUserProfileToasts ?? DEFAULTS.showUserProfileToasts,
+    showErrorToasts: fileConfig.showErrorToasts ?? DEFAULTS.showErrorToasts,
+    compaction: {
+      enabled: fileConfig.compaction?.enabled ?? DEFAULTS.compaction.enabled,
+      memoryLimit: fileConfig.compaction?.memoryLimit ?? DEFAULTS.compaction.memoryLimit,
+    },
+    chatMessage: {
+      enabled: fileConfig.chatMessage?.enabled ?? DEFAULTS.chatMessage.enabled,
+      maxMemories: fileConfig.chatMessage?.maxMemories ?? DEFAULTS.chatMessage.maxMemories,
+      excludeCurrentSession:
+        fileConfig.chatMessage?.excludeCurrentSession ?? DEFAULTS.chatMessage.excludeCurrentSession,
+      maxAgeDays: fileConfig.chatMessage?.maxAgeDays,
+      injectOn: (fileConfig.chatMessage?.injectOn ?? DEFAULTS.chatMessage.injectOn) as
+        | "first"
+        | "always",
+    },
+  };
+}
+
+let _globalFileConfig = loadConfigFromPaths(CONFIG_FILES);
+export let CONFIG = buildConfig(_globalFileConfig);
+
+export function initConfig(directory: string): void {
+  const projectPaths = [
+    join(directory, ".opencode", "opencode-mem.jsonc"),
+    join(directory, ".opencode", "opencode-mem.json"),
+  ];
+  const globalConfig = loadConfigFromPaths(CONFIG_FILES);
+  const projectConfig = loadConfigFromPaths(projectPaths);
+  const merged: OpenCodeMemConfig = { ...globalConfig, ...projectConfig };
+  CONFIG = buildConfig(merged);
+}
 
 export function isConfigured(): boolean {
   return true;

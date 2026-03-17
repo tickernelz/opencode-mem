@@ -11,7 +11,7 @@ import { performUserProfileLearning } from "./services/user-memory-learning.js";
 import { userPromptManager } from "./services/user-prompt/user-prompt-manager.js";
 import { startWebServer, WebServer } from "./services/web-server.js";
 
-import { isConfigured, CONFIG } from "./config.js";
+import { isConfigured, CONFIG, initConfig } from "./config.js";
 import { log } from "./services/logger.js";
 import type { MemoryType } from "./types/index.js";
 import { getLanguageName } from "./services/language-detector.js";
@@ -19,6 +19,7 @@ import { setStatePath, setConnectedProviders } from "./services/ai/opencode-prov
 
 export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   const { directory } = ctx;
+  initConfig(directory);
   const tags = getTags(directory);
   let webServer: WebServer | null = null;
   let idleTimeout: Timer | null = null;
