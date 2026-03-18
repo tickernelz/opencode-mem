@@ -164,8 +164,6 @@ export class DeepSeekProvider extends BaseAIProvider {
     const maxIterations = this.config.maxIterations ?? 5;
     const iterationTimeout = this.config.iterationTimeout ?? 30000;
 
-    const apiUrl = this.config.apiUrl ?? "https://api.deepseek.com";
-
     while (iterations < maxIterations) {
       iterations++;
 
@@ -196,7 +194,7 @@ export class DeepSeekProvider extends BaseAIProvider {
           headers.Authorization = `Bearer ${this.config.apiKey}`;
         }
 
-        const response = await fetch(`${apiUrl}/chat/completions`, {
+        const response = await fetch(`${this.config.apiUrl}/chat/completions`, {
           method: "POST",
           headers,
           body: JSON.stringify(requestBody),
