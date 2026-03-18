@@ -3,6 +3,7 @@ import { OpenAIChatCompletionProvider } from "./providers/openai-chat-completion
 import { OpenAIResponsesProvider } from "./providers/openai-responses.js";
 import { AnthropicMessagesProvider } from "./providers/anthropic-messages.js";
 import { GoogleGeminiProvider } from "./providers/google-gemini.js";
+import { DeepSeekProvider } from "./providers/deepseek.js";
 import { aiSessionManager } from "./session/ai-session-manager.js";
 import type { AIProviderType } from "./session/session-types.js";
 
@@ -21,13 +22,16 @@ export class AIProviderFactory {
       case "google-gemini":
         return new GoogleGeminiProvider(config, aiSessionManager);
 
+      case "deepseek":
+        return new DeepSeekProvider(config, aiSessionManager);
+
       default:
         throw new Error(`Unknown provider type: ${providerType}`);
     }
   }
 
   static getSupportedProviders(): AIProviderType[] {
-    return ["openai-chat", "openai-responses", "anthropic", "google-gemini"];
+    return ["openai-chat", "openai-responses", "anthropic", "google-gemini", "deepseek"];
   }
 
   static cleanupExpiredSessions(): number {

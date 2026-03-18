@@ -36,7 +36,7 @@ interface OpenCodeMemConfig {
   autoCaptureMaxIterations?: number;
   autoCaptureIterationTimeout?: number;
   autoCaptureLanguage?: string;
-  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic";
+  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic" | "deepseek";
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
@@ -99,7 +99,7 @@ const DEFAULTS: Required<
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
-  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic";
+  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic" | "deepseek";
   memoryTemperature?: number | false;
   memoryExtraParams?: Record<string, unknown>;
   opencodeProvider?: string;
@@ -267,7 +267,7 @@ const CONFIG_TEMPLATE = `{
   
   "autoCaptureEnabled": true,
   
-  // Provider type: "openai-chat" | "openai-responses" | "anthropic"
+  // Provider type: "openai-chat" | "openai-responses" | "anthropic" | "deepseek"
   "memoryProvider": "openai-chat",
   
   // REQUIRED for auto-capture (all 3 must be set):
@@ -304,6 +304,11 @@ const CONFIG_TEMPLATE = `{
   //   "memoryModel": "llama-3.3-70b-versatile"
   //   "memoryApiUrl": "https://api.groq.com/openai/v1"
   //   "memoryApiKey": "gsk_..."
+  
+  // DeepSeek (with session support, apiUrl optional — defaults to https://api.deepseek.com):
+  //   "memoryProvider": "deepseek"
+  //   "memoryModel": "deepseek-chat"
+  //   "memoryApiKey": "sk-..."
   
   // Maximum iterations for multi-turn AI analysis (for openai-responses and anthropic)
   "autoCaptureMaxIterations": 5,
