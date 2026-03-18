@@ -481,7 +481,8 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     memoryProvider: (fileConfig.memoryProvider ?? "openai-chat") as
       | "openai-chat"
       | "openai-responses"
-      | "anthropic",
+      | "anthropic"
+      | "deepseek",
     memoryModel: fileConfig.memoryModel,
     memoryApiUrl: fileConfig.memoryApiUrl,
     memoryApiKey: resolveSecretValue(fileConfig.memoryApiKey),
