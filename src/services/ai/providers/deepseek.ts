@@ -4,18 +4,25 @@ import type { ChatCompletionTool } from "../tools/tool-schema.js";
 import { log } from "../../logger.js";
 import { UserProfileValidator } from "../validators/user-profile-validator.js";
 
-interface ToolCallResponse {
+interface DeepSeekToolCall {
+  id: string;
+  type: string;
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+interface DeepSeekErrorResponse {
+  status?: unknown;
+  msg?: unknown;
+}
+
+interface DeepSeekResponse {
   choices: Array<{
     message: {
       content?: string;
-      tool_calls?: Array<{
-        id: string;
-        type: string;
-        function: {
-          name: string;
-          arguments: string;
-        };
-      }>;
+      tool_calls?: DeepSeekToolCall[];
     };
     finish_reason?: string;
   }>;
@@ -226,7 +233,7 @@ export class DeepSeekProvider extends BaseAIProvider {
           };
         }
 
-        const data = (await response.json()) as any;
+        const data = (await response.json()) as DeepSeekErrorResponse & Partial<DeepSeekResponse>;
 
         if (data.status && data.msg) {
           log("DeepSeek API returned error in response body", {
@@ -257,7 +264,8 @@ export class DeepSeekProvider extends BaseAIProvider {
           };
         }
 
-        const choice = data.choices[0];
+        const response_data = data as DeepSeekResponse;
+        const choice = response_data.choices[0] as DeepSeekResponse["choices"][0];
 
         const assistantSequence = this.aiSessionManager.getLastSequence(session.id) + 1;
         const assistantMsg: any = {
