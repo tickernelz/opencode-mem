@@ -60,7 +60,7 @@ const provider = new DeepSeekProvider(config as any, new FakeSessionManager() as
 
 console.log(`Provider : ${provider.getProviderName()}`);
 console.log(`Model    : ${model}`);
-console.log(`API URL  : ${apiUrl ?? "https://api.deepseek.com"} (default)`);
+console.log(`API URL  : ${apiUrl ?? "https://api.deepseek.com"}${apiUrl ? "" : " (default)"}`);
 console.log("---");
 console.log("Calling DeepSeek API...\n");
 
