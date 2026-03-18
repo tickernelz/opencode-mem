@@ -82,14 +82,19 @@ describe("DeepSeekProvider", () => {
     expect(makeProvider().supportsSession()).toBe(true);
   });
 
-  it("uses https://api.deepseek.com as default apiUrl", async () => {
+  it("uses provided apiUrl for the request", async () => {
     let capturedUrl = "";
     globalThis.fetch = (async (input: RequestInfo | URL, _init?: RequestInit) => {
       capturedUrl = String(input);
       return { ok: false, status: 400, statusText: "Bad", text: async () => "err" } as Response;
     }) as typeof fetch;
 
-    await makeProvider().executeToolCall("system", "user", toolSchema, "session-id");
+    await makeProvider({ apiUrl: "https://api.deepseek.com" }).executeToolCall(
+      "system",
+      "user",
+      toolSchema,
+      "session-id"
+    );
 
     expect(capturedUrl).toBe("https://api.deepseek.com/chat/completions");
   });

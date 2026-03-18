@@ -307,9 +307,10 @@ const CONFIG_TEMPLATE = `{
   //   "memoryApiUrl": "https://api.groq.com/openai/v1"
   //   "memoryApiKey": "gsk_..."
   
-  // DeepSeek (with session support, apiUrl optional — defaults to https://api.deepseek.com):
+  // DeepSeek (with session support):
   //   "memoryProvider": "deepseek"
   //   "memoryModel": "deepseek-chat"
+  //   "memoryApiUrl": "https://api.deepseek.com"
   //   "memoryApiKey": "sk-..."
   
   // Maximum iterations for multi-turn AI analysis (for openai-responses and anthropic)
