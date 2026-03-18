@@ -1,4 +1,9 @@
-export type AIProviderType = "openai-chat" | "openai-responses" | "anthropic" | "google-gemini";
+export type AIProviderType =
+  | "openai-chat"
+  | "openai-responses"
+  | "anthropic"
+  | "google-gemini"
+  | "deepseek";
 
 export interface AIMessage {
   id?: number;
