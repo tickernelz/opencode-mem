@@ -342,8 +342,7 @@ export class DeepSeekProvider extends BaseAIProvider {
         }
 
         const retrySequence = this.aiSessionManager.getLastSequence(session.id) + 1;
-        const retryPrompt =
-          "Please use the save_memories tool to extract and save the memories from the conversation as instructed.";
+        const retryPrompt = `Please use the ${toolSchema.function.name} tool to extract and save the memories from the conversation as instructed.`;
 
         this.aiSessionManager.addMessage({
           aiSessionId: session.id,
@@ -358,7 +357,7 @@ export class DeepSeekProvider extends BaseAIProvider {
         if (error instanceof Error && error.name === "AbortError") {
           return {
             success: false,
-            error: `API request timeout (${this.config.iterationTimeout}ms)`,
+            error: `API request timeout (${iterationTimeout}ms)`,
             iterations,
           };
         }
@@ -372,7 +371,7 @@ export class DeepSeekProvider extends BaseAIProvider {
 
     return {
       success: false,
-      error: `Max iterations (${this.config.maxIterations}) reached without tool call`,
+      error: `Max iterations (${maxIterations}) reached without tool call`,
       iterations,
     };
   }
