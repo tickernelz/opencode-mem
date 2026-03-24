@@ -1,8 +1,10 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
+import os from "node:os";
 import { generateText, Output } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createMinimax, createMinimaxOpenAI } from "vercel-minimax-ai-provider";
 import type { ZodType } from "zod";
 
 type OAuthAuth = { type: "oauth"; refresh: string; access: string; expires: number };
@@ -24,12 +26,61 @@ export function getStatePath(): string {
   return _statePath;
 }
 
+// Provider name aliases mapping
+const PROVIDER_ALIASES: Record<string, string> = {
+  "MiniMax Coding Plan (minimaxi.com)": "minimax-cn-coding-plan",
+  "MiniMax (minimaxi.com)": "minimax",
+  "MiniMax Coding Plan (minimax.io)": "minimax-coding-plan",
+};
+// Reverse mapping: internal name -> opencode display name
+const ALIASES_REVERSE: Record<string, string> = {
+  "minimax-cn-coding-plan": "MiniMax Coding Plan (minimaxi.com)",
+  "minimax": "MiniMax (minimaxi.com)",
+  "minimax-coding-plan": "MiniMax Coding Plan (minimax.io)",
+};
+
 export function setConnectedProviders(providers: string[]): void {
-  _connectedProviders = providers;
+  let validProviders: string[] = [];
+  if (Array.isArray(providers)) {
+    validProviders = providers.filter(p => typeof p === "string");
+  } else if (typeof providers === "string") {
+    try {
+      const parsed = JSON.parse(providers);
+      validProviders = Array.isArray(parsed) ? parsed.filter(p => typeof p === "string") : [];
+    } catch {
+      validProviders = [];
+    }
+  }
+  _connectedProviders = validProviders;
 }
 
 export function isProviderConnected(providerName: string): boolean {
-  return _connectedProviders.includes(providerName);
+  if (providerName.includes("minimax") || providerName.includes("MiniMax")) {
+    const homeDir = os.homedir();
+    const authPath = join(homeDir, ".local", "share", "opencode", "auth.json");
+    try {
+      if (existsSync(authPath)) {
+        const authContent = readFileSync(authPath, "utf-8");
+        const auth = JSON.parse(authContent);
+        const keys = Object.keys(auth);
+        const hasMinimax = keys.some(k => k.toLowerCase().includes("minimax"));
+        return hasMinimax;
+      }
+    } catch {}
+  }
+  if (_connectedProviders.includes(providerName)) {
+    return true;
+  }
+  for (const connected of _connectedProviders) {
+    if (PROVIDER_ALIASES[connected] === providerName) {
+      return true;
+    }
+  }
+  const reverseMatch = ALIASES_REVERSE[providerName];
+  if (reverseMatch && _connectedProviders.includes(reverseMatch)) {
+    return true;
+  }
+  return false;
 }
 
 // --- Auth ---
@@ -38,6 +89,7 @@ function findAuthJsonPath(statePath: string): string | undefined {
     join(statePath, "auth.json"),
     join(dirname(statePath), "share", "opencode", "auth.json"),
     join(statePath.replace("/state/", "/share/"), "auth.json"),
+    join(statePath.replace("\\state\\", "\\share\\"), "auth.json"),
   ];
   return candidates.find(existsSync);
 }
@@ -61,7 +113,21 @@ export function readOpencodeAuth(statePath: string, providerName: string): Auth 
   } catch {
     throw new Error(`Failed to read opencode auth.json: invalid JSON`);
   }
-  const auth = parsed[providerName];
+  let auth = parsed[providerName];
+  if (!auth) {
+    const reverseKey = ALIASES_REVERSE[providerName];
+    if (reverseKey) {
+      auth = parsed[reverseKey];
+    }
+  }
+  if (!auth) {
+    for (const [authKey, internalName] of Object.entries(PROVIDER_ALIASES)) {
+      if (internalName === providerName && parsed[authKey]) {
+        auth = parsed[authKey];
+        break;
+      }
+    }
+  }
   if (!auth) {
     const connected = Object.keys(parsed).join(", ") || "none";
     throw new Error(
@@ -246,8 +312,29 @@ export function createOpencodeAIProvider(providerName: string, auth: Auth, state
     }
     return createOpenAI({ apiKey: auth.key });
   }
+  if (providerName === "minimax") {
+    if (auth.type === "oauth") {
+      throw new Error("Minimax does not support OAuth authentication. Use an API key instead.");
+    }
+    return createMinimaxOpenAI({ apiKey: auth.key });
+  }
+  if (providerName === "minimax-cn-coding-plan") {
+    if (auth.type === "oauth") {
+      throw new Error("Minimax does not support OAuth authentication. Use an API key instead.");
+    }
+    return createMinimax({
+      apiKey: auth.key,
+      baseURL: "https://api.minimaxi.com/anthropic/v1"
+    });
+  }
+  if (providerName === "minimax-cn") {
+    if (auth.type === "oauth") {
+      throw new Error("Minimax does not support OAuth authentication. Use an API key instead.");
+    }
+    return createMinimaxOpenAI({ apiKey: auth.key });
+  }
   throw new Error(
-    `Unsupported opencode provider: '${providerName}'. Supported providers: anthropic, openai`
+    `Unsupported opencode provider: '${providerName}'. Supported providers: anthropic, openai, minimax, minimax-cn-coding-plan, minimax-cn`
   );
 }
 
