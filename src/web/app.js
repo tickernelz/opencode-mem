@@ -527,6 +527,21 @@ function deselectAll() {
   updateBulkActions();
 }
 
+function selectAllCurrentPage() {
+  const checkboxes = document.querySelectorAll(".memory-checkbox");
+  if (checkboxes.length === 0) return;
+
+  checkboxes.forEach((cb) => {
+    cb.checked = true;
+    if (cb.dataset.id) {
+      state.selectedMemories.add(cb.dataset.id);
+      updateCardSelection(cb.dataset.id, true);
+    }
+  });
+
+  updateBulkActions();
+}
+
 function editMemory(id) {
   const memory = state.memories.find((m) => m.id === id && m.type === "memory");
   if (!memory) return;
@@ -1164,6 +1179,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("next-page-bottom").addEventListener("click", () => changePage(1));
 
   document.getElementById("bulk-delete-btn").addEventListener("click", bulkDelete);
+  document.getElementById("select-all-btn").addEventListener("click", selectAllCurrentPage);
   document.getElementById("deselect-all-btn").addEventListener("click", deselectAll);
 
   document.getElementById("cleanup-btn").addEventListener("click", runCleanup);
