@@ -14,7 +14,7 @@ export function detectLanguage(text: string): string {
     return "en";
   }
 
-  const detected = franc(text, { minLength: 3 });
+  const detected = franc(text, { minLength: 5 });
 
   if (detected === "und") {
     return "en";
