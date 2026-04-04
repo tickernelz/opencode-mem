@@ -58,6 +58,24 @@ describe("config", () => {
       expect(["first", "always"]).toContain(CONFIG.chatMessage.injectOn);
     });
 
+    it("should have chatMessage.selection defaulting to 'recent'", () => {
+      expect(CONFIG.chatMessage.selection).toBe("recent");
+      expect(["recent", "semantic", "hybrid"]).toContain(CONFIG.chatMessage.selection);
+    });
+
+    it("should have chatMessage.semantic.minSimilarity defaulting to 0.6", () => {
+      expect(CONFIG.chatMessage.semantic).toBeDefined();
+      expect(typeof CONFIG.chatMessage.semantic?.minSimilarity).toBe("number");
+      expect(CONFIG.chatMessage.semantic?.minSimilarity).toBeGreaterThanOrEqual(0);
+      expect(CONFIG.chatMessage.semantic?.minSimilarity).toBeLessThanOrEqual(1);
+      expect(CONFIG.chatMessage.semantic?.minSimilarity).toBe(0.6);
+    });
+
+    it("should have chatMessage.debug defaulting to false", () => {
+      expect(typeof CONFIG.chatMessage.debug).toBe("boolean");
+      expect(CONFIG.chatMessage.debug).toBe(false);
+    });
+
     it("should have boolean toggle settings", () => {
       expect(typeof CONFIG.autoCaptureEnabled).toBe("boolean");
       expect(typeof CONFIG.injectProfile).toBe("boolean");

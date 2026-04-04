@@ -60,3 +60,8 @@ export function log(message: string, data?: unknown) {
     : `[${timestamp}] ${message}\n`;
   appendFileSync(logFile, line);
 }
+
+export function logDebug(enabled: boolean, message: string, data?: unknown): void {
+  if (!enabled) return;
+  log(`[DEBUG] ${message}`, data);
+}

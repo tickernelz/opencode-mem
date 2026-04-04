@@ -96,7 +96,11 @@ export class LocalMemoryClient {
     connectionManager.closeAll();
   }
 
-  async searchMemories(query: string, containerTag: string) {
+  async searchMemories(
+    query: string,
+    containerTag: string,
+    options?: { similarityThreshold?: number; maxMemories?: number }
+  ) {
     try {
       await this.initialize();
 
@@ -112,8 +116,8 @@ export class LocalMemoryClient {
         shards,
         queryVector,
         containerTag,
-        CONFIG.maxMemories,
-        CONFIG.similarityThreshold,
+        options?.maxMemories ?? CONFIG.maxMemories,
+        options?.similarityThreshold ?? CONFIG.similarityThreshold,
         query
       );
 

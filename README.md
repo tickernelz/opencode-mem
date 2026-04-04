@@ -93,10 +93,56 @@ Configure at `~/.config/opencode/opencode-mem.jsonc`:
     "enabled": true,
     "maxMemories": 3,
     "excludeCurrentSession": true,
-    "maxAgeDays": undefined,
     "injectOn": "first",
+    "selection": "recent",
+    "semantic": {
+      "minSimilarity": 0.6,
+    },
   },
 }
+```
+
+### Chat Message Memory Injection
+
+The plugin can inject relevant memories into each message's context automatically. Enable this via `chatMessage.enabled` and choose how memories are selected with `chatMessage.selection`.
+
+**Selection modes:**
+
+| Mode         | Description                                                            | Latency impact                  |
+| ------------ | ---------------------------------------------------------------------- | ------------------------------- |
+| `"recent"`   | Inject the most recently saved memories (default)                      | None                            |
+| `"semantic"` | Inject memories most semantically similar to the current message       | +1 embedding lookup per message |
+| `"hybrid"`   | Combine semantic similarity with recency fill-up for highest relevance | +1 embedding lookup per message |
+
+Semantic and hybrid modes are **opt-in**. The default `"recent"` mode adds zero latency. Switch to `"semantic"` or `"hybrid"` when relevance matters more than speed.
+
+The `chatMessage.semantic.minSimilarity` threshold controls how strictly memories must match (0 to 1). Lower values surface more memories; higher values are stricter. The default `0.6` works well for most use cases.
+
+```jsonc
+"chatMessage": {
+  "selection": "semantic",   // or "hybrid"
+  "semantic": {
+    "minSimilarity": 0.6     // raise to 0.75+ for stricter matching
+  }
+}
+```
+
+**Troubleshooting injection behavior:**
+
+Set `chatMessage.debug: true` to enable verbose `[DEBUG]` entries in the log file. Debug logs include the active selection branch, assistant-tail summary, semantic query prefix (≤200 chars), retrieval parameters, result counts per source, and elapsed timing. Memory content is never logged — only counts. Query snippets are truncated to protect privacy.
+
+> **Warning:** Debug logging is verbose and intended for temporary troubleshooting only. Leave `debug: false` (or omit it) in normal use.
+
+```jsonc
+"chatMessage": {
+  "debug": true   // enable temporarily; remove when done
+}
+```
+
+Logs are written to `~/.opencode-mem/opencode-mem.log`. Follow live:
+
+```bash
+tail -f ~/.opencode-mem/opencode-mem.log
 ```
 
 ### Auto-Capture AI Provider

@@ -4,6 +4,11 @@ import { tool } from "@opencode-ai/plugin";
 
 import { memoryClient } from "./services/client.js";
 import { formatContextForPrompt } from "./services/context.js";
+import {
+  extractAssistantTail,
+  buildSemanticQuery,
+  mergeHybrid,
+} from "./services/chat-injection.js";
 import { getTags } from "./services/tags.js";
 import { stripPrivateContent, isFullyPrivate } from "./services/privacy.js";
 import { performAutoCapture } from "./services/auto-capture.js";
@@ -12,7 +17,7 @@ import { userPromptManager } from "./services/user-prompt/user-prompt-manager.js
 import { startWebServer, WebServer } from "./services/web-server.js";
 
 import { isConfigured, CONFIG, initConfig } from "./config.js";
-import { log } from "./services/logger.js";
+import { log, logDebug } from "./services/logger.js";
 import type { MemoryType } from "./types/index.js";
 import { getLanguageName } from "./services/language-detector.js";
 
@@ -184,30 +189,167 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
         if (!shouldInject) return;
 
-        const listResult = await memoryClient.listMemories(
-          tags.project.tag,
-          CONFIG.chatMessage.maxMemories
-        );
+        const maxMemories = CONFIG.chatMessage.maxMemories ?? 3;
+        const selection = CONFIG.chatMessage.selection ?? "recent";
 
-        let memories = listResult.success ? listResult.memories : [];
+        const debugEnabled = CONFIG.chatMessage.debug === true;
+        const t0 = Date.now();
+        logDebug(debugEnabled, "chat.message: injection path start", { selection, maxMemories });
 
-        if (CONFIG.chatMessage.excludeCurrentSession) {
-          memories = memories.filter((m: any) => m.metadata?.sessionID !== input.sessionID);
+        const filterRecent = (rawMemories: any[]): any[] => {
+          let mems = rawMemories;
+          if (CONFIG.chatMessage.excludeCurrentSession) {
+            mems = mems.filter((m: any) => m.metadata?.sessionID !== input.sessionID);
+          }
+          if (CONFIG.chatMessage.maxAgeDays) {
+            const cutoff = Date.now() - CONFIG.chatMessage.maxAgeDays * 86400000;
+            mems = mems.filter((m: any) => new Date(m.createdAt).getTime() > cutoff);
+          }
+          return mems;
+        };
+
+        const filterSemantic = (results: any[]): any[] => {
+          let res = results;
+          if (CONFIG.chatMessage.excludeCurrentSession) {
+            res = res.filter((r: any) => r.metadata?.sessionID !== input.sessionID);
+          }
+          // NOTE: maxAgeDays cannot be applied to semantic/hybrid results because
+          // SearchResult does not carry a createdAt field — the vector search layer
+          // returns id, memory, similarity, tags, and metadata only. If maxAgeDays
+          // filtering is required for semantic results, the search layer would need
+          // to expose createdAt and this filter updated accordingly.
+          if (CONFIG.chatMessage.maxAgeDays) {
+            log(
+              "chat.message: maxAgeDays is set but cannot be applied to semantic/hybrid results (SearchResult has no createdAt). Only recent mode supports maxAgeDays.",
+              { selection }
+            );
+          }
+          return res;
+        };
+
+        let normalizedMemories: { id: string; text: string; similarity: number }[] = [];
+
+        if (selection === "recent") {
+          const tRecent = Date.now();
+          const listResult = await memoryClient.listMemories(tags.project.tag, maxMemories);
+          const rawMemories = listResult.success ? listResult.memories : [];
+          const filtered = filterRecent(rawMemories);
+          normalizedMemories = filtered.map((m: any) => ({
+            id: m.id,
+            text: m.summary,
+            similarity: 1.0,
+          }));
+          logDebug(debugEnabled, "chat.message: recent fetch done", {
+            raw: rawMemories.length,
+            filtered: filtered.length,
+            elapsedMs: Date.now() - tRecent,
+          });
+        } else if (selection === "semantic") {
+          const assistantTail = extractAssistantTail(messages as any);
+          const query = buildSemanticQuery(userMessage, assistantTail);
+          const minSimilarity = CONFIG.chatMessage.semantic?.minSimilarity ?? 0.6;
+          logDebug(debugEnabled, "chat.message: semantic query", {
+            hasTail: assistantTail != null && assistantTail.length > 0,
+            tailLen: assistantTail?.length ?? 0,
+            queryLen: query.length,
+            querySnippet: query.slice(0, 200),
+            minSimilarity,
+            maxMemories,
+          });
+          const tSemantic = Date.now();
+          const searchResult = await memoryClient.searchMemories(query, tags.project.tag, {
+            similarityThreshold: minSimilarity,
+            maxMemories,
+          });
+          const rawResults = searchResult.success ? searchResult.results : [];
+          const filtered = filterSemantic(rawResults);
+          normalizedMemories = filtered.map((r: any) => ({
+            id: r.id,
+            text: r.memory,
+            similarity: r.similarity,
+          }));
+          logDebug(debugEnabled, "chat.message: semantic fetch done", {
+            raw: rawResults.length,
+            filtered: filtered.length,
+            elapsedMs: Date.now() - tSemantic,
+          });
+        } else if (selection === "hybrid") {
+          const assistantTail = extractAssistantTail(messages as any);
+          const query = buildSemanticQuery(userMessage, assistantTail);
+          const minSimilarity = CONFIG.chatMessage.semantic?.minSimilarity ?? 0.6;
+          logDebug(debugEnabled, "chat.message: hybrid query", {
+            hasTail: assistantTail != null && assistantTail.length > 0,
+            tailLen: assistantTail?.length ?? 0,
+            queryLen: query.length,
+            querySnippet: query.slice(0, 200),
+            minSimilarity,
+            maxMemories,
+          });
+
+          let semanticResults: any[] = [];
+          let recentResults: any[] = [];
+
+          const tHybrid = Date.now();
+          try {
+            const [searchResult, listResult] = await Promise.all([
+              memoryClient.searchMemories(query, tags.project.tag, {
+                similarityThreshold: minSimilarity,
+                maxMemories,
+              }),
+              memoryClient.listMemories(tags.project.tag, maxMemories),
+            ]);
+            semanticResults = searchResult.success ? filterSemantic(searchResult.results) : [];
+            recentResults = listResult.success ? filterRecent(listResult.memories) : [];
+          } catch (hybridError) {
+            log("chat.message: hybrid fetch error, degrading to recent", {
+              error: String(hybridError),
+            });
+            const listResult = await memoryClient.listMemories(tags.project.tag, maxMemories);
+            recentResults = listResult.success ? filterRecent(listResult.memories) : [];
+          }
+          logDebug(debugEnabled, "chat.message: hybrid fetch done", {
+            semanticCount: semanticResults.length,
+            recentCount: recentResults.length,
+            elapsedMs: Date.now() - tHybrid,
+          });
+
+          normalizedMemories = mergeHybrid(
+            semanticResults.map((r: any) => ({
+              id: r.id,
+              memory: r.memory,
+              similarity: r.similarity,
+            })),
+            recentResults.map((m: any) => ({
+              id: m.id,
+              summary: m.summary,
+            })),
+            maxMemories
+          );
+        } else {
+          log("chat.message: unknown selection mode, falling back to recent", { selection });
+          const listResult = await memoryClient.listMemories(tags.project.tag, maxMemories);
+          const rawMemories = listResult.success ? listResult.memories : [];
+          const filtered = filterRecent(rawMemories);
+          normalizedMemories = filtered.map((m: any) => ({
+            id: m.id,
+            text: m.summary,
+            similarity: 1.0,
+          }));
         }
 
-        if (CONFIG.chatMessage.maxAgeDays) {
-          const cutoffDate = Date.now() - CONFIG.chatMessage.maxAgeDays * 86400000;
-          memories = memories.filter((m: any) => new Date(m.createdAt).getTime() > cutoffDate);
-        }
+        logDebug(debugEnabled, "chat.message: injection complete", {
+          finalCount: normalizedMemories.length,
+          totalElapsedMs: Date.now() - t0,
+        });
 
-        if (memories.length === 0) return;
+        if (normalizedMemories.length === 0) return;
 
         const projectMemories = {
-          results: memories.map((m: any) => ({
-            similarity: 1.0,
-            memory: m.summary,
+          results: normalizedMemories.map((m) => ({
+            similarity: m.similarity,
+            memory: m.text,
           })),
-          total: memories.length,
+          total: normalizedMemories.length,
           timing: 0,
         };
 

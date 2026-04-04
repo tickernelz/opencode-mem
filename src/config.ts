@@ -73,6 +73,11 @@ interface OpenCodeMemConfig {
     excludeCurrentSession?: boolean;
     maxAgeDays?: number;
     injectOn?: "first" | "always";
+    selection?: "recent" | "semantic" | "hybrid";
+    semantic?: {
+      minSimilarity?: number;
+    };
+    debug?: boolean;
   };
 }
 
@@ -149,6 +154,11 @@ const DEFAULTS: Required<
     excludeCurrentSession: true,
     maxAgeDays: undefined,
     injectOn: "first",
+    selection: "recent",
+    semantic: {
+      minSimilarity: 0.6,
+    },
+    debug: false,
   },
 };
 
@@ -389,7 +399,49 @@ const CONFIG_TEMPLATE = `{
   // ============================================
   
   // Inject user profile into AI context (preferences, patterns, workflows)
-  "injectProfile": true
+  "injectProfile": true,
+
+  // ============================================
+  // Chat Message Memory Injection
+  // ============================================
+
+  // Inject relevant memories at the start of each chat message context
+  "chatMessage": {
+    // Enable/disable chat message memory injection
+    "enabled": true,
+
+    // Maximum number of memories to inject per message
+    "maxMemories": 3,
+
+    // Exclude memories from the current session
+    "excludeCurrentSession": true,
+
+    // Maximum age of memories to consider (in days). Omit to include all ages.
+    // "maxAgeDays": 30,
+
+    // When to inject memories: "first" (only first message) or "always" (every message)
+    "injectOn": "first",
+
+    // Memory selection strategy:
+    //   "recent"   - inject most recently saved memories (default, no latency impact)
+    //   "semantic" - inject memories most similar to current message (requires embedding lookup)
+    //   "hybrid"   - combine semantic similarity with recency fill-up (highest relevance, highest latency)
+    // Semantic and hybrid modes add a vector search per message. Leave as "recent" if
+    // latency is a concern or the embedding model is running remotely.
+    "selection": "recent",
+
+    // Settings that apply only when selection is "semantic" or "hybrid"
+    "semantic": {
+      // Minimum similarity score (0-1) for a memory to be included
+      // Lower values return more results; higher values are stricter
+      "minSimilarity": 0.6
+    },
+
+    // Temporary troubleshooting toggle — enables verbose [DEBUG] log entries for
+    // the chat-message injection pipeline (branch selection, query, result counts,
+    // elapsed ms). Leave false (or omit) in normal use to keep logs quiet.
+    // "debug": false
+  }
 }
 `;
 
@@ -525,6 +577,17 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
       injectOn: (fileConfig.chatMessage?.injectOn ?? DEFAULTS.chatMessage.injectOn) as
         | "first"
         | "always",
+      selection: (fileConfig.chatMessage?.selection ?? DEFAULTS.chatMessage.selection) as
+        | "recent"
+        | "semantic"
+        | "hybrid",
+      semantic: {
+        minSimilarity:
+          fileConfig.chatMessage?.semantic?.minSimilarity ??
+          DEFAULTS.chatMessage.semantic?.minSimilarity ??
+          0.6,
+      },
+      debug: fileConfig.chatMessage?.debug ?? DEFAULTS.chatMessage.debug,
     },
   };
 }
