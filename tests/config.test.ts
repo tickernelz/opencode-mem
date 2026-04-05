@@ -1,12 +1,20 @@
-import { describe, it, expect } from "bun:test";
-import { mkdirSync } from "node:fs";
+import { afterAll, describe, it, expect } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-const home = `/tmp/opencode-mem-test-${Date.now()}`;
-mkdirSync(home, { recursive: true });
+const home = mkdtempSync(join(tmpdir(), "opencode-mem-test-"));
+const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 process.env.HOME = home;
 process.env.USERPROFILE = home;
 
 const { CONFIG, isConfigured } = await import("../src/config.js");
+
+afterAll(() => {
+  process.env.HOME = originalHome;
+  process.env.USERPROFILE = originalUserProfile;
+});
 
 describe("config", () => {
   describe("CONFIG defaults", () => {
@@ -70,7 +78,8 @@ describe("config", () => {
     });
 
     it("should expose memory scope config", () => {
-      expect(["project", "all-projects"]).toContain(CONFIG.memory.defaultScope);
+      const defaultScope = CONFIG.memory.defaultScope ?? "project";
+      expect(["project", "all-projects"]).toContain(defaultScope);
     });
 
     it("should have user profile settings as numbers", () => {

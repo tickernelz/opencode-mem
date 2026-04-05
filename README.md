@@ -105,9 +105,9 @@ Configure at `~/.config/opencode/opencode-mem.jsonc`:
 
 ### Memory Scope
 
-- `scope: "project"`：仅查当前项目，默认值。
-- `scope: "all-projects"`：跨所有 project shard 查询 `search` / `list`。
-- 配置项 `memory.defaultScope` 可设置默认查询范围，未显式传参时生效。
+- `scope: "project"`: query only the current project. This is the default.
+- `scope: "all-projects"`: query `search` / `list` across all project shards.
+- `memory.defaultScope` sets the default query scope when no explicit scope is provided.
 
 ### Auto-Capture AI Provider
 
