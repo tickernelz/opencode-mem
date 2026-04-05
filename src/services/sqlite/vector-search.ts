@@ -146,12 +146,17 @@ export class VectorSearch {
     const placeholders = ids.map(() => "?").join(",");
     const rows = db
       .prepare(
-        `
+        containerTag === ""
+          ? `
+      SELECT * FROM memories
+      WHERE id IN (${placeholders})
+    `
+          : `
       SELECT * FROM memories
       WHERE id IN (${placeholders}) AND container_tag = ?
     `
       )
-      .all(...ids, containerTag) as any[];
+      .all(...ids, ...(containerTag === "" ? [] : [containerTag])) as any[];
 
     const queryWords = queryText
       ? queryText
@@ -256,14 +261,22 @@ export class VectorSearch {
   }
 
   listMemories(db: DatabaseType, containerTag: string, limit: number): any[] {
-    const stmt = db.prepare(`
+    const stmt = db.prepare(
+      containerTag === ""
+        ? `
+      SELECT * FROM memories
+      ORDER BY created_at DESC
+      LIMIT ?
+    `
+        : `
       SELECT * FROM memories
       WHERE container_tag = ?
       ORDER BY created_at DESC
       LIMIT ?
-    `);
+    `
+    );
 
-    return stmt.all(containerTag, limit) as any[];
+    return (containerTag === "" ? stmt.all(limit) : stmt.all(containerTag, limit)) as any[];
   }
 
   getAllMemories(db: DatabaseType): any[] {

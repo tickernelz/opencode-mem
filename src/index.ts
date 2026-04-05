@@ -15,6 +15,7 @@ import { isConfigured, CONFIG, initConfig } from "./config.js";
 import { log } from "./services/logger.js";
 import type { MemoryType } from "./types/index.js";
 import { getLanguageName } from "./services/language-detector.js";
+import type { MemoryScope } from "./services/client.js";
 
 export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   const { directory } = ctx;
@@ -244,7 +245,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
     tool: {
       memory: tool({
-        description: `Manage and query project memory (MATCH USER LANGUAGE: ${getLanguageName(CONFIG.autoCaptureLanguage || "en")}). Use 'search' with technical keywords/tags, 'add' to store knowledge, 'profile' for preferences.`,
+        description: `Manage and query project memory (MATCH USER LANGUAGE: ${getLanguageName(CONFIG.autoCaptureLanguage || "en")}). Use 'search' with technical keywords/tags, 'add' to store knowledge, 'profile' for preferences. Search/list scope: project or all-projects.`,
         args: {
           mode: tool.schema.enum(["add", "search", "profile", "list", "forget", "help"]).optional(),
           content: tool.schema.string().optional(),
@@ -253,6 +254,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           type: tool.schema.string().optional(),
           memoryId: tool.schema.string().optional(),
           limit: tool.schema.number().optional(),
+          scope: tool.schema.enum(["project", "all-projects"]).optional(),
         },
         async execute(
           args: {
@@ -263,6 +265,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
             type?: MemoryType;
             memoryId?: string;
             limit?: number;
+            scope?: MemoryScope;
           },
           toolCtx: { sessionID: string }
         ) {
@@ -334,7 +337,11 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
               case "search":
                 if (!args.query) return JSON.stringify({ success: false, error: "query required" });
-                const searchRes = await memoryClient.searchMemories(args.query, tags.project.tag);
+                const searchRes = await memoryClient.searchMemories(
+                  args.query,
+                  tags.project.tag,
+                  args.scope ?? CONFIG.memory.defaultScope
+                );
                 if (!searchRes.success)
                   return JSON.stringify({ success: false, error: searchRes.error });
                 return formatSearchResults(args.query, searchRes, args.limit);
@@ -357,7 +364,11 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                 });
 
               case "list":
-                const listRes = await memoryClient.listMemories(tags.project.tag, args.limit || 20);
+                const listRes = await memoryClient.listMemories(
+                  tags.project.tag,
+                  args.limit || 20,
+                  args.scope ?? CONFIG.memory.defaultScope
+                );
                 if (!listRes.success)
                   return JSON.stringify({ success: false, error: listRes.error });
                 return JSON.stringify({
