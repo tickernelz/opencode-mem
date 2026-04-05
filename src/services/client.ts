@@ -7,6 +7,8 @@ import { log } from "./logger.js";
 import type { MemoryType } from "../types/index.js";
 import type { MemoryRecord } from "./sqlite/types.js";
 
+export type MemoryScope = "project" | "all-projects";
+
 function safeToISOString(timestamp: any): string {
   try {
     if (timestamp === null || timestamp === undefined) {
@@ -46,6 +48,16 @@ function extractScopeFromContainerTag(containerTag: string): {
     return { scope, hash };
   }
   return { scope: "user", hash: containerTag };
+}
+
+function resolveScopeValue(
+  scope: MemoryScope,
+  containerTag: string
+): { scope: "user" | "project"; hash: string } {
+  if (scope === "all-projects") {
+    return { scope: "project", hash: "" };
+  }
+  return extractScopeFromContainerTag(containerTag);
 }
 
 export class LocalMemoryClient {
@@ -96,13 +108,13 @@ export class LocalMemoryClient {
     connectionManager.closeAll();
   }
 
-  async searchMemories(query: string, containerTag: string) {
+  async searchMemories(query: string, containerTag: string, scope: MemoryScope = "project") {
     try {
       await this.initialize();
 
       const queryVector = await embeddingService.embedWithTimeout(query);
-      const { scope, hash } = extractScopeFromContainerTag(containerTag);
-      const shards = shardManager.getAllShards(scope, hash);
+      const resolved = resolveScopeValue(scope, containerTag);
+      const shards = shardManager.getAllShards(resolved.scope, resolved.hash);
 
       if (shards.length === 0) {
         return { success: true as const, results: [], total: 0, timing: 0 };
@@ -111,7 +123,7 @@ export class LocalMemoryClient {
       const results = await vectorSearch.searchAcrossShards(
         shards,
         queryVector,
-        containerTag,
+        scope === "all-projects" ? "" : containerTag,
         CONFIG.maxMemories,
         CONFIG.similarityThreshold,
         query
@@ -233,12 +245,12 @@ export class LocalMemoryClient {
     }
   }
 
-  async listMemories(containerTag: string, limit = 20) {
+  async listMemories(containerTag: string, limit = 20, scope: MemoryScope = "project") {
     try {
       await this.initialize();
 
-      const { scope, hash } = extractScopeFromContainerTag(containerTag);
-      const shards = shardManager.getAllShards(scope, hash);
+      const resolved = resolveScopeValue(scope, containerTag);
+      const shards = shardManager.getAllShards(resolved.scope, resolved.hash);
 
       if (shards.length === 0) {
         return {
@@ -252,7 +264,11 @@ export class LocalMemoryClient {
 
       for (const shard of shards) {
         const db = connectionManager.getConnection(shard.dbPath);
-        const memories = vectorSearch.listMemories(db, containerTag, limit);
+        const memories = vectorSearch.listMemories(
+          db,
+          scope === "all-projects" ? "" : containerTag,
+          limit
+        );
         allMemories.push(...memories);
       }
 

@@ -1,7 +1,12 @@
 import { describe, it, expect } from "bun:test";
-import { CONFIG, isConfigured } from "../src/config.js";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { mkdirSync } from "node:fs";
+
+const home = `/tmp/opencode-mem-test-${Date.now()}`;
+mkdirSync(home, { recursive: true });
+process.env.HOME = home;
+process.env.USERPROFILE = home;
+
+const { CONFIG, isConfigured } = await import("../src/config.js");
 
 describe("config", () => {
   describe("CONFIG defaults", () => {
@@ -10,8 +15,6 @@ describe("config", () => {
     });
 
     it("should default to Xenova/nomic-embed-text-v1 embedding model", () => {
-      // If user hasn't overridden, the default should be this model
-      // The actual value depends on the config file, but we can check the type
       expect(typeof CONFIG.embeddingModel).toBe("string");
     });
 
@@ -64,6 +67,10 @@ describe("config", () => {
       expect(typeof CONFIG.webServerEnabled).toBe("boolean");
       expect(typeof CONFIG.autoCleanupEnabled).toBe("boolean");
       expect(typeof CONFIG.deduplicationEnabled).toBe("boolean");
+    });
+
+    it("should expose memory scope config", () => {
+      expect(["project", "all-projects"]).toContain(CONFIG.memory.defaultScope);
     });
 
     it("should have user profile settings as numbers", () => {

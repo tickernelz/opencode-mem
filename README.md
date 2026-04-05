@@ -53,6 +53,7 @@ The plugin downloads automatically on next startup.
 ```typescript
 memory({ mode: "add", content: "Project uses microservices architecture" });
 memory({ mode: "search", query: "architecture decisions" });
+memory({ mode: "search", query: "architecture decisions", scope: "all-projects" });
 memory({ mode: "profile" });
 memory({ mode: "list", limit: 10 });
 ```
@@ -69,6 +70,9 @@ Configure at `~/.config/opencode/opencode-mem.jsonc`:
   "userEmailOverride": "user@example.com",
   "userNameOverride": "John Doe",
   "embeddingModel": "Xenova/nomic-embed-text-v1",
+  "memory": {
+    "defaultScope": "project",
+  },
   "webServerEnabled": true,
   "webServerPort": 4747,
 
@@ -98,6 +102,12 @@ Configure at `~/.config/opencode/opencode-mem.jsonc`:
   },
 }
 ```
+
+### Memory Scope
+
+- `scope: "project"`：仅查当前项目，默认值。
+- `scope: "all-projects"`：跨所有 project shard 查询 `search` / `list`。
+- 配置项 `memory.defaultScope` 可设置默认查询范围，未显式传参时生效。
 
 ### Auto-Capture AI Provider
 
