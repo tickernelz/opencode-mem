@@ -49,6 +49,10 @@ export class EmbeddingService {
     return this.initPromise;
   }
 
+  resetWarmupState(): void {
+    this.initPromise = null;
+  }
+
   private async initializeModel(progressCallback?: (progress: any) => void): Promise<void> {
     try {
       if (CONFIG.embeddingApiUrl && CONFIG.embeddingApiKey) {

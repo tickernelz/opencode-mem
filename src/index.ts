@@ -10,6 +10,7 @@ import { performAutoCapture } from "./services/auto-capture.js";
 import { performUserProfileLearning } from "./services/user-memory-learning.js";
 import { userPromptManager } from "./services/user-prompt/user-prompt-manager.js";
 import { startWebServer, WebServer } from "./services/web-server.js";
+import { embeddingService } from "./services/embedding.js";
 
 import { isConfigured, CONFIG, initConfig } from "./config.js";
 import { log } from "./services/logger.js";
@@ -25,6 +26,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
   const GLOBAL_PLUGIN_WARMUP_KEY = Symbol.for("opencode-mem.plugin.warmedup");
   const GLOBAL_PLUGIN_WARMUP_PROMISE_KEY = Symbol.for("opencode-mem.plugin.warmupPromise");
+  const GLOBAL_PLUGIN_WARMUP_TIMEOUT_MS = 60_000;
 
   const startBackgroundWarmup = () => {
     if (!isConfigured()) return;
@@ -33,16 +35,32 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     if (globalState[GLOBAL_PLUGIN_WARMUP_KEY]) return;
     if (globalState[GLOBAL_PLUGIN_WARMUP_PROMISE_KEY]) return;
 
-    globalState[GLOBAL_PLUGIN_WARMUP_PROMISE_KEY] = (async () => {
+    const warmupState: { promise: Promise<void> | null } = { promise: null };
+    warmupState.promise = (async () => {
       try {
-        await memoryClient.warmup();
+        await Promise.race([
+          memoryClient.warmup(),
+          new Promise((_, reject) => {
+            setTimeout(
+              () => reject(new Error("Background warmup timed out")),
+              GLOBAL_PLUGIN_WARMUP_TIMEOUT_MS
+            );
+          }),
+        ]);
         globalState[GLOBAL_PLUGIN_WARMUP_KEY] = true;
       } catch (error) {
         log("Plugin warmup failed", { error: String(error) });
+        if (String(error).includes("Background warmup timed out")) {
+          embeddingService.resetWarmupState();
+        }
       } finally {
-        globalState[GLOBAL_PLUGIN_WARMUP_PROMISE_KEY] = null;
+        if (globalState[GLOBAL_PLUGIN_WARMUP_PROMISE_KEY] === warmupState.promise) {
+          globalState[GLOBAL_PLUGIN_WARMUP_PROMISE_KEY] = null;
+        }
       }
     })();
+
+    globalState[GLOBAL_PLUGIN_WARMUP_PROMISE_KEY] = warmupState.promise;
   };
 
   // Wire opencode state path and provider list — fire-and-forget to avoid blocking init
