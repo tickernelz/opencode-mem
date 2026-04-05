@@ -44,6 +44,10 @@ export class EmbeddingService {
 
   async warmup(progressCallback?: (progress: any) => void): Promise<void> {
     if (this.isWarmedUp) return;
+    if (CONFIG.embeddingApiUrl && CONFIG.embeddingApiKey) {
+      this.isWarmedUp = true;
+      return;
+    }
     if (this.initPromise) return this.initPromise;
     this.initPromise = this.initializeModel(progressCallback);
     return this.initPromise;
