@@ -23,19 +23,27 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   let webServer: WebServer | null = null;
   let idleTimeout: Timer | null = null;
 
-  if (!isConfigured()) {
-  }
-
   const GLOBAL_PLUGIN_WARMUP_KEY = Symbol.for("opencode-mem.plugin.warmedup");
+  const GLOBAL_PLUGIN_WARMUP_PROMISE_KEY = Symbol.for("opencode-mem.plugin.warmupPromise");
 
-  if (!(globalThis as any)[GLOBAL_PLUGIN_WARMUP_KEY] && isConfigured()) {
-    try {
-      await memoryClient.warmup();
-      (globalThis as any)[GLOBAL_PLUGIN_WARMUP_KEY] = true;
-    } catch (error) {
-      log("Plugin warmup failed", { error: String(error) });
-    }
-  }
+  const startBackgroundWarmup = () => {
+    if (!isConfigured()) return;
+
+    const globalState = globalThis as any;
+    if (globalState[GLOBAL_PLUGIN_WARMUP_KEY]) return;
+    if (globalState[GLOBAL_PLUGIN_WARMUP_PROMISE_KEY]) return;
+
+    globalState[GLOBAL_PLUGIN_WARMUP_PROMISE_KEY] = (async () => {
+      try {
+        await memoryClient.warmup();
+        globalState[GLOBAL_PLUGIN_WARMUP_KEY] = true;
+      } catch (error) {
+        log("Plugin warmup failed", { error: String(error) });
+      } finally {
+        globalState[GLOBAL_PLUGIN_WARMUP_PROMISE_KEY] = null;
+      }
+    })();
+  };
 
   // Wire opencode state path and provider list — fire-and-forget to avoid blocking init
   // These calls can hang if opencode isn't fully bootstrapped yet
@@ -126,6 +134,8 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
         }
       });
   }
+
+  startBackgroundWarmup();
 
   const shutdownHandler = async () => {
     try {
@@ -275,6 +285,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
           const needsWarmup = !(await memoryClient.isReady());
           if (needsWarmup) {
+            startBackgroundWarmup();
             return JSON.stringify({ success: false, error: "Memory system is initializing." });
           }
 
