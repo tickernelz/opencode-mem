@@ -380,7 +380,7 @@ export abstract class OpenAIChatCompletionBaseProvider extends BaseAIProvider {
         if (error instanceof Error && error.name === "AbortError") {
           return {
             success: false,
-            error: `API request timeout (${this.config.iterationTimeout}ms)`,
+            error: `API request timeout (${iterationTimeout}ms)`,
             iterations,
           };
         }
@@ -394,7 +394,7 @@ export abstract class OpenAIChatCompletionBaseProvider extends BaseAIProvider {
 
     return {
       success: false,
-      error: `Max iterations (${this.config.maxIterations}) reached without tool call`,
+      error: `Max iterations (${maxIterations}) reached without tool call`,
       iterations,
     };
   }
