@@ -298,7 +298,12 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                       description: `Search memories via keywords (MATCH USER LANGUAGE: ${langName})`,
                       args: ["query"],
                     },
-                    { command: "profile", description: "View user profile", args: [] },
+                    {
+                      command: "profile",
+                      description:
+                        "View user profile or save an explicit preference (provide content to write)",
+                      args: ["content?"],
+                    },
                     { command: "list", description: "List recent memories", args: ["limit?"] },
                     { command: "forget", description: "Remove memory", args: ["memoryId"] },
                   ],
@@ -339,12 +344,84 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                   return JSON.stringify({ success: false, error: searchRes.error });
                 return formatSearchResults(args.query, searchRes, args.limit);
 
-              case "profile":
+              case "profile": {
+                if (args.query) {
+                  return JSON.stringify({
+                    success: false,
+                    error:
+                      "query is not valid for profile mode. Use content to write a preference or omit all args to read.",
+                  });
+                }
+
                 const { userProfileManager } =
                   await import("./services/user-profile/user-profile-manager.js");
-                const profile = userProfileManager.getActiveProfile(
-                  tags.user.userEmail || "unknown"
-                );
+
+                const userId = tags.user.userEmail || "unknown";
+
+                // --- WRITE: explicit preference ---
+                if (args.content !== undefined) {
+                  const trimmed = args.content.trim();
+                  if (!trimmed) {
+                    return JSON.stringify({ success: false, error: "content must not be blank" });
+                  }
+
+                  if (!tags.user.userEmail) {
+                    return JSON.stringify({
+                      success: false,
+                      error:
+                        "Cannot save profile preference because no user email could be resolved. Configure userEmailOverride or git user.email.",
+                    });
+                  }
+
+                  if (isFullyPrivate(trimmed)) {
+                    return JSON.stringify({ success: false, error: "Private content blocked" });
+                  }
+
+                  const sanitizedContent = stripPrivateContent(trimmed);
+
+                  const newPreference = {
+                    category: "explicit",
+                    description: sanitizedContent,
+                    confidence: 1.0,
+                    evidence: ["manual-write"],
+                    lastUpdated: Date.now(),
+                  };
+
+                  const existingProfile = userProfileManager.getActiveProfile(userId);
+
+                  if (existingProfile) {
+                    const existingData = JSON.parse(existingProfile.profileData);
+                    const mergedData = userProfileManager.mergeProfileData(existingData, {
+                      preferences: [newPreference],
+                    });
+                    userProfileManager.updateProfile(
+                      existingProfile.id,
+                      mergedData,
+                      0,
+                      `Explicit preference added: ${sanitizedContent.slice(0, 80)}`
+                    );
+                    return JSON.stringify({
+                      success: true,
+                      message: "Preference saved to profile",
+                    });
+                  } else {
+                    userProfileManager.createProfile(
+                      userId,
+                      tags.user.displayName || userId,
+                      tags.user.userName || userId,
+                      tags.user.userEmail || userId,
+                      { preferences: [newPreference], patterns: [], workflows: [] },
+                      0
+                    );
+                    return JSON.stringify({
+                      success: true,
+                      message: "Profile created with preference",
+                    });
+                  }
+                }
+
+                // --- READ: no content provided ---
+                const profile = userProfileManager.getActiveProfile(userId);
                 if (!profile) return JSON.stringify({ success: true, profile: null });
                 const pData = JSON.parse(profile.profileData);
                 return JSON.stringify({
@@ -355,6 +432,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                     lastAnalyzed: profile.lastAnalyzedAt,
                   },
                 });
+              }
 
               case "list":
                 const listRes = await memoryClient.listMemories(tags.project.tag, args.limit || 20);
