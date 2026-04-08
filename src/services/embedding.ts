@@ -7,13 +7,13 @@ const GLOBAL_EMBEDDING_KEY = Symbol.for("opencode-mem.embedding.instance");
 const MAX_CACHE_SIZE = 100;
 
 let _transformers: {
-  pipeline: (typeof import("@xenova/transformers"))["pipeline"];
-  env: (typeof import("@xenova/transformers"))["env"];
+  pipeline: (typeof import("@huggingface/transformers"))["pipeline"];
+  env: (typeof import("@huggingface/transformers"))["env"];
 } | null = null;
 
 async function ensureTransformersLoaded(): Promise<NonNullable<typeof _transformers>> {
   if (_transformers !== null) return _transformers;
-  const mod = await import("@xenova/transformers");
+  const mod = await import("@huggingface/transformers");
   mod.env.allowLocalModels = true;
   mod.env.allowRemoteModels = true;
   mod.env.cacheDir = join(CONFIG.storagePath, ".cache");
