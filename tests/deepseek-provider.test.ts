@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { DeepSeekProvider } from "../src/services/ai/providers/deepseek.js";
 import type { ChatCompletionTool } from "../src/services/ai/tools/tool-schema.js";
+import type { AIMessage } from "../src/services/ai/session/session-types.js";
 
 const toolSchema: ChatCompletionTool = {
   type: "function",
@@ -40,8 +41,21 @@ class FakeSessionManager {
   }
 }
 
+class TestableDeepSeekProvider extends DeepSeekProvider {
+  filterMessages(messages: AIMessage[]): AIMessage[] {
+    return this.filterIncompleteToolCallSequences(messages);
+  }
+}
+
 function makeProvider(config: Record<string, unknown> = {}) {
   return new DeepSeekProvider(
+    { model: "deepseek-chat", apiKey: "test-key", ...config },
+    new FakeSessionManager() as any
+  );
+}
+
+function makeTestableProvider(config: Record<string, unknown> = {}) {
+  return new TestableDeepSeekProvider(
     { model: "deepseek-chat", apiKey: "test-key", ...config },
     new FakeSessionManager() as any
   );
@@ -80,6 +94,99 @@ describe("DeepSeekProvider", () => {
 
   it("supportsSession returns true", () => {
     expect(makeProvider().supportsSession()).toBe(true);
+  });
+
+  it("keeps complete tool call sequences", () => {
+    const messages: AIMessage[] = [
+      {
+        aiSessionId: "session-1",
+        sequence: 0,
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          {
+            id: "call-1",
+            type: "function",
+            function: { name: "save_memories", arguments: "{}" },
+          },
+        ],
+        createdAt: 1,
+      },
+      {
+        aiSessionId: "session-1",
+        sequence: 1,
+        role: "tool",
+        content: '{"success":true}',
+        toolCallId: "call-1",
+        createdAt: 2,
+      },
+    ];
+
+    expect(makeTestableProvider().filterMessages(messages)).toEqual(messages);
+  });
+
+  it("drops trailing incomplete tool call sequences", () => {
+    const messages: AIMessage[] = [
+      {
+        aiSessionId: "session-1",
+        sequence: 0,
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          {
+            id: "call-1",
+            type: "function",
+            function: { name: "save_memories", arguments: "{}" },
+          },
+        ],
+        createdAt: 1,
+      },
+    ];
+
+    expect(makeTestableProvider().filterMessages(messages)).toEqual([]);
+  });
+
+  it("keeps complete prefix and drops later incomplete tool call sequences", () => {
+    const messages: AIMessage[] = [
+      {
+        aiSessionId: "session-1",
+        sequence: 0,
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          {
+            id: "call-1",
+            type: "function",
+            function: { name: "save_memories", arguments: "{}" },
+          },
+        ],
+        createdAt: 1,
+      },
+      {
+        aiSessionId: "session-1",
+        sequence: 1,
+        role: "tool",
+        content: '{"success":true}',
+        toolCallId: "call-1",
+        createdAt: 2,
+      },
+      {
+        aiSessionId: "session-1",
+        sequence: 2,
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          {
+            id: "call-2",
+            type: "function",
+            function: { name: "save_memories", arguments: "{}" },
+          },
+        ],
+        createdAt: 3,
+      },
+    ];
+
+    expect(makeTestableProvider().filterMessages(messages)).toEqual(messages.slice(0, 2));
   });
 
   it("uses provided apiUrl for the request", async () => {
