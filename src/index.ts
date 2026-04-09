@@ -373,11 +373,13 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                     });
                   }
 
-                  if (isFullyPrivate(trimmed)) {
+                  const sanitizedContent = stripPrivateContent(trimmed);
+                  const hasNonPrivateContent =
+                    sanitizedContent.replace(/\[REDACTED\]/g, "").trim().length > 0;
+
+                  if (isFullyPrivate(trimmed) || !hasNonPrivateContent) {
                     return JSON.stringify({ success: false, error: "Private content blocked" });
                   }
-
-                  const sanitizedContent = stripPrivateContent(trimmed);
 
                   const newPreference = {
                     category: "explicit",

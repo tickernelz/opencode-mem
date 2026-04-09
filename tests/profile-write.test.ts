@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { connectionManager } from "../src/services/sqlite/connection-manager.js";
 
 // We patch CONFIG.storagePath before importing the manager so the DB lands in tmp.
 let tmpDir: string;
@@ -15,8 +16,8 @@ async function makeManager() {
   // Dynamic import after setting storagePath so the constructor picks up the temp dir.
   const { CONFIG } = await import("../src/config.js");
   CONFIG.storagePath = tmpDir;
-  // Re-import fresh instance by side-stepping module cache with a unique query param trick.
-  // Since bun caches ESM modules we instead instantiate the class directly.
+  // Bun may cache the imported module, so this helper does not try to reload it.
+  // Instead, each test creates a new UserProfileManager instance after updating CONFIG.storagePath.
   const { UserProfileManager } =
     await import("../src/services/user-profile/user-profile-manager.js");
   return new UserProfileManager();
@@ -28,6 +29,7 @@ describe("UserProfileManager – explicit preference writes", () => {
   });
 
   afterEach(() => {
+    connectionManager.closeAll();
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
