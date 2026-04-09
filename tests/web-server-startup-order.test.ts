@@ -263,6 +263,31 @@ describe("web server startup order", () => {
     expect(testState.events).toEqual(["server:start", "server:ready", "warmup:start"]);
   });
 
+  it("waits for a failed web server startup attempt before background warmup begins", async () => {
+    let rejectServer!: (error: Error) => void;
+
+    testState.startWebServerImpl = () => {
+      testState.events.push("server:start");
+      return new Promise<MockWebServer>((_resolve, reject) => {
+        rejectServer = (error) => {
+          testState.events.push("server:failed");
+          reject(error);
+        };
+      });
+    };
+
+    const pluginPromise = OpenCodeMemPlugin(createPluginInput());
+    await flushMicrotasks();
+
+    expect(testState.events).toEqual(["server:start"]);
+    expect(testState.warmupCalls).toBe(0);
+
+    rejectServer(new Error("bind failed"));
+    await pluginPromise;
+
+    expect(testState.events).toEqual(["server:start", "server:failed", "warmup:start"]);
+  });
+
   it("keeps the memory tool non-blocking while initialization is still running", async () => {
     CONFIG.webServerEnabled = false;
 
