@@ -36,7 +36,7 @@ interface OpenCodeMemConfig {
   autoCaptureMaxIterations?: number;
   autoCaptureIterationTimeout?: number;
   autoCaptureLanguage?: string;
-  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic" | "deepseek";
+  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic";
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
@@ -99,7 +99,7 @@ const DEFAULTS: Required<
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
-  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic" | "deepseek";
+  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic";
   memoryTemperature?: number | false;
   memoryExtraParams?: Record<string, unknown>;
   opencodeProvider?: string;
@@ -267,7 +267,9 @@ const CONFIG_TEMPLATE = `{
   
   "autoCaptureEnabled": true,
   
-  // Provider type: "openai-chat" | "openai-responses" | "anthropic" | "deepseek"
+  // Provider type: "openai-chat" | "openai-responses" | "anthropic"
+  // Note: "openai-chat" is a generic OpenAI API-compatible mode.
+  // Any service that follows the OpenAI Chat Completions API can use it via custom "memoryApiUrl".
   "memoryProvider": "openai-chat",
   
   // REQUIRED for auto-capture (all 3 must be set):
@@ -281,10 +283,20 @@ const CONFIG_TEMPLATE = `{
   // From env variable:   "env://LITELLM_API_KEY"
   
   // Examples for different providers:
+  // Any OpenAI-compatible endpoint can use the "openai-chat" provider pattern below.
+  // Common examples: DeepSeek, Qwen (via Alibaba Cloud ModelStudio),
+  // Zhipu GLM (BigModel platform), and Kimi (Moonshot AI platform).
+  
   // OpenAI Chat Completion (default, backward compatible):
   //   "memoryProvider": "openai-chat"
   //   "memoryModel": "gpt-4o-mini"
   //   "memoryApiUrl": "https://api.openai.com/v1"
+  //   "memoryApiKey": "sk-..."
+
+  // DeepSeek (OpenAI-compatible example):
+  //   "memoryProvider": "openai-chat"
+  //   "memoryModel": "deepseek-chat"
+  //   "memoryApiUrl": "https://api.deepseek.com/v1"
   //   "memoryApiKey": "sk-..."
   
   // OpenAI Responses API (recommended, with session support):
@@ -304,12 +316,6 @@ const CONFIG_TEMPLATE = `{
   //   "memoryModel": "llama-3.3-70b-versatile"
   //   "memoryApiUrl": "https://api.groq.com/openai/v1"
   //   "memoryApiKey": "gsk_..."
-  
-  // DeepSeek (with session support):
-  //   "memoryProvider": "deepseek"
-  //   "memoryModel": "deepseek-chat"
-  //   "memoryApiUrl": "https://api.deepseek.com"
-  //   "memoryApiKey": "sk-..."
   
   // Maximum iterations for multi-turn AI analysis (for openai-responses and anthropic)
   "autoCaptureMaxIterations": 5,
@@ -482,8 +488,7 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     memoryProvider: (fileConfig.memoryProvider ?? "openai-chat") as
       | "openai-chat"
       | "openai-responses"
-      | "anthropic"
-      | "deepseek",
+      | "anthropic",
     memoryModel: fileConfig.memoryModel,
     memoryApiUrl: fileConfig.memoryApiUrl,
     memoryApiKey: resolveSecretValue(fileConfig.memoryApiKey),

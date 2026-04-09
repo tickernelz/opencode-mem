@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { DeepSeekProvider } from "../src/services/ai/providers/deepseek.js";
+import { OpenAIChatCompletionProvider } from "../src/services/ai/providers/openai-chat-completion.js";
 import type { ChatCompletionTool } from "../src/services/ai/tools/tool-schema.js";
 import type { AIMessage } from "../src/services/ai/session/session-types.js";
 
@@ -41,22 +41,22 @@ class FakeSessionManager {
   }
 }
 
-class TestableDeepSeekProvider extends DeepSeekProvider {
+class TestableOpenAIChatCompletionProvider extends OpenAIChatCompletionProvider {
   filterMessages(messages: AIMessage[]): AIMessage[] {
     return this.filterIncompleteToolCallSequences(messages);
   }
 }
 
 function makeProvider(config: Record<string, unknown> = {}) {
-  return new DeepSeekProvider(
-    { model: "deepseek-chat", apiKey: "test-key", ...config },
+  return new OpenAIChatCompletionProvider(
+    { model: "gpt-4o-mini", apiKey: "test-key", ...config },
     new FakeSessionManager() as any
   );
 }
 
 function makeTestableProvider(config: Record<string, unknown> = {}) {
-  return new TestableDeepSeekProvider(
-    { model: "deepseek-chat", apiKey: "test-key", ...config },
+  return new TestableOpenAIChatCompletionProvider(
+    { model: "gpt-4o-mini", apiKey: "test-key", ...config },
     new FakeSessionManager() as any
   );
 }
@@ -81,15 +81,15 @@ function makeFetch(response: {
   }) as typeof fetch;
 }
 
-describe("DeepSeekProvider", () => {
+describe("OpenAIChatCompletionProvider", () => {
   const originalFetch = globalThis.fetch;
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
   });
 
-  it("getProviderName returns deepseek", () => {
-    expect(makeProvider().getProviderName()).toBe("deepseek");
+  it("getProviderName returns openai-chat", () => {
+    expect(makeProvider().getProviderName()).toBe("openai-chat");
   });
 
   it("supportsSession returns true", () => {
@@ -189,38 +189,21 @@ describe("DeepSeekProvider", () => {
     expect(makeTestableProvider().filterMessages(messages)).toEqual(messages.slice(0, 2));
   });
 
-  it("uses provided apiUrl for the request", async () => {
+  it("uses custom apiUrl for the request", async () => {
     let capturedUrl = "";
     globalThis.fetch = (async (input: RequestInfo | URL, _init?: RequestInit) => {
       capturedUrl = String(input);
       return { ok: false, status: 400, statusText: "Bad", text: async () => "err" } as Response;
     }) as typeof fetch;
 
-    await makeProvider({ apiUrl: "https://api.deepseek.com" }).executeToolCall(
+    await makeProvider({ apiUrl: "https://compatible.example.com/v1" }).executeToolCall(
       "system",
       "user",
       toolSchema,
       "session-id"
     );
 
-    expect(capturedUrl).toBe("https://api.deepseek.com/chat/completions");
-  });
-
-  it("respects custom apiUrl when provided", async () => {
-    let capturedUrl = "";
-    globalThis.fetch = (async (input: RequestInfo | URL, _init?: RequestInit) => {
-      capturedUrl = String(input);
-      return { ok: false, status: 400, statusText: "Bad", text: async () => "err" } as Response;
-    }) as typeof fetch;
-
-    await makeProvider({ apiUrl: "https://custom.example.com/v1" }).executeToolCall(
-      "system",
-      "user",
-      toolSchema,
-      "session-id"
-    );
-
-    expect(capturedUrl).toBe("https://custom.example.com/v1/chat/completions");
+    expect(capturedUrl).toBe("https://compatible.example.com/v1/chat/completions");
   });
 
   it("sends Authorization Bearer header", async () => {
@@ -230,7 +213,7 @@ describe("DeepSeekProvider", () => {
       return { ok: false, status: 400, statusText: "Bad", text: async () => "err" } as Response;
     }) as typeof fetch;
 
-    await makeProvider({ apiKey: "sk-mykey" }).executeToolCall(
+    await makeProvider({ apiKey: "sk-mykey", apiUrl: "https://api.openai.com/v1" }).executeToolCall(
       "system",
       "user",
       toolSchema,
@@ -247,7 +230,7 @@ describe("DeepSeekProvider", () => {
       return { ok: false, status: 400, statusText: "Bad", text: async () => "err" } as Response;
     }) as typeof fetch;
 
-    await makeProvider({ apiKey: undefined }).executeToolCall(
+    await makeProvider({ apiKey: undefined, apiUrl: "https://api.openai.com/v1" }).executeToolCall(
       "system",
       "user",
       toolSchema,
@@ -264,14 +247,12 @@ describe("DeepSeekProvider", () => {
       return { ok: false, status: 400, statusText: "Bad", text: async () => "err" } as Response;
     }) as typeof fetch;
 
-    await makeProvider({ model: "deepseek-reasoner" }).executeToolCall(
-      "system",
-      "user",
-      toolSchema,
-      "session-id"
-    );
+    await makeProvider({
+      model: "gpt-4o-mini",
+      apiUrl: "https://api.openai.com/v1",
+    }).executeToolCall("system", "user", toolSchema, "session-id");
 
-    expect(capturedBody?.model).toBe("deepseek-reasoner");
+    expect(capturedBody?.model).toBe("gpt-4o-mini");
     expect(Array.isArray(capturedBody?.messages)).toBe(true);
     expect(Array.isArray(capturedBody?.tools)).toBe(true);
     expect(capturedBody?.tool_choice).toBe("auto");
@@ -284,7 +265,12 @@ describe("DeepSeekProvider", () => {
       return { ok: false, status: 400, statusText: "Bad", text: async () => "err" } as Response;
     }) as typeof fetch;
 
-    await makeProvider().executeToolCall("system", "user", toolSchema, "session-id");
+    await makeProvider({ apiUrl: "https://api.openai.com/v1" }).executeToolCall(
+      "system",
+      "user",
+      toolSchema,
+      "session-id"
+    );
 
     expect(capturedBody?.temperature).toBe(0.3);
   });
@@ -296,12 +282,10 @@ describe("DeepSeekProvider", () => {
       return { ok: false, status: 400, statusText: "Bad", text: async () => "err" } as Response;
     }) as typeof fetch;
 
-    await makeProvider({ memoryTemperature: false }).executeToolCall(
-      "system",
-      "user",
-      toolSchema,
-      "session-id"
-    );
+    await makeProvider({
+      memoryTemperature: false,
+      apiUrl: "https://api.openai.com/v1",
+    }).executeToolCall("system", "user", toolSchema, "session-id");
 
     expect(capturedBody?.temperature).toBeUndefined();
   });
@@ -309,7 +293,12 @@ describe("DeepSeekProvider", () => {
   it("returns success: false with error message on API error response", async () => {
     globalThis.fetch = makeFetch({ ok: false, status: 401, body: "Unauthorized" });
 
-    const result = await makeProvider().executeToolCall("system", "user", toolSchema, "session-id");
+    const result = await makeProvider({ apiUrl: "https://api.openai.com/v1" }).executeToolCall(
+      "system",
+      "user",
+      toolSchema,
+      "session-id"
+    );
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("401");
@@ -322,7 +311,12 @@ describe("DeepSeekProvider", () => {
       body: '{"error": {"type": "unsupported_value", "param": "temperature"}}',
     });
 
-    const result = await makeProvider().executeToolCall("system", "user", toolSchema, "session-id");
+    const result = await makeProvider({ apiUrl: "https://api.openai.com/v1" }).executeToolCall(
+      "system",
+      "user",
+      toolSchema,
+      "session-id"
+    );
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("memoryTemperature");
@@ -331,7 +325,12 @@ describe("DeepSeekProvider", () => {
   it("returns success: false when response has no choices", async () => {
     globalThis.fetch = makeFetch({ ok: true, body: { choices: [] } } as any);
 
-    const result = await makeProvider().executeToolCall("system", "user", toolSchema, "session-id");
+    const result = await makeProvider({ apiUrl: "https://api.openai.com/v1" }).executeToolCall(
+      "system",
+      "user",
+      toolSchema,
+      "session-id"
+    );
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("Invalid API response format");
@@ -343,21 +342,7 @@ describe("DeepSeekProvider", () => {
       body: { status: "error", msg: "quota exceeded" },
     } as any);
 
-    const result = await makeProvider().executeToolCall("system", "user", toolSchema, "session-id");
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("quota exceeded");
-  });
-
-  it("returns success: false after max iterations with no tool call", async () => {
-    globalThis.fetch = makeFetch({
-      ok: true,
-      body: {
-        choices: [{ message: { content: "I will not use a tool", tool_calls: undefined } }],
-      },
-    } as any);
-
-    const result = await makeProvider({ maxIterations: 2 }).executeToolCall(
+    const result = await makeProvider({ apiUrl: "https://api.openai.com/v1" }).executeToolCall(
       "system",
       "user",
       toolSchema,
@@ -365,8 +350,7 @@ describe("DeepSeekProvider", () => {
     );
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("Max iterations");
-    expect(result.iterations).toBe(2);
+    expect(result.error).toContain("quota exceeded");
   });
 
   it("returns success: true when model calls the correct tool", async () => {
@@ -398,10 +382,33 @@ describe("DeepSeekProvider", () => {
       },
     } as any);
 
-    const result = await makeProvider().executeToolCall("system", "user", toolSchema, "session-id");
+    const result = await makeProvider({ apiUrl: "https://api.openai.com/v1" }).executeToolCall(
+      "system",
+      "user",
+      toolSchema,
+      "session-id"
+    );
 
     expect(result.success).toBe(true);
     expect(result.iterations).toBe(1);
+  });
+
+  it("returns success: false after max iterations with no tool call", async () => {
+    globalThis.fetch = makeFetch({
+      ok: true,
+      body: {
+        choices: [{ message: { content: "I will not use a tool", tool_calls: undefined } }],
+      },
+    } as any);
+
+    const result = await makeProvider({
+      maxIterations: 2,
+      apiUrl: "https://api.openai.com/v1",
+    }).executeToolCall("system", "user", toolSchema, "session-id");
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Max iterations");
+    expect(result.iterations).toBe(2);
   });
 
   it("returns success: false when model calls wrong tool name", async () => {
@@ -425,12 +432,10 @@ describe("DeepSeekProvider", () => {
       },
     } as any);
 
-    const result = await makeProvider({ maxIterations: 1 }).executeToolCall(
-      "system",
-      "user",
-      toolSchema,
-      "session-id"
-    );
+    const result = await makeProvider({
+      maxIterations: 1,
+      apiUrl: "https://api.openai.com/v1",
+    }).executeToolCall("system", "user", toolSchema, "session-id");
 
     expect(result.success).toBe(false);
   });
