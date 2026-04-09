@@ -1,5 +1,11 @@
-import { BaseAIProvider, type ToolCallResult, applySafeExtraParams } from "./base-provider.js";
-import { AISessionManager } from "../session/ai-session-manager.js";
+import {
+  BaseAIProvider,
+  type ProviderConfig,
+  type ToolCallResult,
+  applySafeExtraParams,
+} from "./base-provider.js";
+import type { AISessionManager } from "../session/ai-session-manager.js";
+import type { AIMessage } from "../session/session-types.js";
 import type { ChatCompletionTool } from "../tools/tool-schema.js";
 import { log } from "../../logger.js";
 import { UserProfileValidator } from "../validators/user-profile-validator.js";
@@ -10,7 +16,7 @@ interface ToolCallResponse {
       content?: string;
       tool_calls?: Array<{
         id: string;
-        type: string;
+        type: "function";
         function: {
           name: string;
           arguments: string;
@@ -21,10 +27,46 @@ interface ToolCallResponse {
   }>;
 }
 
-export class OpenAIChatCompletionProvider extends BaseAIProvider {
-  private aiSessionManager: AISessionManager;
+type APIMessage = {
+  role: AIMessage["role"];
+  content: string;
+  tool_calls?: ToolCallResponse["choices"][number]["message"]["tool_calls"];
+  tool_call_id?: string;
+};
 
-  constructor(config: any, aiSessionManager: AISessionManager) {
+type RequestBody = {
+  model: string;
+  messages: APIMessage[];
+  tools: ChatCompletionTool[];
+  tool_choice: "auto";
+  temperature?: number;
+  [key: string]: unknown;
+};
+
+type AssistantSessionMessage = Omit<AIMessage, "id" | "createdAt">;
+
+function isErrorResponseBody(data: unknown): data is { status: string; msg: string } {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    typeof (data as { status?: unknown }).status === "string" &&
+    typeof (data as { msg?: unknown }).msg === "string"
+  );
+}
+
+function isToolCallResponse(data: unknown): data is ToolCallResponse {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    Array.isArray((data as { choices?: unknown }).choices) &&
+    (data as { choices: unknown[] }).choices.length > 0
+  );
+}
+
+export class OpenAIChatCompletionProvider extends BaseAIProvider {
+  private readonly aiSessionManager: AISessionManager;
+
+  constructor(config: ProviderConfig, aiSessionManager: AISessionManager) {
     super(config);
     this.aiSessionManager = aiSessionManager;
   }
@@ -39,7 +81,7 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
 
   private addToolResponse(
     sessionId: string,
-    messages: any[],
+    messages: APIMessage[],
     toolCallId: string,
     content: string
   ): void {
@@ -58,22 +100,26 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
     });
   }
 
-  private filterIncompleteToolCallSequences(messages: any[]): any[] {
-    const result: any[] = [];
+  protected filterIncompleteToolCallSequences(messages: AIMessage[]): AIMessage[] {
+    const result: AIMessage[] = [];
     let i = 0;
 
     while (i < messages.length) {
       const msg = messages[i];
+      if (!msg) {
+        break;
+      }
 
       if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
-        const toolCallIds = new Set(msg.toolCalls.map((tc: any) => tc.id));
-        const toolResponses: any[] = [];
+        const toolCallIds = new Set(msg.toolCalls.map((tc) => tc.id));
+        const toolResponses: AIMessage[] = [];
         let j = i + 1;
 
-        while (j < messages.length && messages[j].role === "tool") {
-          if (toolCallIds.has(messages[j].toolCallId)) {
-            toolResponses.push(messages[j]);
-            toolCallIds.delete(messages[j].toolCallId);
+        while (j < messages.length && messages[j]?.role === "tool") {
+          const toolMessage = messages[j];
+          if (toolMessage?.toolCallId && toolCallIds.has(toolMessage.toolCallId)) {
+            toolResponses.push(toolMessage);
+            toolCallIds.delete(toolMessage.toolCallId);
           }
           j++;
         }
@@ -110,12 +156,12 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
     }
 
     const existingMessages = this.aiSessionManager.getMessages(session.id);
-    const messages: any[] = [];
+    const messages: APIMessage[] = [];
 
     const validatedMessages = this.filterIncompleteToolCallSequences(existingMessages);
 
     for (const msg of validatedMessages) {
-      const apiMsg: any = {
+      const apiMsg: APIMessage = {
         role: msg.role,
         content: msg.content,
       };
@@ -164,7 +210,7 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
       const timeout = setTimeout(() => controller.abort(), iterationTimeout);
 
       try {
-        const requestBody: any = {
+        const requestBody: RequestBody = {
           model: this.config.model,
           messages,
           tools: [toolSchema],
@@ -224,9 +270,9 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
           };
         }
 
-        const data = (await response.json()) as any;
+        const data: unknown = await response.json();
 
-        if (data.status && data.msg) {
+        if (isErrorResponseBody(data)) {
           log("API returned error in response body", {
             provider: this.getProviderName(),
             model: this.config.model,
@@ -240,13 +286,18 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
           };
         }
 
-        if (!data.choices || !data.choices[0]) {
+        if (!isToolCallResponse(data)) {
+          const choices =
+            typeof data === "object" && data !== null
+              ? (data as { choices?: unknown }).choices
+              : undefined;
+
           log("Invalid API response format", {
             provider: this.getProviderName(),
             model: this.config.model,
             response: JSON.stringify(data).slice(0, 1000),
-            hasChoices: !!data.choices,
-            choicesLength: data.choices?.length,
+            hasChoices: Array.isArray(choices),
+            choicesLength: Array.isArray(choices) ? choices.length : undefined,
           });
           return {
             success: false,
@@ -256,9 +307,16 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
         }
 
         const choice = data.choices[0];
+        if (!choice) {
+          return {
+            success: false,
+            error: "Invalid API response format",
+            iterations,
+          };
+        }
 
         const assistantSequence = this.aiSessionManager.getLastSequence(session.id) + 1;
-        const assistantMsg: any = {
+        const assistantMsg: AssistantSessionMessage = {
           aiSessionId: session.id,
           sequence: assistantSequence,
           role: "assistant",
@@ -270,7 +328,11 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
         }
 
         this.aiSessionManager.addMessage(assistantMsg);
-        messages.push(choice.message);
+        messages.push({
+          role: "assistant",
+          content: choice.message.content || "",
+          tool_calls: choice.message.tool_calls,
+        });
 
         if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
           for (const toolCall of choice.message.tool_calls) {
@@ -356,7 +418,7 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
         if (error instanceof Error && error.name === "AbortError") {
           return {
             success: false,
-            error: `API request timeout (${this.config.iterationTimeout}ms)`,
+            error: `API request timeout (${iterationTimeout}ms)`,
             iterations,
           };
         }
@@ -370,7 +432,7 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
 
     return {
       success: false,
-      error: `Max iterations (${this.config.maxIterations}) reached without tool call`,
+      error: `Max iterations (${maxIterations}) reached without tool call`,
       iterations,
     };
   }
