@@ -23,9 +23,6 @@ interface OpenCodeMemConfig {
   storagePath?: string;
   userEmailOverride?: string;
   userNameOverride?: string;
-  memory?: {
-    defaultScope?: "project" | "all-projects";
-  };
   embeddingModel?: string;
   embeddingDimensions?: number;
   embeddingApiUrl?: string;
@@ -111,9 +108,6 @@ const DEFAULTS: Required<
   autoCaptureLanguage?: string;
   userEmailOverride?: string;
   userNameOverride?: string;
-  memory?: {
-    defaultScope?: "project" | "all-projects";
-  };
 } = {
   storagePath: join(DATA_DIR, "data"),
   embeddingModel: "Xenova/nomic-embed-text-v1",
@@ -145,9 +139,6 @@ const DEFAULTS: Required<
   showAutoCaptureToasts: true,
   showUserProfileToasts: true,
   showErrorToasts: true,
-  memory: {
-    defaultScope: "project",
-  },
   compaction: {
     enabled: true,
     memoryLimit: 10,
@@ -248,19 +239,9 @@ const CONFIG_TEMPLATE = `{
    // Similarity threshold (0-1) for detecting duplicates (higher = stricter)
    "deduplicationSimilarityThreshold": 0.90,
    
-  // ============================================
-  // Memory Scope Settings
-  // ============================================
-
-  // Default scope for memory list/search queries
-  // "project" keeps queries within the current project, "all-projects" searches across all project shards
-  "memory": {
-    "defaultScope": "project"
-  },
-
-  // ============================================
-  // OpenCode Provider Settings (RECOMMENDED)
-  // ============================================
+   // ============================================
+   // OpenCode Provider Settings (RECOMMENDED)
+   // ============================================
 
    // Use opencode's already-configured providers for auto-capture and user profile learning.
    // When set, no separate API key is needed — uses your existing opencode authentication
@@ -531,9 +512,6 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     showAutoCaptureToasts: fileConfig.showAutoCaptureToasts ?? DEFAULTS.showAutoCaptureToasts,
     showUserProfileToasts: fileConfig.showUserProfileToasts ?? DEFAULTS.showUserProfileToasts,
     showErrorToasts: fileConfig.showErrorToasts ?? DEFAULTS.showErrorToasts,
-    memory: {
-      defaultScope: fileConfig.memory?.defaultScope ?? DEFAULTS.memory.defaultScope,
-    },
     compaction: {
       enabled: fileConfig.compaction?.enabled ?? DEFAULTS.compaction.enabled,
       memoryLimit: fileConfig.compaction?.memoryLimit ?? DEFAULTS.compaction.memoryLimit,
