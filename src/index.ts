@@ -83,74 +83,73 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   })();
 
   if (CONFIG.webServerEnabled) {
-    startWebServer({
-      port: CONFIG.webServerPort,
-      host: CONFIG.webServerHost,
-      enabled: CONFIG.webServerEnabled,
-    })
-      .then((server) => {
-        webServer = server;
-        const url = webServer.getUrl();
+    try {
+      webServer = await startWebServer({
+        port: CONFIG.webServerPort,
+        host: CONFIG.webServerHost,
+        enabled: CONFIG.webServerEnabled,
+      });
 
-        webServer.setOnTakeoverCallback(async () => {
-          if (ctx.client?.tui) {
-            ctx.client.tui
-              .showToast({
-                body: {
-                  title: "Memory Explorer",
-                  message: "Took over web server ownership",
-                  variant: "success",
-                  duration: 3000,
-                },
-              })
-              .catch(() => {});
-          }
-        });
+      const url = webServer.getUrl();
 
-        if (webServer.isServerOwner()) {
-          if (ctx.client?.tui) {
-            ctx.client.tui
-              .showToast({
-                body: {
-                  title: "Memory Explorer",
-                  message: `Web UI started at ${url}`,
-                  variant: "success",
-                  duration: 5000,
-                },
-              })
-              .catch(() => {});
-          }
-        } else {
-          if (ctx.client?.tui) {
-            ctx.client.tui
-              .showToast({
-                body: {
-                  title: "Memory Explorer",
-                  message: `Web UI available at ${url}`,
-                  variant: "info",
-                  duration: 3000,
-                },
-              })
-              .catch(() => {});
-          }
-        }
-      })
-      .catch((error) => {
-        log("Web server failed to start", { error: String(error) });
-
+      webServer.setOnTakeoverCallback(async () => {
         if (ctx.client?.tui) {
           ctx.client.tui
             .showToast({
               body: {
-                title: "Memory Explorer Error",
-                message: `Failed to start: ${String(error)}`,
-                variant: "error",
-                duration: 5000,
+                title: "Memory Explorer",
+                message: "Took over web server ownership",
+                variant: "success",
+                duration: 3000,
               },
             })
             .catch(() => {});
         }
       });
+
+      if (webServer.isServerOwner()) {
+        if (ctx.client?.tui) {
+          ctx.client.tui
+            .showToast({
+              body: {
+                title: "Memory Explorer",
+                message: `Web UI started at ${url}`,
+                variant: "success",
+                duration: 5000,
+              },
+            })
+            .catch(() => {});
+        }
+      } else {
+        if (ctx.client?.tui) {
+          ctx.client.tui
+            .showToast({
+              body: {
+                title: "Memory Explorer",
+                message: `Web UI available at ${url}`,
+                variant: "info",
+                duration: 3000,
+              },
+            })
+            .catch(() => {});
+        }
+      }
+    } catch (error) {
+      log("Web server failed to start", { error: String(error) });
+
+      if (ctx.client?.tui) {
+        ctx.client.tui
+          .showToast({
+            body: {
+              title: "Memory Explorer Error",
+              message: `Failed to start: ${String(error)}`,
+              variant: "error",
+              duration: 5000,
+            },
+          })
+          .catch(() => {});
+      }
+    }
   }
 
   startBackgroundWarmup();
