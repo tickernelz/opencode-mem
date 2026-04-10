@@ -36,6 +36,16 @@ describe("OpenCode 1.3.x plugin-loader contract", () => {
     expect(typeof defaultExport?.["server"]).toBe("function");
   });
 
+  it('dist/plugin.js default export has a non-empty "id" matching package name', async () => {
+    const pkg = readPackageJson();
+    const mod = (await loadDistPlugin()) as { default: unknown };
+    const defaultExport = mod.default as Record<string, unknown> | null | undefined;
+
+    expect(typeof defaultExport?.["id"]).toBe("string");
+    expect((defaultExport?.["id"] as string).trim().length).toBeGreaterThan(0);
+    expect(defaultExport?.["id"]).toBe(pkg["name"]);
+  });
+
   it("server() invocation returns hooks with expected keys (or server is callable)", async () => {
     const mod = (await loadDistPlugin()) as { default: Record<string, unknown> };
     const serverFn = mod.default["server"];
