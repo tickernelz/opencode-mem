@@ -31,6 +31,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 export class EmbeddingService {
   private pipe: any = null;
   private initPromise: Promise<void> | null = null;
+  private initGeneration = 0;
+  private resetSignal = this.createResetSignal();
   public isWarmedUp: boolean = false;
   private cache: Map<string, Float32Array> = new Map();
   private cachedModelName: string | null = null;
@@ -42,26 +44,76 @@ export class EmbeddingService {
     return (globalThis as any)[GLOBAL_EMBEDDING_KEY];
   }
 
-  async warmup(progressCallback?: (progress: any) => void): Promise<void> {
-    if (this.isWarmedUp) return;
-    if (this.initPromise) return this.initPromise;
-    this.initPromise = this.initializeModel(progressCallback);
-    return this.initPromise;
+  private createResetSignal(): { promise: Promise<void>; resolve: () => void } {
+    let resolve!: () => void;
+    const promise = new Promise<void>((resolver) => {
+      resolve = resolver;
+    });
+
+    return { promise, resolve };
   }
 
-  private async initializeModel(progressCallback?: (progress: any) => void): Promise<void> {
+  async warmup(progressCallback?: (progress: any) => void): Promise<void> {
+    while (!this.isWarmedUp) {
+      if (!this.initPromise) {
+        const generation = ++this.initGeneration;
+        const initPromise = this.initializeModel(generation, progressCallback).finally(() => {
+          if (this.initPromise === initPromise) {
+            this.initPromise = null;
+          }
+        });
+
+        this.initPromise = initPromise;
+      }
+
+      await Promise.race([this.initPromise, this.resetSignal.promise]);
+    }
+  }
+
+  resetWarmupState(): void {
+    const resetSignal = this.resetSignal;
+    this.resetSignal = this.createResetSignal();
+    this.initGeneration += 1;
+    this.isWarmedUp = false;
+    this.pipe = null;
+    if (this.initPromise) {
+      this.initPromise = null;
+    }
+
+    this.clearCache();
+    resetSignal.resolve();
+  }
+
+  private async initializeModel(
+    generation: number,
+    progressCallback?: (progress: any) => void
+  ): Promise<void> {
     try {
       if (CONFIG.embeddingApiUrl && CONFIG.embeddingApiKey) {
+        if (generation !== this.initGeneration) {
+          return;
+        }
+
         this.isWarmedUp = true;
         return;
       }
+
       const { pipeline } = await ensureTransformersLoaded();
-      this.pipe = await pipeline("feature-extraction", CONFIG.embeddingModel, {
+      const pipe = await pipeline("feature-extraction", CONFIG.embeddingModel, {
         progress_callback: progressCallback,
       });
+
+      if (generation !== this.initGeneration) {
+        return;
+      }
+
+      this.pipe = pipe;
       this.isWarmedUp = true;
     } catch (error) {
-      this.initPromise = null;
+      if (generation !== this.initGeneration) {
+        return;
+      }
+
       log("Failed to initialize embedding model", { error: String(error) });
       throw error;
     }
@@ -76,11 +128,8 @@ export class EmbeddingService {
     const cached = this.cache.get(text);
     if (cached) return cached;
 
-    if (!this.isWarmedUp && !this.initPromise) {
+    if (!this.isWarmedUp) {
       await this.warmup();
-    }
-    if (this.initPromise) {
-      await this.initPromise;
     }
 
     let result: Float32Array;

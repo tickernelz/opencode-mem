@@ -10,6 +10,7 @@ import { performAutoCapture } from "./services/auto-capture.js";
 import { performUserProfileLearning } from "./services/user-memory-learning.js";
 import { userPromptManager } from "./services/user-prompt/user-prompt-manager.js";
 import { startWebServer, WebServer } from "./services/web-server.js";
+import { embeddingService } from "./services/embedding.js";
 
 import { isConfigured, CONFIG, initConfig } from "./config.js";
 import { log } from "./services/logger.js";
@@ -24,19 +25,44 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   let webServer: WebServer | null = null;
   let idleTimeout: Timer | null = null;
 
-  if (!isConfigured()) {
-  }
-
   const GLOBAL_PLUGIN_WARMUP_KEY = Symbol.for("opencode-mem.plugin.warmedup");
+  const GLOBAL_PLUGIN_WARMUP_PROMISE_KEY = Symbol.for("opencode-mem.plugin.warmupPromise");
+  const GLOBAL_PLUGIN_WARMUP_TIMEOUT_MS = 60_000;
 
-  if (!(globalThis as any)[GLOBAL_PLUGIN_WARMUP_KEY] && isConfigured()) {
-    try {
-      await memoryClient.warmup();
-      (globalThis as any)[GLOBAL_PLUGIN_WARMUP_KEY] = true;
-    } catch (error) {
-      log("Plugin warmup failed", { error: String(error) });
-    }
-  }
+  const startBackgroundWarmup = () => {
+    if (!isConfigured()) return;
+
+    const globalState = globalThis as any;
+    if (globalState[GLOBAL_PLUGIN_WARMUP_KEY]) return;
+    if (globalState[GLOBAL_PLUGIN_WARMUP_PROMISE_KEY]) return;
+
+    const warmupState: { promise: Promise<void> | null } = { promise: null };
+    warmupState.promise = (async () => {
+      try {
+        await Promise.race([
+          memoryClient.warmup(),
+          new Promise((_, reject) => {
+            setTimeout(
+              () => reject(new Error("Background warmup timed out")),
+              GLOBAL_PLUGIN_WARMUP_TIMEOUT_MS
+            );
+          }),
+        ]);
+        globalState[GLOBAL_PLUGIN_WARMUP_KEY] = true;
+      } catch (error) {
+        log("Plugin warmup failed", { error: String(error) });
+        if (String(error).includes("Background warmup timed out")) {
+          embeddingService.resetWarmupState();
+        }
+      } finally {
+        if (globalState[GLOBAL_PLUGIN_WARMUP_PROMISE_KEY] === warmupState.promise) {
+          globalState[GLOBAL_PLUGIN_WARMUP_PROMISE_KEY] = null;
+        }
+      }
+    })();
+
+    globalState[GLOBAL_PLUGIN_WARMUP_PROMISE_KEY] = warmupState.promise;
+  };
 
   // Wire opencode state path and provider list — fire-and-forget to avoid blocking init
   // These calls can hang if opencode isn't fully bootstrapped yet
@@ -58,75 +84,76 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   })();
 
   if (CONFIG.webServerEnabled) {
-    startWebServer({
-      port: CONFIG.webServerPort,
-      host: CONFIG.webServerHost,
-      enabled: CONFIG.webServerEnabled,
-    })
-      .then((server) => {
-        webServer = server;
-        const url = webServer.getUrl();
+    try {
+      webServer = await startWebServer({
+        port: CONFIG.webServerPort,
+        host: CONFIG.webServerHost,
+        enabled: CONFIG.webServerEnabled,
+      });
 
-        webServer.setOnTakeoverCallback(async () => {
-          if (ctx.client?.tui) {
-            ctx.client.tui
-              .showToast({
-                body: {
-                  title: "Memory Explorer",
-                  message: "Took over web server ownership",
-                  variant: "success",
-                  duration: 3000,
-                },
-              })
-              .catch(() => {});
-          }
-        });
+      const url = webServer.getUrl();
 
-        if (webServer.isServerOwner()) {
-          if (ctx.client?.tui) {
-            ctx.client.tui
-              .showToast({
-                body: {
-                  title: "Memory Explorer",
-                  message: `Web UI started at ${url}`,
-                  variant: "success",
-                  duration: 5000,
-                },
-              })
-              .catch(() => {});
-          }
-        } else {
-          if (ctx.client?.tui) {
-            ctx.client.tui
-              .showToast({
-                body: {
-                  title: "Memory Explorer",
-                  message: `Web UI available at ${url}`,
-                  variant: "info",
-                  duration: 3000,
-                },
-              })
-              .catch(() => {});
-          }
-        }
-      })
-      .catch((error) => {
-        log("Web server failed to start", { error: String(error) });
-
+      webServer.setOnTakeoverCallback(async () => {
         if (ctx.client?.tui) {
           ctx.client.tui
             .showToast({
               body: {
-                title: "Memory Explorer Error",
-                message: `Failed to start: ${String(error)}`,
-                variant: "error",
-                duration: 5000,
+                title: "Memory Explorer",
+                message: "Took over web server ownership",
+                variant: "success",
+                duration: 3000,
               },
             })
             .catch(() => {});
         }
       });
+
+      if (webServer.isServerOwner()) {
+        if (ctx.client?.tui) {
+          ctx.client.tui
+            .showToast({
+              body: {
+                title: "Memory Explorer",
+                message: `Web UI started at ${url}`,
+                variant: "success",
+                duration: 5000,
+              },
+            })
+            .catch(() => {});
+        }
+      } else {
+        if (ctx.client?.tui) {
+          ctx.client.tui
+            .showToast({
+              body: {
+                title: "Memory Explorer",
+                message: `Web UI available at ${url}`,
+                variant: "info",
+                duration: 3000,
+              },
+            })
+            .catch(() => {});
+        }
+      }
+    } catch (error) {
+      log("Web server failed to start", { error: String(error) });
+
+      if (ctx.client?.tui) {
+        ctx.client.tui
+          .showToast({
+            body: {
+              title: "Memory Explorer Error",
+              message: `Failed to start: ${String(error)}`,
+              variant: "error",
+              duration: 5000,
+            },
+          })
+          .catch(() => {});
+      }
+    }
   }
+
+  startBackgroundWarmup();
 
   const shutdownHandler = async () => {
     try {
@@ -278,6 +305,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
           const needsWarmup = !(await memoryClient.isReady());
           if (needsWarmup) {
+            startBackgroundWarmup();
             return JSON.stringify({ success: false, error: "Memory system is initializing." });
           }
 
