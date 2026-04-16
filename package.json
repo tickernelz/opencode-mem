@@ -52,6 +52,7 @@
     "franc-min": "^6.2.0",
     "iso-639-3": "^3.0.1",
     "usearch": "^2.21.4",
+    "vercel-minimax-ai-provider": "^0.0.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
