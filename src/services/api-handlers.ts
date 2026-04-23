@@ -100,7 +100,10 @@ function getProjectPathFromTag(tag: string): string | undefined {
 
 export async function handleListTags(): Promise<ApiResponse<{ project: TagInfo[] }>> {
   try {
-    await embeddingService.warmup();
+    // Tags are stored as SQLite metadata; embedding model is not needed.
+    // Calling warmup() here would block on @huggingface/transformers init in
+    // the worker thread and hang every read API. Only handlers that compute
+    // similarity (e.g. handleSearch) should warm up the embedding service.
     const projectShards = shardManager.getAllShards("project", "");
     const tagsMap = new Map<string, TagInfo>();
     for (const shard of projectShards) {
@@ -140,7 +143,8 @@ export async function handleListMemories(
   includePrompts: boolean = true
 ): Promise<ApiResponse<PaginatedResponse<Memory | any>>> {
   try {
-    await embeddingService.warmup();
+    // Listing only reads SQLite rows; no vector ops happen here.
+    // See handleListTags comment - keep embedding init out of read paths.
     let allMemories: any[] = [];
     if (tag) {
       const { scope: tagScope, hash } = extractScopeFromTag(tag);
@@ -652,7 +656,8 @@ export async function handleStats(): Promise<
   }>
 > {
   try {
-    await embeddingService.warmup();
+    // Stats only counts SQLite rows; no embedding needed.
+    // See handleListTags comment - keep embedding init out of read paths.
     const projectShards = shardManager.getAllShards("project", "");
     let userCount = 0,
       projectCount = 0;
