@@ -17,6 +17,14 @@ async function ensureTransformersLoaded(): Promise<NonNullable<typeof _transform
   mod.env.allowLocalModels = true;
   mod.env.allowRemoteModels = true;
   mod.env.cacheDir = join(CONFIG.storagePath, ".cache");
+  // CRITICAL: Disable WASM multi-threading. In Node.js/Bun (no SharedArrayBuffer),
+  // ONNX runtime hangs indefinitely during pipeline() init when threads > 1.
+  // See https://github.com/xenova/transformers.js/pull/488
+  try {
+    (mod.env as any).backends.onnx.wasm.numThreads = 1;
+  } catch (e) {
+    log("Failed to set wasm.numThreads", { error: String(e) });
+  }
   _transformers = mod;
   return _transformers!;
 }
@@ -58,7 +66,11 @@ export class EmbeddingService {
       const { pipeline } = await ensureTransformersLoaded();
       this.pipe = await pipeline("feature-extraction", CONFIG.embeddingModel, {
         progress_callback: progressCallback,
-      });
+        // Force quantized ONNX. Default is fp32 model.onnx which transformers v4
+        // tries to download from huggingface.co; cache only ships model_quantized.onnx
+        // and HF is unreachable behind GFW, causing init to fail.
+        dtype: "q8",
+      } as any);
       this.isWarmedUp = true;
     } catch (error) {
       this.initPromise = null;
