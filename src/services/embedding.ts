@@ -1,6 +1,7 @@
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
 import { join } from "node:path";
+import type { PretrainedModelOptions } from "@huggingface/transformers";
 
 const TIMEOUT_MS = 30000;
 const GLOBAL_EMBEDDING_KEY = Symbol.for("opencode-mem.embedding.instance");
@@ -64,13 +65,14 @@ export class EmbeddingService {
         return;
       }
       const { pipeline } = await ensureTransformersLoaded();
-      this.pipe = await pipeline("feature-extraction", CONFIG.embeddingModel, {
+      const pipelineOptions: PretrainedModelOptions = {
         progress_callback: progressCallback,
         // Force quantized ONNX. Default is fp32 model.onnx which transformers v4
         // tries to download from huggingface.co; cache only ships model_quantized.onnx
         // and HF is unreachable behind GFW, causing init to fail.
         dtype: "q8",
-      } as any);
+      };
+      this.pipe = await pipeline("feature-extraction", CONFIG.embeddingModel, pipelineOptions);
       this.isWarmedUp = true;
     } catch (error) {
       this.initPromise = null;
