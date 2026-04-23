@@ -30,24 +30,24 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   const GLOBAL_PLUGIN_WARMUP_KEY = Symbol.for("opencode-mem.plugin.warmedup");
 
   if (!(globalThis as any)[GLOBAL_PLUGIN_WARMUP_KEY] && isConfigured()) {
-    try {
-      await memoryClient.warmup();
-      (globalThis as any)[GLOBAL_PLUGIN_WARMUP_KEY] = true;
-    } catch (error) {
-      log("Plugin warmup failed", { error: String(error) });
-    }
+    // Fire-and-forget: warmup is slow (embedding model load + index rebuild).
+    // Awaiting it here serializes opencode's plugin loader and starves the TUI,
+    // which gave the symptom "opencode hangs ~70s then disconnects on startup".
+    (async () => {
+      try {
+        await memoryClient.warmup();
+        (globalThis as any)[GLOBAL_PLUGIN_WARMUP_KEY] = true;
+      } catch (error) {
+        log("Plugin warmup failed", { error: String(error) });
+      }
+    })();
   }
 
-  // Wire opencode state path and provider list — fire-and-forget to avoid blocking init
-  // These calls can hang if opencode isn't fully bootstrapped yet
   (async () => {
     try {
-      const { setStatePath, setConnectedProviders } =
+      const { setConnectedProviders, setV2Client, createV2Client } =
         await import("./services/ai/opencode-provider.js");
-      const pathResult = await ctx.client.path.get();
-      if (pathResult.data?.state) {
-        setStatePath(pathResult.data.state);
-      }
+      setV2Client(createV2Client(ctx.serverUrl));
       const providerResult = await ctx.client.provider.list();
       if (providerResult.data?.connected) {
         setConnectedProviders(providerResult.data.connected);

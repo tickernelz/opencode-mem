@@ -238,12 +238,19 @@ async function generateSummary(
       log("opencodeProvider takes precedence over memoryModel for auto-capture");
     }
 
-    const { isProviderConnected, getStatePath, generateStructuredOutput } =
+    const { isProviderConnected, getV2Client, generateStructuredOutput } =
       await import("./ai/opencode-provider.js");
 
     if (!isProviderConnected(CONFIG.opencodeProvider)) {
       throw new Error(
         `opencode provider '${CONFIG.opencodeProvider}' is not connected. Check your opencode provider configuration.`
+      );
+    }
+
+    const v2Client = getV2Client();
+    if (!v2Client) {
+      throw new Error(
+        "opencode-mem: v2 client not initialized; cannot perform structured-output capture"
       );
     }
 
@@ -286,14 +293,12 @@ Analyze this conversation. If it contains technical work (code, bugs, features, 
     });
 
     const result = await generateStructuredOutput({
-      providerName: CONFIG.opencodeProvider,
-      modelId: CONFIG.opencodeModel,
-      statePath: getStatePath(),
+      client: v2Client,
+      providerID: CONFIG.opencodeProvider,
+      modelID: CONFIG.opencodeModel,
       systemPrompt,
       userPrompt: aiPrompt,
       schema,
-      temperature:
-        CONFIG.memoryTemperature === false ? undefined : (CONFIG.memoryTemperature ?? 0.3),
     });
 
     return {

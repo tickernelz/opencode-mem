@@ -148,12 +148,19 @@ async function analyzeUserProfile(
   existingProfile: UserProfile | null
 ): Promise<UserProfileData | null> {
   if (CONFIG.opencodeProvider && CONFIG.opencodeModel) {
-    const { isProviderConnected, getStatePath, generateStructuredOutput } =
+    const { isProviderConnected, getV2Client, generateStructuredOutput } =
       await import("./ai/opencode-provider.js");
 
     if (!isProviderConnected(CONFIG.opencodeProvider)) {
       throw new Error(
         `opencode provider '${CONFIG.opencodeProvider}' is not connected. Check your opencode provider configuration.`
+      );
+    }
+
+    const v2Client = getV2Client();
+    if (!v2Client) {
+      throw new Error(
+        "opencode-mem: v2 client not initialized; cannot perform user-profile learning"
       );
     }
 
@@ -190,14 +197,12 @@ Use the update_user_profile tool to save the ${existingProfile ? "updated" : "ne
     });
 
     const result = await generateStructuredOutput({
-      providerName: CONFIG.opencodeProvider,
-      modelId: CONFIG.opencodeModel,
-      statePath: getStatePath(),
+      client: v2Client,
+      providerID: CONFIG.opencodeProvider,
+      modelID: CONFIG.opencodeModel,
       systemPrompt,
       userPrompt: context,
       schema,
-      temperature:
-        CONFIG.memoryTemperature === false ? undefined : (CONFIG.memoryTemperature ?? 0.3),
     });
 
     if (existingProfile) {
