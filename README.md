@@ -111,16 +111,16 @@ Configure at `~/.config/opencode/opencode-mem.jsonc`:
 
 ### Auto-Capture AI Provider
 
-**Recommended:** Use opencode's built-in providers (no separate API key needed):
+**Recommended:** Use any provider that is already authenticated in opencode (no separate API key needed in this plugin):
 
 ```jsonc
 "opencodeProvider": "anthropic",
 "opencodeModel": "claude-haiku-4-5-20251001",
 ```
 
-This leverages your existing opencode authentication (OAuth or API key). Works with Claude Pro/Max plans via OAuth - no individual API keys required.
+The plugin issues structured-output requests to opencode's session API instead of calling provider endpoints directly, so opencode owns the auth, token refresh, and provider routing. Whatever you configured in opencode just works — Claude Pro/Max via OAuth, GitHub Copilot (personal & business), OpenAI / Anthropic API keys, custom providers, etc.
 
-Supported providers: `anthropic`, `openai`
+Supported providers: any provider listed by `opencode providers list` (e.g. `anthropic`, `openai`, `github-copilot`, ...).
 
 **Fallback:** Manual API configuration (if not using opencodeProvider):
 

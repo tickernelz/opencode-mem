@@ -262,17 +262,22 @@ const CONFIG_TEMPLATE = `{
   // OpenCode Provider Settings (RECOMMENDED)
   // ============================================
 
-   // Use opencode's already-configured providers for auto-capture and user profile learning.
-   // When set, no separate API key is needed — uses your existing opencode authentication
-   // (including Claude Pro/Max plans via OAuth, or any API key configured in opencode).
+   // Use any provider that is already authenticated in opencode for auto-capture
+   // and user profile learning. The plugin calls opencode's session.prompt API
+   // (with structured output) instead of talking to provider HTTPS endpoints
+   // directly, so opencode owns the auth, token refresh, and provider routing.
+   //
+   // No separate API key is needed in this plugin — whatever you configured in
+   // opencode (OAuth like Claude Pro/Max, GitHub Copilot personal/business,
+   // bring-your-own API key, custom provider, ...) just works.
    //
    // If NOT set, falls back to the manual config (memoryApiKey/memoryApiUrl/memoryModel below).
    //
-   // Examples:
-   //   Anthropic (OAuth/API key): "opencodeProvider": "anthropic", "opencodeModel": "claude-haiku-4-5-20251001"
-   //   OpenAI (API key):          "opencodeProvider": "openai",     "opencodeModel": "gpt-4o-mini"
+   // Examples (the provider name must be one returned by 'opencode providers list'):
+   //   Anthropic (OAuth/API key): "opencodeProvider": "anthropic",      "opencodeModel": "claude-haiku-4-5-20251001"
+   //   OpenAI (API key):          "opencodeProvider": "openai",          "opencodeModel": "gpt-4o-mini"
+   //   GitHub Copilot:            "opencodeProvider": "github-copilot",  "opencodeModel": "gpt-4o-mini"
    //
-   // The provider name must match a connected provider in opencode (check with: opencode providers list)
    // "opencodeProvider": "anthropic",
    // "opencodeModel": "claude-haiku-4-5-20251001",
 
