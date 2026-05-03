@@ -1,10 +1,13 @@
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
 
 const TIMEOUT_MS = 30000;
 const GLOBAL_EMBEDDING_KEY = Symbol.for("opencode-mem.embedding.instance");
 const MAX_CACHE_SIZE = 100;
+
+let localEmbeddingsFailed = false;
 
 let _transformers: {
   pipeline: (typeof import("@huggingface/transformers"))["pipeline"];
@@ -13,12 +16,21 @@ let _transformers: {
 
 async function ensureTransformersLoaded(): Promise<NonNullable<typeof _transformers>> {
   if (_transformers !== null) return _transformers;
-  const mod = await import("@huggingface/transformers");
-  mod.env.allowLocalModels = true;
-  mod.env.allowRemoteModels = true;
-  mod.env.cacheDir = join(CONFIG.storagePath, ".cache");
-  _transformers = mod;
-  return _transformers!;
+  if (localEmbeddingsFailed) {
+    throw new Error("Local embedding model previously failed to load (native dependency issue)");
+  }
+  try {
+    const mod = await import("@huggingface/transformers");
+    mod.env.allowLocalModels = true;
+    mod.env.allowRemoteModels = true;
+    mod.env.cacheDir = join(CONFIG.storagePath, ".cache");
+    _transformers = mod;
+    return _transformers!;
+  } catch (error) {
+    localEmbeddingsFailed = true;
+    log("Failed to load @huggingface/transformers", { error: String(error) });
+    throw error;
+  }
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -28,12 +40,54 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
+function runTransformersPreflight(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const child = spawn(
+      process.execPath,
+      ["-e", "await import('@huggingface/transformers');process.stdout.write('OK')"],
+      { stdio: ["ignore", "pipe", "pipe"], timeout: 10000 }
+    );
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (d: Buffer) => {
+      stdout += d.toString();
+    });
+    child.stderr.on("data", (d: Buffer) => {
+      stderr += d.toString();
+    });
+
+    child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
+      if (code === 0 && stdout.includes("OK")) {
+        resolve(true);
+      } else {
+        log("Transformers pre-flight check failed", {
+          code,
+          signal,
+          stderr: stderr.slice(0, 500),
+        });
+        resolve(false);
+      }
+    });
+
+    child.on("error", (err: Error) => {
+      log("Transformers pre-flight spawn error", { error: String(err) });
+      resolve(false);
+    });
+  });
+}
+
 export class EmbeddingService {
   private pipe: any = null;
   private initPromise: Promise<void> | null = null;
   public isWarmedUp: boolean = false;
   private cache: Map<string, Float32Array> = new Map();
   private cachedModelName: string | null = null;
+
+  get localEmbeddingsAvailable(): boolean {
+    return !localEmbeddingsFailed;
+  }
 
   static getInstance(): EmbeddingService {
     if (!(globalThis as any)[GLOBAL_EMBEDDING_KEY]) {
@@ -45,7 +99,24 @@ export class EmbeddingService {
   async warmup(progressCallback?: (progress: any) => void): Promise<void> {
     if (this.isWarmedUp) return;
     if (this.initPromise) return this.initPromise;
-    this.initPromise = this.initializeModel(progressCallback);
+
+    this.initPromise = (async () => {
+      if (CONFIG.embeddingApiUrl && CONFIG.embeddingApiKey) {
+        this.isWarmedUp = true;
+        return;
+      }
+
+      const ok = await runTransformersPreflight();
+      if (!ok) {
+        localEmbeddingsFailed = true;
+        log("Local embedding model unavailable (native dependency check failed)", {});
+        this.isWarmedUp = true;
+        return;
+      }
+
+      await this.initializeModel(progressCallback);
+    })();
+
     return this.initPromise;
   }
 
@@ -105,6 +176,11 @@ export class EmbeddingService {
       const data: any = await response.json();
       result = new Float32Array(data.data[0].embedding);
     } else {
+      if (localEmbeddingsFailed) {
+        throw new Error(
+          "Local embedding model unavailable. Configure embeddingApiUrl and embeddingApiKey in opencode-mem.jsonc to use an API-based embedding service."
+        );
+      }
       const output = await this.pipe(text, { pooling: "mean", normalize: true });
       result = new Float32Array(output.data);
     }

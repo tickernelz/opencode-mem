@@ -3,6 +3,7 @@ import type { Part } from "@opencode-ai/sdk";
 import { tool } from "@opencode-ai/plugin";
 
 import { memoryClient } from "./services/client.js";
+import { embeddingService } from "./services/embedding.js";
 import { formatContextForPrompt } from "./services/context.js";
 import { getTags } from "./services/tags.js";
 import { stripPrivateContent, isFullyPrivate } from "./services/privacy.js";
@@ -33,8 +34,36 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     try {
       await memoryClient.warmup();
       (globalThis as any)[GLOBAL_PLUGIN_WARMUP_KEY] = true;
+
+      if (!embeddingService.localEmbeddingsAvailable && !CONFIG.embeddingApiUrl) {
+        if (ctx.client?.tui) {
+          ctx.client.tui
+            .showToast({
+              body: {
+                title: "Memory System",
+                message:
+                  "Local embedding model unavailable. Configure embeddingApiUrl and embeddingApiKey in opencode-mem.jsonc to use API-based embeddings.",
+                variant: "warning",
+                duration: 10000,
+              },
+            })
+            .catch(() => {});
+        }
+      }
     } catch (error) {
       log("Plugin warmup failed", { error: String(error) });
+      if (ctx.client?.tui) {
+        ctx.client.tui
+          .showToast({
+            body: {
+              title: "Memory System Error",
+              message: `Failed to initialize: ${error instanceof Error ? error.message : String(error)}`,
+              variant: "error",
+              duration: 10000,
+            },
+          })
+          .catch(() => {});
+      }
     }
   }
 
