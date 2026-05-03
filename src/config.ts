@@ -212,6 +212,8 @@ const CONFIG_TEMPLATE = `{
   // "embeddingModel": "Xenova/all-mpnet-base-v2",           // 768 dims, good quality, 512 context
   
   // Optional: Use OpenAI-compatible API for embeddings
+  // The /v1 prefix is auto-appended if missing, and trailing /embeddings is stripped.
+  // You can use a plain base URL: "embeddingApiUrl": "https://api.openai.com"
   // "embeddingApiUrl": "https://api.openai.com/v1",
   // "embeddingApiKey": "sk-...",
   // "embeddingModel": "text-embedding-3-small",  // 1536 dims, auto-detected
@@ -480,6 +482,22 @@ function getEmbeddingDimensions(model: string): number {
   return dimensionMap[model] || 768;
 }
 
+function normalizeEmbeddingUrl(url: string): string {
+  let normalized = url.replace(/\/+$/, "");
+  if (normalized.endsWith("/embeddings")) {
+    normalized = normalized.slice(0, -"/embeddings".length);
+  }
+  normalized = normalized.replace(/\/+$/, "");
+  if (!normalized.endsWith("/v1")) {
+    normalized = `${normalized}/v1`;
+  }
+  return normalized;
+}
+
+function stripTrailingSlash(url: string): string {
+  return url.replace(/\/+$/, "");
+}
+
 function buildConfig(fileConfig: OpenCodeMemConfig) {
   return {
     storagePath: expandPath(fileConfig.storagePath ?? DEFAULTS.storagePath),
@@ -489,7 +507,9 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     embeddingDimensions:
       fileConfig.embeddingDimensions ??
       getEmbeddingDimensions(fileConfig.embeddingModel ?? DEFAULTS.embeddingModel),
-    embeddingApiUrl: fileConfig.embeddingApiUrl,
+    embeddingApiUrl: fileConfig.embeddingApiUrl
+      ? normalizeEmbeddingUrl(fileConfig.embeddingApiUrl)
+      : undefined,
     embeddingApiKey: fileConfig.embeddingApiUrl
       ? resolveSecretValue(fileConfig.embeddingApiKey ?? process.env.OPENAI_API_KEY)
       : undefined,
@@ -509,7 +529,7 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
       | "openai-responses"
       | "anthropic",
     memoryModel: fileConfig.memoryModel,
-    memoryApiUrl: fileConfig.memoryApiUrl,
+    memoryApiUrl: fileConfig.memoryApiUrl ? stripTrailingSlash(fileConfig.memoryApiUrl) : undefined,
     memoryApiKey: resolveSecretValue(fileConfig.memoryApiKey),
     memoryTemperature: fileConfig.memoryTemperature,
     memoryExtraParams: fileConfig.memoryExtraParams,
