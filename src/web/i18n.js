@@ -211,6 +211,151 @@ const translations = {
     "migration-mismatch-details":
       "模型不匹配：配置使用 {configDimensions}D ({configModel})，但{shardInfo}。",
   },
+  ar: {
+    title: "┌─ مستكشف ذاكرة OpenCode ─┐",
+    "tab-project": "ذكريات المشروع",
+    "tab-profile": "ملف المستخدم",
+
+    "label-tag": "الوسم:",
+    "label-type": "النوع:",
+    "label-tags": "الوسوم:",
+    "label-content": "المحتوى:",
+
+    "btn-cleanup": "تنظيف",
+    "btn-deduplicate": "إزالة التكرار",
+    "btn-delete-selected": "حذف المحدد",
+    "btn-select-all": "تحديد الصفحة",
+    "btn-deselect-all": "إلغاء التحديد",
+    "btn-add-memory": "إضافة ذكرى",
+
+    "section-project": "└─ ذكريات المشروع ({count}) ──",
+    "section-profile": "└─ ملف المستخدم ──",
+    "section-add": "└─ إضافة ذكرى جديدة ──",
+
+    "opt-all-tags": "جميع الوسوم",
+    "opt-select-tag": "اختر وسمًا",
+    "opt-other": "أخرى",
+    "opt-feature": "ميزة",
+    "opt-bug-fix": "إصلاح خطأ",
+    "opt-refactor": "إعادة هيكلة",
+    "opt-architecture": "معمارية",
+    "opt-rule": "قاعدة",
+    "opt-documentation": "توثيق",
+    "opt-discussion": "نقاش",
+    "opt-analysis": "تحليل",
+    "opt-configuration": "إعدادات",
+
+    "modal-edit-title": "تعديل الذكرى",
+    "modal-migration-title": "ترحيل وسوم الذكريات",
+    "modal-changelog-title": "سجل إصدارات الملف الشخصي",
+
+    "btn-cancel": "إلغاء",
+    "btn-save": "حفظ التغييرات",
+    "btn-start-migration": "بدء الترحيل",
+
+    "loading-init": "جاري التهيئة...",
+    "loading-profile": "جاري تحميل الملف الشخصي...",
+    "loading-changelog": "جاري تحميل السجل...",
+
+    "migration-mismatch": "تم اكتشاف عدم تطابق في أبعاد النموذج!",
+    "migration-understand":
+      "أفهم أن هذه العملية غير قابلة للتراجع وستؤثر على جميع الذكريات المخزنة",
+
+    "btn-fresh-start": "بداية جديدة (حذف الكل)",
+    "btn-reembed": "إعادة إنشاء المتجهات (مع الاحتفاظ بالبيانات)",
+
+    "migration-note":
+      "يرجى عدم إغلاق المتصفح. سيتم إعادة فهرسة الذكريات باستخدام وسوم تقنية لتحسين دقة البحث.",
+
+    "placeholder-search": "ابحث في الذكريات...",
+    "placeholder-tags": "react, hooks, auth (مفصولة بفواصل)",
+    "placeholder-content": "أدخل محتوى الذكرى...",
+
+    "toast-add-success": "تمت إضافة الذكرى بنجاح",
+    "toast-add-error": "المحتوى والوسم مطلوبان",
+    "toast-add-failed": "فشلت إضافة الذكرى",
+
+    "toast-delete-success": "تم حذف الذكرى بنجاح",
+    "toast-delete-failed": "فشل حذف الذكرى",
+
+    "toast-update-success": "تم تحديث الذكرى بنجاح",
+    "toast-update-failed": "فشل تحديث الذكرى",
+
+    "toast-cleanup-success": "اكتملت عملية التنظيف بنجاح",
+    "toast-cleanup-failed": "فشلت عملية التنظيف",
+
+    "toast-dedup-success": "اكتملت إزالة التكرار بنجاح",
+    "toast-dedup-failed": "فشلت إزالة التكرار",
+
+    "toast-bulk-delete-success": "تم حذف الذكريات المحددة بنجاح",
+    "toast-bulk-delete-failed": "فشل حذف الذكريات المحددة",
+
+    "toast-migration-success": "اكتملت عملية الترحيل بنجاح",
+    "toast-migration-failed": "فشلت عملية الترحيل",
+
+    "toast-fresh-start-success": "تمت البداية الجديدة بنجاح",
+    "toast-fresh-start-failed": "فشلت البداية الجديدة",
+
+    "confirm-delete": "هل تريد حذف هذه الذكرى؟",
+    "confirm-delete-pair": "هل تريد حذف هذه الذكرى والموجه المرتبط بها؟",
+    "confirm-delete-prompt": "هل تريد حذف هذا الموجه والذكرى المرتبطة به؟",
+
+    "confirm-bulk-delete": "هل تريد حذف {count} من الذكريات المحددة؟",
+
+    "confirm-cleanup": "سيؤدي هذا إلى حذف جميع الذكريات التي لم تعد ذات صلة. هل تريد المتابعة؟",
+
+    "confirm-dedup": "سيؤدي هذا إلى دمج الذكريات المتكررة أو المتشابهة جدًا. هل تريد المتابعة؟",
+
+    "text-selected": "تم تحديد {count}",
+    "text-page": "الصفحة {current} من {total}",
+    "text-total": "الإجمالي: {count}",
+
+    "empty-memories": "لم يتم العثور على ذكريات",
+    "empty-changelog": "لا يوجد سجل تغييرات",
+
+    "status-cleanup": "جاري التنظيف...",
+    "status-dedup": "جاري إزالة التكرار...",
+    "status-migration-init": "جاري تهيئة الترحيل...",
+    "status-migration-progress": "جاري الترحيل... {current}/{total}",
+
+    "profile-version": "الإصدار",
+    "profile-prompts": "الموجهات",
+    "profile-updated": "آخر تحديث",
+    "profile-preferences": "التفضيلات",
+    "profile-patterns": "الأنماط",
+    "profile-workflows": "سير العمل",
+
+    "badge-prompt": "موجه المستخدم",
+    "badge-memory": "ذكرى",
+    "badge-pinned": "مثبتة",
+    "badge-linked": "مرتبطة",
+
+    "date-created": "تاريخ الإنشاء:",
+    "date-updated": "تاريخ التحديث:",
+
+    "empty-preferences": "لم يتم تعلم أي تفضيلات بعد",
+    "empty-patterns": "لم يتم اكتشاف أي أنماط بعد",
+    "empty-workflows": "لم يتم التعرف على أي سير عمل بعد",
+
+    "btn-delete-pair": "حذف الزوج",
+    "btn-delete": "حذف",
+
+    "text-generated-above": "تم إنشاء الذكرى أعلاه",
+    "text-from-below": "من الموجه أدناه",
+
+    "btn-refresh": "تحديث",
+
+    "migration-found-tags": "تم العثور على {count} من الذكريات التي تحتاج إلى وسوم تقنية.",
+
+    "migration-stopped": "تم إيقاف الترحيل: تم الوصول إلى الحد الأقصى للمحاولات",
+
+    "migration-shards-mismatch": "{count} من الأجزاء تحتوي على أبعاد مختلفة",
+
+    "migration-dimension-mismatch": "تم اكتشاف عدم تطابق في الأبعاد",
+
+    "migration-mismatch-details":
+      "عدم تطابق النموذج: يستخدم الإعداد {configDimensions}D ({configModel}) بينما {shardInfo}.",
+  },
 };
 
 function getLanguage() {
@@ -219,6 +364,11 @@ function getLanguage() {
 
 function setLanguage(lang) {
   localStorage.setItem("opencode-mem-lang", lang);
+
+  document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+
+  document.documentElement.lang = lang;
+
   applyLanguage();
 }
 

@@ -645,7 +645,8 @@ function showRefreshIndicator(show) {
 
 function formatDate(isoString) {
   const date = new Date(isoString);
-  const locale = getLanguage() === "zh" ? "zh-CN" : "en-US";
+  const lang = getLanguage();
+  const locale = lang === "zh" ? "zh-CN" : lang === "ar" ? "ar-SA" : "en-US";
   return date.toLocaleString(locale, {
     year: "numeric",
     month: "short",
@@ -1141,10 +1142,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   document.getElementById("lang-toggle").addEventListener("click", () => {
-    const newLang = getLanguage() === "en" ? "zh" : "en";
+    const langCycle = ["en", "zh", "ar"];
+    const currentLang = getLanguage();
+    const currentIndex = langCycle.indexOf(currentLang);
+    const newLang = langCycle[(currentIndex + 1) % langCycle.length];
     setLanguage(newLang);
     document.getElementById("lang-toggle").textContent = newLang.toUpperCase();
-    // Re-render dynamic content
     loadMemories();
     loadStats();
     if (state.currentView === "profile") loadUserProfile();
