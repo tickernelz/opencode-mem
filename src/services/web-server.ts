@@ -1,7 +1,48 @@
 import { readFileSync } from "node:fs";
+import { createServer as createHttpServer } from "node:http";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "./logger.js";
+
+interface NodeLikeServer {
+  stop(): void;
+}
+
+async function startNodeServer(
+  port: number,
+  hostname: string,
+  fetchHandler: (req: Request) => Promise<Response>,
+): Promise<NodeLikeServer> {
+  return new Promise((resolve, reject) => {
+    const httpServer = createHttpServer(async (req, res) => {
+      const host = req.headers.host || `${hostname}:${port}`;
+      const url = new URL(req.url!, `http://${host}`);
+      const headers: Record<string, string> = {};
+      for (const [key, val] of Object.entries(req.headers)) {
+        if (val != null) headers[key] = Array.isArray(val) ? val.join(", ") : val;
+      }
+      let bodyInit: Buffer | undefined;
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        bodyInit = Buffer.concat(chunks);
+      }
+      try {
+        const request = new Request(url.toString(), { method: req.method, headers, body: bodyInit });
+        const response = await fetchHandler(request);
+        const respHeaders: Record<string, string> = {};
+        response.headers.forEach((v, k) => { respHeaders[k] = v; });
+        res.writeHead(response.status, respHeaders);
+        res.end(Buffer.from(await response.arrayBuffer()));
+      } catch {
+        res.writeHead(500);
+        res.end("Internal Server Error");
+      }
+    });
+    httpServer.listen(port, hostname, () => resolve({ stop: () => httpServer.close() }));
+    httpServer.on("error", reject);
+  });
+}
 import {
   handleListTags,
   handleListMemories,
@@ -38,7 +79,7 @@ interface WebServerConfig {
 }
 
 export class WebServer {
-  private server: ReturnType<typeof Bun.serve> | null = null;
+  private server: ReturnType<typeof Bun.serve> | NodeLikeServer | null = null;
   private config: WebServerConfig;
   private isOwner: boolean = false;
   private startPromise: Promise<void> | null = null;
@@ -68,11 +109,15 @@ export class WebServer {
     }
 
     try {
-      this.server = Bun.serve({
-        port: this.config.port,
-        hostname: this.config.host,
-        fetch: this.handleRequest.bind(this),
-      });
+      if (typeof Bun !== "undefined") {
+        this.server = Bun.serve({
+          port: this.config.port,
+          hostname: this.config.host,
+          fetch: this.handleRequest.bind(this),
+        });
+      } else {
+        this.server = await startNodeServer(this.config.port, this.config.host, this.handleRequest.bind(this));
+      }
       this.isOwner = true;
     } catch (error) {
       const errorMsg = String(error);
