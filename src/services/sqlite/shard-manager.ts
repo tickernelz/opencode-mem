@@ -1,6 +1,6 @@
 import { getDatabase } from "./sqlite-bootstrap.js";
 import { join, basename } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
 import { CONFIG } from "../../config.js";
 import { connectionManager } from "./connection-manager.js";
 import { log } from "../logger.js";
@@ -309,9 +309,8 @@ export class ShardManager {
       connectionManager.closeConnection(fullPath);
 
       try {
-        const fs = require("node:fs");
-        if (fs.existsSync(fullPath)) {
-          fs.unlinkSync(fullPath);
+        if (existsSync(fullPath)) {
+          unlinkSync(fullPath);
         }
       } catch (error) {
         log("Error deleting shard file", {

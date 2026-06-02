@@ -1,9 +1,5 @@
-let Database: typeof import("bun:sqlite").Database;
+import { Database as BunDatabase } from "bun:sqlite";
 
-export function getDatabase(): typeof import("bun:sqlite").Database {
-  if (!Database) {
-    const bunSqlite = require("bun:sqlite") as typeof import("bun:sqlite");
-    Database = bunSqlite.Database;
-  }
-  return Database;
+export function getDatabase(): typeof BunDatabase {
+  return BunDatabase;
 }
