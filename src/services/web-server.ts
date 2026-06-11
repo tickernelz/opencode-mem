@@ -85,6 +85,7 @@ function serveFetch(opts: {
       const webRes = await opts.fetch(webReq);
       res.statusCode = webRes.status;
       webRes.headers.forEach((value, name) => res.setHeader(name, value));
+      res.setHeader("Connection", "close");
 
       if (webRes.body) {
         Readable.fromWeb(webRes.body as unknown as Parameters<typeof Readable.fromWeb>[0]).pipe(
@@ -110,12 +111,21 @@ function serveFetch(opts: {
       listenError = err;
     }
   });
-  server.listen(opts.port, opts.hostname);
+  server.listen({ port: opts.port, host: opts.hostname, reuseAddr: true });
+  server.unref();
+  server.timeout = 30000;
+  server.keepAliveTimeout = 10000;
+  server.headersTimeout = 11000;
 
   if (listenError) {
     throw listenError;
   }
-  return { stop: () => server.close() };
+  return {
+    stop: () => {
+      server.closeAllConnections();
+      server.close();
+    },
+  };
 }
 
 const __filename = fileURLToPath(import.meta.url);
