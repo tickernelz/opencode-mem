@@ -86,14 +86,15 @@ export class UserPromptManager {
   }
 
   getLastUncapturedPrompt(sessionId: string): UserPrompt | null {
+    const maxRetries = CONFIG.autoCaptureMaxRetries ?? 3;
     const stmt = this.db.prepare(`
       SELECT * FROM user_prompts 
-      WHERE session_id = ? AND captured = 0 AND capture_attempts < 5
+      WHERE session_id = ? AND captured = 0 AND capture_attempts <= ?
       ORDER BY created_at DESC 
       LIMIT 1
     `);
 
-    const row = stmt.get(sessionId) as any;
+    const row = stmt.get(sessionId, maxRetries) as any;
     if (!row) return null;
 
     return this.rowToPrompt(row);
@@ -135,22 +136,24 @@ export class UserPromptManager {
   }
 
   countUncapturedPrompts(): number {
+    const maxRetries = CONFIG.autoCaptureMaxRetries ?? 3;
     const stmt = this.db.prepare(
-      `SELECT COUNT(*) as count FROM user_prompts WHERE captured = 0 AND capture_attempts < 5`
+      `SELECT COUNT(*) as count FROM user_prompts WHERE captured = 0 AND capture_attempts <= ?`
     );
-    const row = stmt.get() as any;
+    const row = stmt.get(maxRetries) as any;
     return row?.count || 0;
   }
 
   getUncapturedPrompts(limit: number): UserPrompt[] {
+    const maxRetries = CONFIG.autoCaptureMaxRetries ?? 3;
     const stmt = this.db.prepare(`
       SELECT * FROM user_prompts 
-      WHERE captured = 0 AND capture_attempts < 5
+      WHERE captured = 0 AND capture_attempts <= ?
       ORDER BY capture_attempts ASC, created_at ASC 
       LIMIT ?
     `);
 
-    const rows = stmt.all(limit) as any[];
+    const rows = stmt.all(maxRetries, limit) as any[];
     return rows.map((row) => this.rowToPrompt(row));
   }
 

@@ -38,6 +38,7 @@ interface OpenCodeMemConfig {
   autoCaptureEnabled?: boolean;
   autoCaptureMaxIterations?: number;
   autoCaptureIterationTimeout?: number;
+  autoCaptureMaxRetries?: number;
   autoCaptureLanguage?: string;
   memoryProvider?: "openai-chat" | "openai-responses" | "anthropic";
   memoryModel?: string;
@@ -126,6 +127,7 @@ const DEFAULTS: Required<
   autoCaptureEnabled: true,
   autoCaptureMaxIterations: 5,
   autoCaptureIterationTimeout: 30000,
+  autoCaptureMaxRetries: 3,
   vectorBackend: "usearch-first",
   aiSessionRetentionDays: 7,
   webServerEnabled: true,
@@ -346,6 +348,9 @@ const CONFIG_TEMPLATE = `{
    
   // Timeout per iteration in milliseconds (30 seconds default)
   "autoCaptureIterationTimeout": 30000,
+
+  // Maximum number of times to retry capturing a prompt if it fails (due to network, API errors, etc.)
+  "autoCaptureMaxRetries": 3,
    
   // Days to keep AI session history before cleanup
   "aiSessionRetentionDays": 7,
@@ -508,6 +513,7 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
       fileConfig.autoCaptureMaxIterations ?? DEFAULTS.autoCaptureMaxIterations,
     autoCaptureIterationTimeout:
       fileConfig.autoCaptureIterationTimeout ?? DEFAULTS.autoCaptureIterationTimeout,
+    autoCaptureMaxRetries: fileConfig.autoCaptureMaxRetries ?? DEFAULTS.autoCaptureMaxRetries,
     autoCaptureLanguage: fileConfig.autoCaptureLanguage,
     memoryProvider: (fileConfig.memoryProvider ?? "openai-chat") as
       | "openai-chat"
