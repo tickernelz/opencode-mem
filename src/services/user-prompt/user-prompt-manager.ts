@@ -39,11 +39,20 @@ export class UserPromptManager {
         project_path TEXT,
         content TEXT NOT NULL,
         created_at INTEGER NOT NULL,
-        captured BOOLEAN DEFAULT 0,
+        captured INTEGER DEFAULT 0,
         user_learning_captured BOOLEAN DEFAULT 0,
-        linked_memory_id TEXT
+        linked_memory_id TEXT,
+        capture_attempts INTEGER DEFAULT 0
       )
     `);
+
+    try {
+      this.db.run("ALTER TABLE user_prompts ADD COLUMN capture_attempts INTEGER DEFAULT 0");
+    } catch (error: any) {
+      if (!error.message.includes("duplicate column name")) {
+        console.warn("Failed to add capture_attempts column:", error.message);
+      }
+    }
 
     this.db.run("UPDATE user_prompts SET captured = 0 WHERE captured = 2");
 
@@ -79,7 +88,7 @@ export class UserPromptManager {
   getLastUncapturedPrompt(sessionId: string): UserPrompt | null {
     const stmt = this.db.prepare(`
       SELECT * FROM user_prompts 
-      WHERE session_id = ? AND captured = 0
+      WHERE session_id = ? AND captured = 0 AND capture_attempts < 5
       ORDER BY created_at DESC 
       LIMIT 1
     `);
@@ -102,7 +111,7 @@ export class UserPromptManager {
 
   claimPrompt(promptId: string): boolean {
     const stmt = this.db.prepare(
-      `UPDATE user_prompts SET captured = 2 WHERE id = ? AND captured = 0`
+      `UPDATE user_prompts SET captured = 2, capture_attempts = capture_attempts + 1 WHERE id = ? AND captured = 0`
     );
     const result = stmt.run(promptId);
     return result.changes > 0;
@@ -126,7 +135,9 @@ export class UserPromptManager {
   }
 
   countUncapturedPrompts(): number {
-    const stmt = this.db.prepare(`SELECT COUNT(*) as count FROM user_prompts WHERE captured = 0`);
+    const stmt = this.db.prepare(
+      `SELECT COUNT(*) as count FROM user_prompts WHERE captured = 0 AND capture_attempts < 5`
+    );
     const row = stmt.get() as any;
     return row?.count || 0;
   }
@@ -134,8 +145,8 @@ export class UserPromptManager {
   getUncapturedPrompts(limit: number): UserPrompt[] {
     const stmt = this.db.prepare(`
       SELECT * FROM user_prompts 
-      WHERE captured = 0 
-      ORDER BY created_at ASC 
+      WHERE captured = 0 AND capture_attempts < 5
+      ORDER BY capture_attempts ASC, created_at ASC 
       LIMIT ?
     `);
 
