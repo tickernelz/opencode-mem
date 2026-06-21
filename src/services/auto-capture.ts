@@ -11,6 +11,7 @@ interface ToolCallInfo {
 }
 
 const MAX_TOOL_INPUT_LENGTH = 100;
+const RETRY_BASE_DELAY_MS = 2000;
 
 let isCaptureRunning = false;
 
@@ -131,7 +132,9 @@ export async function performAutoCapture(
 
         if (attempt < maxRetries) {
           log(`Auto-capture warning (attempt ${attempt}/${maxRetries})`, { error: errMsg });
-          await new Promise((resolve) => setTimeout(resolve, 2000 * Math.pow(2, attempt - 1)));
+          await new Promise((resolve) =>
+            setTimeout(resolve, RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1))
+          );
         } else {
           throw error;
         }
