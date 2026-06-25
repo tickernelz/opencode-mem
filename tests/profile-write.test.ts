@@ -4,10 +4,11 @@
  * by testing the underlying manager directly (no live plugin context needed).
  */
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connectionManager } from "../src/services/sqlite/connection-manager.js";
+import { removeDirWithRetries } from "./helpers/temp-dir.mjs";
 
 // We patch CONFIG.storagePath before importing the manager so the DB lands in tmp.
 let tmpDir: string;
@@ -28,9 +29,9 @@ describe("UserProfileManager – explicit preference writes", () => {
     tmpDir = mkdtempSync(join(tmpdir(), "opencode-mem-test-"));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     connectionManager.closeAll();
-    rmSync(tmpDir, { recursive: true, force: true });
+    await removeDirWithRetries(tmpDir);
   });
 
   it("creates a profile with an explicit preference when none exists", async () => {
