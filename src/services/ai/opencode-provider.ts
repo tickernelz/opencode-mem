@@ -15,6 +15,60 @@ import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/c
 
 let _connectedProviders: Set<string> = new Set();
 let _v2Client: OpencodeClient | undefined;
+const _clientBaseUrls = new WeakMap<OpencodeClient, string>();
+const REDACTED = "[REDACTED]";
+const SENSITIVE_KEY_PATTERN =
+  /(authorization|cookie|token|password|passwd|secret|apikey|privatekey)/;
+
+function getClientBaseUrl(client: OpencodeClient): string | undefined {
+  return _clientBaseUrls.get(client);
+}
+
+function sanitizeBaseUrl(baseUrl: string): string {
+  try {
+    const url = new URL(baseUrl);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return baseUrl;
+  }
+}
+
+function isSensitiveKey(key: string): boolean {
+  const normalizedKey = key.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  return normalizedKey.length > 0 && SENSITIVE_KEY_PATTERN.test(normalizedKey);
+}
+
+function summarizeValue(value: unknown, maxLength = 300): string {
+  const seen = new WeakSet<object>();
+  const replacer = (key: string, currentValue: unknown): unknown => {
+    if (isSensitiveKey(key)) {
+      return REDACTED;
+    }
+    if (currentValue instanceof Error) {
+      return {
+        name: currentValue.name,
+        message: currentValue.message,
+      };
+    }
+    if (typeof currentValue === "object" && currentValue !== null) {
+      if (seen.has(currentValue)) {
+        return "[Circular]";
+      }
+      seen.add(currentValue);
+    }
+    return currentValue;
+  };
+
+  try {
+    const json = JSON.stringify(value, replacer);
+    if (json === undefined) {
+      return String(value);
+    }
+    return json.length > maxLength ? `${json.slice(0, maxLength)}…` : json;
+  } catch (error) {
+    return `[unserializable: ${error instanceof Error ? error.message : String(error)}]`;
+  }
+}
 
 export function setConnectedProviders(providers: string[]): void {
   _connectedProviders = new Set(providers);
@@ -34,7 +88,9 @@ export function getV2Client(): OpencodeClient | undefined {
 
 export function createV2Client(serverUrl: URL | string): OpencodeClient {
   const baseUrl = typeof serverUrl === "string" ? serverUrl : serverUrl.toString();
-  return createOpencodeClient({ baseUrl });
+  const client = createOpencodeClient({ baseUrl });
+  _clientBaseUrls.set(client, baseUrl);
+  return client;
 }
 
 export interface StructuredOutputOptions<T> {
@@ -74,9 +130,13 @@ export async function generateStructuredOutput<T>(opts: StructuredOutputOptions<
   });
   const sessionID = (created as { data?: { id?: string } })?.data?.id;
   if (!sessionID) {
-    throw new Error(
-      "opencode-mem: session.create returned no session id; cannot generate structured output"
-    );
+    const diagnostics = ["opencode-mem: session.create returned no session id"];
+    const baseUrl = getClientBaseUrl(client);
+    if (baseUrl) {
+      diagnostics.push(`baseUrl=${sanitizeBaseUrl(baseUrl)}`);
+    }
+    diagnostics.push(`response=${summarizeValue(created)}`);
+    throw new Error(`${diagnostics.join("; ")}; cannot generate structured output`);
   }
 
   try {
