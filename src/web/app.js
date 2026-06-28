@@ -183,7 +183,7 @@ function renderCombinedCard(pair) {
           <div class="meta">
             <input type="checkbox" class="memory-checkbox" data-id="${memory.id}" ${isSelected ? "checked" : ""} />
             <span class="badge badge-memory">${t("badge-memory")}</span>
-            ${memory.memoryType ? `<span class="badge badge-type">${memory.memoryType}</span>` : ""}
+            ${memory.memoryType ? `<span class="badge badge-type">${escapeHtml(memory.memoryType)}</span>` : ""}
             ${similarityHtml}
             ${isPinned ? `<span class="badge badge-pinned">${t("badge-pinned")}</span>` : ""}
             <span class="memory-display-name">${escapeHtml(memory.displayName || memory.id)}</span>
@@ -281,7 +281,7 @@ function renderMemoryCard(memory) {
       <div class="memory-header">
         <div class="meta">
           <input type="checkbox" class="memory-checkbox" data-id="${memory.id}" ${isSelected ? "checked" : ""} />
-          ${memory.memoryType ? `<span class="badge badge-type">${memory.memoryType}</span>` : ""}
+          ${memory.memoryType ? `<span class="badge badge-type">${escapeHtml(memory.memoryType)}</span>` : ""}
           ${isLinked ? `<span class="badge badge-linked"><i data-lucide="link" class="icon-sm"></i> ${t("badge-linked")}</span>` : ""}
           ${similarityHtml}
           ${isPinned ? `<span class="badge badge-pinned">${t("badge-pinned")}</span>` : ""}
