@@ -11,10 +11,42 @@
  */
 
 import type { z } from "zod";
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
+
+type SessionCreateResult = {
+  data?: { id?: string };
+  id?: string;
+  error?: { message?: string; data?: { message?: string } };
+  response?: { status?: number; statusText?: string };
+};
+
+type SessionPromptResult = {
+  data?: {
+    info?: {
+      structured?: unknown;
+      error?: { name: string; data?: { message?: string } };
+    };
+  };
+};
+
+export interface StructuredOutputClient {
+  session: {
+    create(input: Record<string, unknown>): Promise<SessionCreateResult>;
+    prompt(input: Record<string, unknown>): Promise<SessionPromptResult>;
+    delete(input: Record<string, unknown>): Promise<unknown>;
+  };
+}
+
+type InjectedOpencodeClient = {
+  session: {
+    create(options: unknown): Promise<unknown>;
+    prompt(options: unknown): Promise<unknown>;
+    delete(options: unknown): Promise<unknown>;
+  };
+};
 
 let _connectedProviders: Set<string> = new Set();
-let _v2Client: OpencodeClient | undefined;
+let _v2Client: StructuredOutputClient | undefined;
 
 export function setConnectedProviders(providers: string[]): void {
   _connectedProviders = new Set(providers);
@@ -24,21 +56,78 @@ export function isProviderConnected(providerName: string): boolean {
   return _connectedProviders.has(providerName);
 }
 
-export function setV2Client(client: OpencodeClient): void {
+export function setV2Client(client: StructuredOutputClient | undefined): void {
   _v2Client = client;
 }
 
-export function getV2Client(): OpencodeClient | undefined {
+export function getV2Client(): StructuredOutputClient | undefined {
   return _v2Client;
 }
 
-export function createV2Client(serverUrl: URL | string): OpencodeClient {
+export function createV2Client(serverUrl: URL | string): StructuredOutputClient {
   const baseUrl = typeof serverUrl === "string" ? serverUrl : serverUrl.toString();
-  return createOpencodeClient({ baseUrl });
+  return createOpencodeClient({ baseUrl }) as unknown as StructuredOutputClient;
+}
+
+function compactObject(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined));
+}
+
+export function createStructuredOutputClient(
+  client: InjectedOpencodeClient
+): StructuredOutputClient {
+  return {
+    session: {
+      create: (input) =>
+        client.session.create({
+          query: compactObject({ directory: input.directory, workspace: input.workspace }),
+          body: compactObject({
+            parentID: input.parentID,
+            title: input.title,
+            agent: input.agent,
+            model: input.model,
+            metadata: input.metadata,
+            permission: input.permission,
+            workspaceID: input.workspaceID,
+          }),
+        }) as Promise<SessionCreateResult>,
+      prompt: (input) =>
+        client.session.prompt({
+          path: { id: input.sessionID },
+          query: compactObject({ directory: input.directory, workspace: input.workspace }),
+          body: compactObject({
+            messageID: input.messageID,
+            model: input.model,
+            agent: input.agent,
+            noReply: input.noReply,
+            tools: input.tools,
+            format: input.format,
+            system: input.system,
+            variant: input.variant,
+            parts: input.parts,
+          }),
+        }) as Promise<SessionPromptResult>,
+      delete: (input) =>
+        client.session.delete({
+          path: { id: input.sessionID },
+          query: compactObject({ directory: input.directory, workspace: input.workspace }),
+        }),
+    },
+  };
+}
+
+function summarizeCreateFailure(created: SessionCreateResult): string {
+  const status = created?.response?.status;
+  const statusText = created?.response?.statusText;
+  const message = created?.error?.message ?? created?.error?.data?.message;
+  const details = [status ? `status=${status}` : undefined, statusText, message]
+    .filter(Boolean)
+    .join(" ");
+  return details ? ` (${details})` : "";
 }
 
 export interface StructuredOutputOptions<T> {
-  client: OpencodeClient;
+  client: StructuredOutputClient;
   providerID: string;
   modelID: string;
   systemPrompt: string;
@@ -72,10 +161,12 @@ export async function generateStructuredOutput<T>(opts: StructuredOutputOptions<
     title: "opencode-mem capture",
     ...(directory ? { directory } : {}),
   });
-  const sessionID = (created as { data?: { id?: string } })?.data?.id;
+  const sessionID = created.data?.id ?? created.id;
   if (!sessionID) {
     throw new Error(
-      "opencode-mem: session.create returned no session id; cannot generate structured output"
+      `opencode-mem: session.create returned no session id${summarizeCreateFailure(
+        created
+      )}; cannot generate structured output`
     );
   }
 
@@ -94,16 +185,7 @@ export async function generateStructuredOutput<T>(opts: StructuredOutputOptions<
       noReply: true,
     });
 
-    const data = (
-      promptResult as {
-        data?: {
-          info?: {
-            structured?: unknown;
-            error?: { name: string; data?: { message?: string } };
-          };
-        };
-      }
-    ).data;
+    const data = promptResult.data;
 
     const info = data?.info;
     if (!info) {

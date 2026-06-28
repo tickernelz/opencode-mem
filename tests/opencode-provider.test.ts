@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { z } from "zod";
 import {
+  createStructuredOutputClient,
   createV2Client,
   generateStructuredOutput,
   getV2Client,
@@ -93,6 +94,65 @@ describe("v2 client cache", () => {
     expect(typeof client.session.create).toBe("function");
     expect(typeof client.session.prompt).toBe("function");
     expect(typeof client.session.delete).toBe("function");
+  });
+});
+
+describe("structured output client adapter", () => {
+  it("uses the injected opencode client instead of opening a new serverUrl client", async () => {
+    const calls: Array<{ method: string; options: unknown }> = [];
+    const injectedClient = {
+      session: {
+        create: async (options: unknown) => {
+          calls.push({ method: "create", options });
+          return { data: { id: "ses_injected" } };
+        },
+        prompt: async (options: unknown) => {
+          calls.push({ method: "prompt", options });
+          return {
+            data: {
+              info: { structured: { topic: "ctx-client", count: 1 } },
+              parts: [],
+            },
+          };
+        },
+        delete: async (options: unknown) => {
+          calls.push({ method: "delete", options });
+          return { data: true };
+        },
+      },
+    };
+
+    const result = await generateStructuredOutput({
+      client: createStructuredOutputClient(injectedClient),
+      providerID: "openai",
+      modelID: "gpt-5.4-mini",
+      systemPrompt: "system",
+      userPrompt: "user",
+      schema,
+      directory: "/repo",
+      retryCount: 2,
+    });
+
+    expect(result).toEqual({ topic: "ctx-client", count: 1 });
+    expect(calls.map((c) => c.method)).toEqual(["create", "prompt", "delete"]);
+    expect(calls[0]?.options).toEqual({
+      query: { directory: "/repo" },
+      body: { title: "opencode-mem capture" },
+    });
+    expect(calls[1]?.options).toMatchObject({
+      path: { id: "ses_injected" },
+      query: { directory: "/repo" },
+      body: {
+        model: { providerID: "openai", modelID: "gpt-5.4-mini" },
+        system: "system",
+        noReply: true,
+        format: { type: "json_schema", retryCount: 2 },
+      },
+    });
+    expect(calls[2]?.options).toEqual({
+      path: { id: "ses_injected" },
+      query: { directory: "/repo" },
+    });
   });
 });
 
