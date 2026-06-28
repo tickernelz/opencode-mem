@@ -6,6 +6,8 @@ describe("project-scoped config resolution", () => {
   let readSpy: ReturnType<typeof spyOn>;
   let existsSpy: ReturnType<typeof spyOn>;
 
+  const normalizePath = (p: unknown) => String(p).replace(/\\/g, "/");
+
   afterEach(() => {
     readSpy?.mockRestore();
     existsSpy?.mockRestore();
@@ -15,7 +17,7 @@ describe("project-scoped config resolution", () => {
 
   it("uses global config when no project config exists", () => {
     existsSpy = spyOn(fs, "existsSync").mockImplementation((p) => {
-      const path = String(p);
+      const path = normalizePath(p);
       return path.includes(".config/opencode/opencode-mem");
     });
     readSpy = spyOn(fs, "readFileSync").mockReturnValue(
@@ -28,7 +30,7 @@ describe("project-scoped config resolution", () => {
   it("project config overrides global config", () => {
     existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
     readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
-      const path = String(p);
+      const path = normalizePath(p);
       if (path.includes(".opencode/opencode-mem")) {
         return JSON.stringify({
           opencodeProvider: "openai",
@@ -48,7 +50,7 @@ describe("project-scoped config resolution", () => {
   it("shallow merge: project adds fields, global fields preserved when not overridden", () => {
     existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
     readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
-      const path = String(p);
+      const path = normalizePath(p);
       if (path.includes(".opencode/opencode-mem")) {
         return JSON.stringify({ opencodeProvider: "anthropic" }) as any;
       }

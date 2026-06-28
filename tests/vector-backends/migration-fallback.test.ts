@@ -1,21 +1,25 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getDatabase } from "../../src/services/sqlite/sqlite-bootstrap.js";
 import { ExactScanBackend } from "../../src/services/vector-backends/exact-scan-backend.js";
 import { VectorSearch } from "../../src/services/sqlite/vector-search.js";
+import { removeTempDirs } from "../helpers/temp-dir.mjs";
+import { connectionManager } from "../../src/services/sqlite/connection-manager.js";
 
 const Database = getDatabase();
 
 describe("migration with backend abstraction", () => {
   const tempDirs: string[] = [];
+  const databases: Array<{ close: () => void }> = [];
 
-  afterEach(() => {
-    while (tempDirs.length > 0) {
-      const dir = tempDirs.pop();
-      if (dir) rmSync(dir, { recursive: true, force: true });
+  afterEach(async () => {
+    connectionManager.closeAll();
+    while (databases.length > 0) {
+      databases.pop()?.close();
     }
+    await removeTempDirs(tempDirs);
   });
 
   it("rebuilds and searches memories without direct hnsw manager calls", async () => {
@@ -23,6 +27,7 @@ describe("migration with backend abstraction", () => {
     tempDirs.push(tempDir);
     const dbPath = join(tempDir, "test.db");
     const db = new Database(dbPath);
+    databases.push(db);
     db.run(`
       CREATE TABLE memories (
         id TEXT PRIMARY KEY,

@@ -1,20 +1,22 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getDatabase } from "../../src/services/sqlite/sqlite-bootstrap.js";
 import { ExactScanBackend } from "../../src/services/vector-backends/exact-scan-backend.js";
+import { removeTempDirs } from "../helpers/temp-dir.mjs";
 
 const Database = getDatabase();
 
 describe("ExactScanBackend", () => {
   const tempDirs: string[] = [];
+  const databases: Array<{ close: () => void }> = [];
 
-  afterEach(() => {
-    while (tempDirs.length > 0) {
-      const dir = tempDirs.pop();
-      if (dir) rmSync(dir, { recursive: true, force: true });
+  afterEach(async () => {
+    while (databases.length > 0) {
+      databases.pop()?.close();
     }
+    await removeTempDirs(tempDirs);
   });
 
   it("returns nearest vectors in similarity order", () => {
@@ -41,6 +43,7 @@ describe("ExactScanBackend", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "exact-scan-backend-"));
     tempDirs.push(tempDir);
     const db = new Database(join(tempDir, "test.db"));
+    databases.push(db);
 
     db.run(`CREATE TABLE memories (id TEXT PRIMARY KEY, vector BLOB, tags_vector BLOB)`);
 
@@ -76,6 +79,7 @@ describe("ExactScanBackend", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "exact-scan-backend-empty-"));
     tempDirs.push(tempDir);
     const db = new Database(join(tempDir, "test.db"));
+    databases.push(db);
     db.run(`CREATE TABLE memories (id TEXT PRIMARY KEY, vector BLOB, tags_vector BLOB)`);
 
     const backend = new ExactScanBackend();
