@@ -129,6 +129,10 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   }
 
   const cleanupPlugin = async () => {
+    if (idleTimeout) {
+      clearTimeout(idleTimeout);
+      idleTimeout = null;
+    }
     if (webServer) await webServer.stop();
     if (memoryClient) memoryClient.close();
   };
@@ -136,10 +140,9 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   const shutdownHandler = async () => {
     try {
       await cleanupPlugin();
-      process.exit(0);
     } catch (error) {
       log("Shutdown error", { error: String(error) });
-      process.exit(1);
+      process.exitCode = 1;
     }
   };
 
