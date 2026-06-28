@@ -91,7 +91,9 @@ export async function generateStructuredOutput<T>(opts: StructuredOutputOptions<
         schema: jsonSchema as Record<string, unknown>,
         ...(retryCount !== undefined ? { retryCount } : {}),
       },
-      noReply: true,
+      // Structured output is produced by opencode's assistant loop; noReply is
+      // context-only and returns before `info.structured` can be populated.
+      noReply: false,
     });
 
     const data = (
