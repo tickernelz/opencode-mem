@@ -225,22 +225,109 @@ describe("generateStructuredOutput", () => {
   it("rejects when session.create returns no id", async () => {
     mock = installFetchMock((call) => {
       if (call.method === "POST" && call.url.endsWith("/session")) {
-        return { body: {} };
+        return {
+          body: {
+            error: {},
+            request: {
+              timeout: false,
+              authorization: "Bearer super-secret-auth",
+              token: "top-level-token",
+              cookie: "session=super-cookie",
+              "set-cookie": "refresh=super-set-cookie",
+              accessToken: "access-token-value",
+              refreshToken: "refresh-token-value",
+            },
+            nested: {
+              secret: "nested-secret-value",
+              password: "nested-password-value",
+              clientSecret: "nested-client-secret",
+              secretKey: "nested-secret-key",
+              privateKey: "nested-private-key",
+              "private-key": "nested-private-key-dashed",
+            },
+          },
+        };
       }
       throw new Error(`unexpected fetch: ${call.method} ${call.url}`);
     });
 
-    const client = createV2Client("http://127.0.0.1:9999");
-    await expect(
-      generateStructuredOutput({
+    const client = createV2Client("http://user:pass@127.0.0.1:9999/api?v=1#frag");
+    try {
+      await generateStructuredOutput({
         client,
         providerID: "anthropic",
         modelID: "claude-haiku-4-5",
         systemPrompt: "s",
         userPrompt: "u",
         schema,
-      })
-    ).rejects.toThrow(/session\.create returned no session id/);
+      });
+      throw new Error("expected generateStructuredOutput to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      const message = (error as Error).message;
+      expect(message).toMatch(/session\.create returned no session id/);
+      expect(message).toContain("http://127.0.0.1:9999/api");
+      expect(message).not.toContain("user:pass");
+      expect(message).not.toContain("?v=1");
+      expect(message).not.toContain("#frag");
+      expect(message).toContain('"error":{}');
+      expect(message).toContain('"authorization":"[REDACTED]"');
+      expect(message).toContain('"token":"[REDACTED]"');
+      expect(message).toContain('"cookie":"[REDACTED]"');
+      expect(message).toContain('"set-cookie":"[REDACTED]"');
+      expect(message).toContain('"accessToken":"[REDACTED]"');
+      expect(message).toContain('"refreshToken":"[REDACTED]"');
+      expect(message).toContain('"secret":"[REDACTED]"');
+      expect(message).toContain('"password":"[REDACTED]"');
+      expect(message).toContain('"clientSecret":"[REDACTED]"');
+      expect(message).not.toContain("super-secret-auth");
+      expect(message).not.toContain("top-level-token");
+      expect(message).not.toContain("super-cookie");
+      expect(message).not.toContain("super-set-cookie");
+      expect(message).not.toContain("access-token-value");
+      expect(message).not.toContain("refresh-token-value");
+      expect(message).not.toContain("nested-secret-value");
+      expect(message).not.toContain("nested-password-value");
+      expect(message).not.toContain("nested-client-secret");
+      expect(message).not.toContain("nested-secret-key");
+      expect(message).not.toContain("nested-private-key");
+      expect(message).not.toContain("nested-private-key-dashed");
+      expect(message).toContain("[REDACTED]");
+    }
+  });
+
+  it("redacts private key variants in session.create diagnostics", async () => {
+    mock = installFetchMock((call) => {
+      if (call.method === "POST" && call.url.endsWith("/session")) {
+        return {
+          body: {
+            privateKey: "top-level-private-key",
+            "private-key": "dashed-private-key",
+          },
+        };
+      }
+      throw new Error(`unexpected fetch: ${call.method} ${call.url}`);
+    });
+
+    const client = createV2Client("http://127.0.0.1:9999");
+    try {
+      await generateStructuredOutput({
+        client,
+        providerID: "anthropic",
+        modelID: "claude-haiku-4-5",
+        systemPrompt: "s",
+        userPrompt: "u",
+        schema,
+      });
+      throw new Error("expected generateStructuredOutput to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      const message = (error as Error).message;
+      expect(message).toContain('"privateKey":"[REDACTED]"');
+      expect(message).toContain('"private-key":"[REDACTED]"');
+      expect(message).not.toContain("top-level-private-key");
+      expect(message).not.toContain("dashed-private-key");
+    }
   });
 
   it("swallows session.delete failure and still returns success", async () => {
