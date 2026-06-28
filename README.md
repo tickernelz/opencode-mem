@@ -30,11 +30,14 @@ This plugin uses `USearch` for preferred in-memory vector indexing with automati
 
 - Bun
 - Standard OpenCode plugin environment
+- Internet access on first use if you use the default local embedding model, because the model is downloaded by `@huggingface/transformers`.
+- For source/development installs, run `bun install` before building or testing. The published plugin package installs its runtime dependencies automatically through OpenCode.
 
 **Notes:**
 
 - If `USearch` is unavailable or fails at runtime, the plugin automatically falls back to exact vector scanning.
 - SQLite remains the source of truth; search indexes are rebuilt from SQLite data when needed.
+- Auto-capture and user profile learning require an AI provider that can return structured/tool-call output. Memory search/add/list still work without auto-capture provider configuration.
 
 ## Getting Started
 
@@ -64,12 +67,19 @@ Access the web interface at `http://127.0.0.1:4747` for visual memory browsing a
 
 Configure at `~/.config/opencode/opencode-mem.jsonc`:
 
+The plugin creates a full commented template at this path on first startup. This trimmed example shows the most common settings:
+
 ```jsonc
 {
   "storagePath": "~/.opencode-mem/data",
   "userEmailOverride": "user@example.com",
   "userNameOverride": "John Doe",
   "embeddingModel": "Xenova/nomic-embed-text-v1",
+  // Optional OpenAI-compatible embedding endpoint:
+  // "embeddingApiUrl": "https://api.openai.com/v1",
+  // "embeddingApiKey": "env://OPENAI_API_KEY",
+  // "embeddingModel": "text-embedding-3-small",
+
   "memory": {
     "defaultScope": "project",
   },
@@ -81,6 +91,12 @@ Configure at `~/.config/opencode/opencode-mem.jsonc`:
 
   "opencodeProvider": "anthropic",
   "opencodeModel": "claude-haiku-4-5-20251001",
+
+  // Manual fallback if you do not use opencodeProvider:
+  // "memoryProvider": "openai-chat",
+  // "memoryModel": "gpt-4o-mini",
+  // "memoryApiUrl": "https://api.openai.com/v1",
+  // "memoryApiKey": "env://OPENAI_API_KEY",
 
   "showAutoCaptureToasts": true,
   "showUserProfileToasts": true,
@@ -111,16 +127,20 @@ Configure at `~/.config/opencode/opencode-mem.jsonc`:
 
 ### Auto-Capture AI Provider
 
-**Recommended:** Use any provider that is already authenticated in opencode (no separate API key needed in this plugin):
+Auto-capture runs a background AI request to summarize technical work and save it as memory. It needs one of the provider configurations below.
+
+**Recommended:** Use a provider that is already authenticated in opencode and supports structured output:
 
 ```jsonc
 "opencodeProvider": "anthropic",
 "opencodeModel": "claude-haiku-4-5-20251001",
 ```
 
-The plugin issues structured-output requests to opencode's session API instead of calling provider endpoints directly, so opencode owns the auth, token refresh, and provider routing. Whatever you configured in opencode just works — Claude Pro/Max via OAuth, GitHub Copilot (personal & business), OpenAI / Anthropic API keys, custom providers, etc.
+The plugin issues structured-output requests to opencode's session API instead of calling provider endpoints directly, so opencode owns the auth, token refresh, and provider routing. The provider name must match an entry from `opencode providers list`, and the selected model must support structured JSON output through opencode.
 
 Supported providers: any provider listed by `opencode providers list` (e.g. `anthropic`, `openai`, `github-copilot`, ...).
+
+If `opencodeProvider` and `opencodeModel` are set, they take precedence over the manual `memoryProvider` settings below.
 
 **Fallback:** Manual API configuration (if not using opencodeProvider):
 
@@ -139,7 +159,18 @@ Supported providers: any provider listed by `opencode providers list` (e.g. `ant
 "memoryApiKey": "env://OPENAI_API_KEY"
 ```
 
-Full documentation available in this README.
+Manual `memoryProvider` modes:
+
+- `openai-chat`: OpenAI Chat Completions compatible API with tool/function calling. This can work with compatible proxies such as LiteLLM only when the selected upstream model and proxy preserve tool calls.
+- `openai-responses`: OpenAI Responses API with function-call output.
+- `anthropic`: Anthropic Messages API with tool use.
+
+Troubleshooting:
+
+- Auto-capture failures do not block manual `memory` tool usage.
+- If auto-capture reports that a provider is not connected, confirm the provider name with `opencode providers list` and configure that provider in opencode first.
+- If a proxy or custom provider returns plain text instead of structured/tool output, choose another model/provider or use one of the manual provider modes above.
+- For models that reject `temperature`, add `"memoryTemperature": false` when using manual API configuration.
 
 ## Public Subpath Exports
 
