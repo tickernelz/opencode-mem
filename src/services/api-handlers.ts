@@ -1003,19 +1003,24 @@ export async function handleGetProfileSnapshot(changelogId: string): Promise<Api
 export async function handleRefreshProfile(userId?: string): Promise<ApiResponse<any>> {
   try {
     const { getTags } = await import("./tags.js");
+    const { userProfileManager } = await import("./user-profile/user-profile-manager.js");
     const { userPromptManager } = await import("./user-prompt/user-prompt-manager.js");
     let targetUserId = userId;
     if (!targetUserId) {
       const tags = getTags(process.cwd());
       targetUserId = tags.user.userEmail || "unknown";
     }
+    const profile = userProfileManager.getActiveProfile(targetUserId);
+    const decayApplied = profile ? userProfileManager.applyConfidenceDecay(profile.id) : false;
     const unanalyzedCount = userPromptManager.countUnanalyzedForUserLearning();
     return {
       success: true,
       data: {
-        message: "Profile refresh queued",
+        message: decayApplied ? "Profile confidence decay applied" : "Profile refresh queued",
+        profileExists: Boolean(profile),
+        decayApplied,
         unanalyzedPrompts: unanalyzedCount,
-        note: "Profile will be updated when threshold is reached",
+        note: "Confidence decay runs immediately; AI profile learning still runs when the prompt threshold is reached",
       },
     };
   } catch (error) {

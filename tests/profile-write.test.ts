@@ -3,15 +3,19 @@
  * Exercises the write path added to src/index.ts `profile` mode
  * by testing the underlying manager directly (no live plugin context needed).
  */
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from "bun:test";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connectionManager } from "../src/services/sqlite/connection-manager.js";
 import { removeDirWithRetries } from "./helpers/temp-dir.mjs";
 
 // We patch CONFIG.storagePath before importing the manager so the DB lands in tmp.
+let suiteTmpDir: string;
 let tmpDir: string;
+let testCounter = 0;
+
+const WINDOWS_CLEANUP_LOCK_ERRORS = new Set(["EBUSY", "ENOTEMPTY", "EPERM"]);
 
 async function makeManager() {
   // Dynamic import after setting storagePath so the constructor picks up the temp dir.
@@ -25,13 +29,30 @@ async function makeManager() {
 }
 
 describe("UserProfileManager – explicit preference writes", () => {
-  beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "opencode-mem-test-"));
+  beforeAll(() => {
+    suiteTmpDir = mkdtempSync(join(tmpdir(), "opencode-mem-profile-write-"));
   });
 
-  afterEach(async () => {
+  beforeEach(() => {
+    testCounter += 1;
+    tmpDir = join(suiteTmpDir, `case-${testCounter}`);
+    mkdirSync(tmpDir, { recursive: true });
+  });
+
+  afterEach(() => {
     connectionManager.closeAll();
-    await removeDirWithRetries(tmpDir);
+  });
+
+  afterAll(async () => {
+    connectionManager.closeAll();
+    try {
+      await removeDirWithRetries(suiteTmpDir, 8);
+    } catch (error: any) {
+      // Windows can briefly keep SQLite temp dirs locked after closeAll().
+      if (!WINDOWS_CLEANUP_LOCK_ERRORS.has(error?.code)) {
+        throw error;
+      }
+    }
   });
 
   it("creates a profile with an explicit preference when none exists", async () => {
@@ -66,6 +87,123 @@ describe("UserProfileManager – explicit preference writes", () => {
     expect(data.preferences[0].description).toBe("Prefer concise answers");
     expect(data.preferences[0].confidence).toBe(1.0);
     expect(data.preferences[0].evidence).toContain("manual-write");
+  });
+
+  it("adds lastUpdated to generated preferences when creating a profile", async () => {
+    const mgr = await makeManager();
+    const userId = "test@example.com";
+    const before = Date.now();
+
+    mgr.createProfile(
+      userId,
+      "Test User",
+      "testuser",
+      userId,
+      {
+        preferences: [
+          {
+            category: "style",
+            description: "Prefers concise answers",
+            confidence: 0.7,
+            evidence: ["observed"],
+          } as any,
+        ],
+        patterns: [],
+        workflows: [],
+      },
+      10
+    );
+
+    const after = Date.now();
+    const profile = mgr.getActiveProfile(userId)!;
+    const data = JSON.parse(profile.profileData);
+    const lastUpdated = data.preferences[0].lastUpdated;
+
+    expect(typeof lastUpdated).toBe("number");
+    expect(lastUpdated).toBeGreaterThanOrEqual(before);
+    expect(lastUpdated).toBeLessThanOrEqual(after);
+  });
+
+  it("applies confidence decay to stale preferences", async () => {
+    const mgr = await makeManager();
+    const userId = "test@example.com";
+    const staleTimestamp = Date.now() - 61 * 24 * 60 * 60 * 1000;
+
+    mgr.createProfile(
+      userId,
+      "Test User",
+      "testuser",
+      userId,
+      {
+        preferences: [
+          {
+            category: "style",
+            description: "Prefers concise answers",
+            confidence: 0.8,
+            evidence: ["observed"],
+            lastUpdated: staleTimestamp,
+          },
+        ],
+        patterns: [],
+        workflows: [],
+      },
+      10
+    );
+
+    const profile = mgr.getActiveProfile(userId)!;
+    const changed = mgr.applyConfidenceDecay(profile.id);
+
+    expect(changed).toBe(true);
+
+    const updated = mgr.getActiveProfile(userId)!;
+    const data = JSON.parse(updated.profileData);
+
+    expect(updated.version).toBe(2);
+    expect(data.preferences[0].confidence).toBeCloseTo(0.4, 2);
+    expect(data.preferences[0].lastUpdated).toBeGreaterThan(staleTimestamp);
+
+    const changedAgain = mgr.applyConfidenceDecay(updated.id);
+    const unchanged = mgr.getActiveProfile(userId)!;
+
+    expect(changedAgain).toBe(false);
+    expect(unchanged.version).toBe(2);
+  });
+
+  it("removes preferences that decay below the confidence floor", async () => {
+    const mgr = await makeManager();
+    const userId = "test@example.com";
+    const staleTimestamp = Date.now() - 61 * 24 * 60 * 60 * 1000;
+
+    mgr.createProfile(
+      userId,
+      "Test User",
+      "testuser",
+      userId,
+      {
+        preferences: [
+          {
+            category: "style",
+            description: "Weak stale preference",
+            confidence: 0.4,
+            evidence: ["observed"],
+            lastUpdated: staleTimestamp,
+          },
+        ],
+        patterns: [],
+        workflows: [],
+      },
+      10
+    );
+
+    const profile = mgr.getActiveProfile(userId)!;
+    const changed = mgr.applyConfidenceDecay(profile.id);
+
+    expect(changed).toBe(true);
+
+    const updated = mgr.getActiveProfile(userId)!;
+    const data = JSON.parse(updated.profileData);
+
+    expect(data.preferences).toHaveLength(0);
   });
 
   it("merges a new explicit preference into an existing profile without clobbering other prefs", async () => {

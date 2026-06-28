@@ -32,7 +32,10 @@ export async function performUserProfileLearning(
     const tags = getTags(directory);
     const userId = tags.user.userEmail || "unknown";
 
-    const existingProfile = userProfileManager.getActiveProfile(userId);
+    let existingProfile = userProfileManager.getActiveProfile(userId);
+    if (existingProfile && userProfileManager.applyConfidenceDecay(existingProfile.id)) {
+      existingProfile = userProfileManager.getActiveProfile(userId);
+    }
 
     const context = buildUserAnalysisContext(prompts, existingProfile);
 

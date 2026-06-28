@@ -86,11 +86,7 @@ export class UserProfileManager {
     const id = `profile_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const now = Date.now();
 
-    const cleanedData: UserProfileData = {
-      preferences: safeArray(profileData.preferences),
-      patterns: safeArray(profileData.patterns),
-      workflows: safeArray(profileData.workflows),
-    };
+    const cleanedData = this.normalizeProfileData(profileData, now);
 
     const stmt = this.db.prepare(`
       INSERT INTO user_profiles (
@@ -126,11 +122,7 @@ export class UserProfileManager {
   ): void {
     const now = Date.now();
 
-    const cleanedData: UserProfileData = {
-      preferences: safeArray(profileData.preferences),
-      patterns: safeArray(profileData.patterns),
-      workflows: safeArray(profileData.workflows),
-    };
+    const cleanedData = this.normalizeProfileData(profileData, now);
 
     const getVersionStmt = this.db.prepare(`SELECT version FROM user_profiles WHERE id = ?`);
     const versionRow = getVersionStmt.get(profileId) as any;
@@ -208,9 +200,9 @@ export class UserProfileManager {
     return rows.map((row) => this.rowToChangelog(row));
   }
 
-  applyConfidenceDecay(profileId: string): void {
+  applyConfidenceDecay(profileId: string): boolean {
     const profile = this.getProfileById(profileId);
-    if (!profile) return;
+    if (!profile) return false;
 
     const profileData: UserProfileData = JSON.parse(profile.profileData);
     const now = Date.now();
@@ -218,21 +210,48 @@ export class UserProfileManager {
 
     let hasChanges = false;
 
-    profileData.preferences = profileData.preferences
+    profileData.preferences = this.ensureArray(profileData.preferences)
       .map((pref) => {
-        const age = now - pref.lastUpdated;
+        const lastUpdated = this.preferenceLastUpdated(pref, profile, now);
+        const evidence = this.ensureArray(pref.evidence);
+        const normalizedPref = {
+          ...pref,
+          confidence: this.normalizeConfidence(pref.confidence),
+          evidence,
+          lastUpdated,
+        };
+
+        if (
+          pref.lastUpdated !== lastUpdated ||
+          pref.confidence !== normalizedPref.confidence ||
+          !Array.isArray(pref.evidence)
+        ) {
+          hasChanges = true;
+        }
+
+        const age = now - lastUpdated;
         if (age > decayThreshold) {
           hasChanges = true;
           const decayFactor = Math.max(0.5, 1 - (age - decayThreshold) / decayThreshold);
-          return { ...pref, confidence: pref.confidence * decayFactor };
+          return {
+            ...normalizedPref,
+            confidence: normalizedPref.confidence * decayFactor,
+            lastUpdated: now,
+          };
         }
-        return pref;
+        return normalizedPref;
       })
-      .filter((pref) => pref.confidence >= 0.3);
+      .filter((pref) => {
+        const keep = pref.confidence >= 0.3;
+        if (!keep) hasChanges = true;
+        return keep;
+      });
 
     if (hasChanges) {
       this.updateProfile(profileId, profileData, 0, "Applied confidence decay to preferences");
     }
+
+    return hasChanges;
   }
 
   deleteProfile(profileId: string): void {
@@ -381,6 +400,57 @@ export class UserProfileManager {
       }
     }
     return Array.isArray(val) ? val : [];
+  }
+
+  private normalizeProfileData(profileData: UserProfileData, now: number): UserProfileData {
+    return {
+      preferences: safeArray(profileData.preferences).map((pref: any) => ({
+        ...pref,
+        confidence: this.normalizeConfidence(pref.confidence),
+        evidence: this.ensureArray(pref.evidence),
+        lastUpdated: this.isValidTimestamp(pref.lastUpdated) ? pref.lastUpdated : now,
+      })),
+      patterns: safeArray(profileData.patterns).map((pattern: any) => ({
+        ...pattern,
+        frequency: this.normalizePositiveNumber(pattern.frequency, 1),
+        lastSeen: this.isValidTimestamp(pattern.lastSeen) ? pattern.lastSeen : now,
+      })),
+      workflows: safeArray(profileData.workflows).map((workflow: any) => ({
+        ...workflow,
+        frequency: this.normalizePositiveNumber(workflow.frequency, 1),
+      })),
+    };
+  }
+
+  private preferenceLastUpdated(pref: any, profile: UserProfile, fallback: number): number {
+    if (this.isValidTimestamp(pref.lastUpdated)) {
+      return pref.lastUpdated;
+    }
+    if (this.isValidTimestamp(profile.lastAnalyzedAt)) {
+      return profile.lastAnalyzedAt;
+    }
+    if (this.isValidTimestamp(profile.createdAt)) {
+      return profile.createdAt;
+    }
+    return fallback;
+  }
+
+  private normalizeConfidence(value: any): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return 0.5;
+    }
+    return Math.min(1, Math.max(0, value));
+  }
+
+  private normalizePositiveNumber(value: any, fallback: number): number {
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+      return fallback;
+    }
+    return value;
+  }
+
+  private isValidTimestamp(value: any): value is number {
+    return typeof value === "number" && Number.isFinite(value) && value > 0;
   }
 }
 
