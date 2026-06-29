@@ -109,6 +109,46 @@ Configure at `~/.config/opencode/opencode-mem.jsonc`:
 - `scope: "all-projects"`: query `search` / `list` across all project shards.
 - `memory.defaultScope` sets the default query scope when no explicit scope is provided.
 
+### Sharing One Project Memory Across Nested Repos
+
+By default a project is identified by its enclosing git repository, so every
+physical git repo gets its own isolated memory store. That is wrong for
+multi-repo workspaces — trees managed by Google [`repo`](https://gerrit.googlesource.com/git-repo/+/HEAD/Docs/manual-repo.md),
+monorepos, or any layout where several nested git repositories belong to one
+logical project — because each sub-repository would be siloed.
+
+Drop an empty **`.opencode-mem-project`** marker file at the workspace root:
+
+```
+my-workspace/
+├── .opencode-mem-project   ← workspace root
+├── kernel/                 (own git repo)
+├── userspace/              (own git repo)
+└── tools/                  (own git repo)
+```
+
+Every session started anywhere underneath the marker then resolves onto that
+root and shares one memory store, regardless of which sub-repo the working
+directory lives in:
+
+```sh
+touch ~/my-workspace/.opencode-mem-project
+```
+
+The marker is looked up by walking up from the working directory that every
+code path already passes in (the plugin's working directory, the web API's
+`process.cwd()`), so identity is **directory-driven and process-independent**.
+It does not rely on environment variables or a global config value, which
+would be unreliable here: opencode-mem runs across multiple opencode processes
+that share a single web server, and only some of those processes carry a
+given env var. With the marker, the project root is always derived from where
+the session actually runs.
+
+The marker takes precedence over git detection. When it is present, the
+sub-repo's own git remote is intentionally ignored (it would describe only one
+nested repository). Without a marker, behavior is unchanged (git-based
+identity).
+
 ### Auto-Capture AI Provider
 
 **Recommended:** Use any provider that is already authenticated in opencode (no separate API key needed in this plugin):
