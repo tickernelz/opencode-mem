@@ -19,6 +19,8 @@ export interface UserPrompt {
   userLearningCaptured: boolean;
   linkedMemoryId: string | null;
   capture_attempts: number;
+  providerId: string | null;
+  modelId: string | null;
 }
 
 export class UserPromptManager {
@@ -43,7 +45,9 @@ export class UserPromptManager {
         captured INTEGER DEFAULT 0,
         user_learning_captured BOOLEAN DEFAULT 0,
         linked_memory_id TEXT,
-        capture_attempts INTEGER DEFAULT 0
+        capture_attempts INTEGER DEFAULT 0,
+        provider_id TEXT,
+        model_id TEXT
       )
     `);
 
@@ -52,6 +56,16 @@ export class UserPromptManager {
     } catch (error: any) {
       if (!error.message.includes("duplicate column name")) {
         console.warn("Failed to add capture_attempts column:", error.message);
+      }
+    }
+
+    for (const column of ["provider_id TEXT", "model_id TEXT"]) {
+      try {
+        this.db.run(`ALTER TABLE user_prompts ADD COLUMN ${column}`);
+      } catch (error: any) {
+        if (!error.message.includes("duplicate column name")) {
+          console.warn(`Failed to add ${column.split(" ")[0]} column:`, error.message);
+        }
       }
     }
 
@@ -84,6 +98,13 @@ export class UserPromptManager {
 
     stmt.run(id, sessionId, messageId, projectPath, content, now);
     return id;
+  }
+
+  setPromptModel(messageId: string, providerId: string, modelId: string): void {
+    const stmt = this.db.prepare(
+      `UPDATE user_prompts SET provider_id = ?, model_id = ? WHERE message_id = ?`
+    );
+    stmt.run(providerId, modelId, messageId);
   }
 
   getLastUncapturedPrompt(sessionId: string): UserPrompt | null {
@@ -304,6 +325,8 @@ export class UserPromptManager {
       userLearningCaptured: row.user_learning_captured === 1,
       linkedMemoryId: row.linked_memory_id,
       capture_attempts: row.capture_attempts || 0,
+      providerId: row.provider_id ?? null,
+      modelId: row.model_id ?? null,
     };
   }
 }

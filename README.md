@@ -182,6 +182,8 @@ Supported providers: any provider listed by `opencode providers list` (e.g. `ant
 
 If `opencodeProvider` and `opencodeModel` are set, they take precedence over the manual `memoryProvider` settings below.
 
+**Follow the session model:** set `"opencodeModel": "inherit"` to capture each prompt with the exact provider/model opencode used to answer it (recorded per message via the `chat.params` hook). This is useful if you switch models often or use several local backends; captures then always use the model that produced the conversation, and pinned ids can’t become stale. `opencodeProvider` is still required as the normal config gate, and is used if a prompt has no recorded model.
+
 **Fallback:** Manual API configuration (if not using opencodeProvider):
 
 ```jsonc

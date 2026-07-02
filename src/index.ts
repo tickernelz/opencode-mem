@@ -309,6 +309,16 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       }
     },
 
+    "chat.params": async (input) => {
+      if (!isConfigured() || CONFIG.opencodeModel !== "inherit") return;
+
+      try {
+        userPromptManager.setPromptModel(input.message.id, input.model.providerID, input.model.id);
+      } catch (error) {
+        log("chat.params: ERROR", { error: String(error) });
+      }
+    },
+
     tool: {
       memory: tool({
         description: `Manage and query project memory (MATCH USER LANGUAGE: ${getLanguageName(CONFIG.autoCaptureLanguage || "en")}). Use 'search' with technical keywords/tags, 'add' to store knowledge, 'profile' for preferences. Search/list scope: project or all-projects.`,
