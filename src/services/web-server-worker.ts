@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { corsPreflightResponse, disallowedCorsResponse, isAllowedBrowserOrigin } from "./cors.js";
 import {
   handleListTags,
   handleListMemories,
@@ -49,6 +50,15 @@ async function handleRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const path = url.pathname;
   const method = req.method;
+  const origin = req.headers.get("Origin");
+
+  if (!isAllowedBrowserOrigin(origin)) {
+    return disallowedCorsResponse();
+  }
+
+  if (method === "OPTIONS") {
+    return corsPreflightResponse(req);
+  }
 
   try {
     if (path === "/" || path === "/index.html") {
@@ -289,9 +299,6 @@ function jsonResponse(data: any, status: number = 200): Response {
     status,
     headers: {
       "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
     },
   });
 }

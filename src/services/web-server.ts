@@ -4,6 +4,7 @@ import { Readable } from "node:stream";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "./logger.js";
+import { corsPreflightResponse, disallowedCorsResponse, isAllowedBrowserOrigin } from "./cors.js";
 import {
   handleListTags,
   handleListMemories,
@@ -289,6 +290,15 @@ export class WebServer {
     const url = new URL(req.url);
     const path = url.pathname;
     const method = req.method;
+    const origin = req.headers.get("Origin");
+
+    if (!isAllowedBrowserOrigin(origin)) {
+      return disallowedCorsResponse();
+    }
+
+    if (method === "OPTIONS") {
+      return corsPreflightResponse(req);
+    }
 
     try {
       if (path === "/" || path === "/index.html") {
@@ -533,9 +543,6 @@ export class WebServer {
       status,
       headers: {
         "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
       },
     });
   }
