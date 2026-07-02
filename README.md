@@ -122,6 +122,8 @@ The plugin issues structured-output requests to opencode's session API instead o
 
 Supported providers: any provider listed by `opencode providers list` (e.g. `anthropic`, `openai`, `github-copilot`, ...).
 
+**Follow the session model:** set `"opencodeModel": "inherit"` to capture each prompt with the exact provider/model opencode used to answer it (recorded per message via the `chat.params` hook). Useful if you switch models often or run several local backends — captures always use the model that produced the conversation, and pinned ids can never go stale. `opencodeProvider` still needs to be set (it is only used when a prompt predates the upgrade and has no recorded model, in which case capture fails and retries later).
+
 **Fallback:** Manual API configuration (if not using opencodeProvider):
 
 ```jsonc
