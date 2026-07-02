@@ -79,7 +79,7 @@ export async function performAutoCapture(
           latestMemory
         );
 
-        const summaryResult = await generateSummary(context, sessionID, prompt.content);
+        const summaryResult = await generateSummary(context, sessionID, prompt.content, prompt);
 
         if (!summaryResult || summaryResult.type === "skip") {
           userPromptManager.deletePrompt(prompt.id);
@@ -294,7 +294,8 @@ function buildMarkdownContext(
 async function generateSummary(
   context: string,
   sessionID: string,
-  userPrompt: string
+  userPrompt: string,
+  prompt?: { providerId: string | null; modelId: string | null }
 ): Promise<{ summary: string; type: string; tags: string[] } | null> {
   // Opencode provider path (when opencodeProvider + opencodeModel configured)
   if (CONFIG.opencodeProvider && CONFIG.opencodeModel) {
@@ -305,9 +306,24 @@ async function generateSummary(
     const { isProviderConnected, getV2Client, generateStructuredOutput } =
       await import("./ai/opencode-provider.js");
 
-    if (!isProviderConnected(CONFIG.opencodeProvider)) {
+    // "inherit" resolves to the model opencode used for the captured prompt
+    // (recorded by the chat.params hook); fall back is a hard error so the
+    // prompt is retried once a model has been recorded.
+    let providerID = CONFIG.opencodeProvider;
+    let modelID = CONFIG.opencodeModel;
+    if (modelID === "inherit") {
+      if (!prompt?.providerId || !prompt?.modelId) {
+        throw new Error(
+          "opencode-mem: opencodeModel is 'inherit' but no session model was recorded for this prompt"
+        );
+      }
+      providerID = prompt.providerId;
+      modelID = prompt.modelId;
+    }
+
+    if (!isProviderConnected(providerID)) {
       throw new Error(
-        `opencode provider '${CONFIG.opencodeProvider}' is not connected. Check your opencode provider configuration.`
+        `opencode provider '${providerID}' is not connected. Check your opencode provider configuration.`
       );
     }
 
@@ -358,8 +374,8 @@ Analyze this conversation. If it contains technical work (code, bugs, features, 
 
     const result = await generateStructuredOutput({
       client: v2Client,
-      providerID: CONFIG.opencodeProvider,
-      modelID: CONFIG.opencodeModel,
+      providerID,
+      modelID,
       systemPrompt,
       userPrompt: aiPrompt,
       schema,
