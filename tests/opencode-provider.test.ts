@@ -146,7 +146,7 @@ describe("generateStructuredOutput", () => {
       modelID: "gpt-4o-mini",
     });
     expect(promptBody.system).toBe("system");
-    expect(promptBody.noReply).toBe(true);
+    expect(promptBody.noReply).toBe(false);
     const format = promptBody.format as Record<string, unknown>;
     expect(format.type).toBe("json_schema");
     expect(format.schema).toBeDefined();
