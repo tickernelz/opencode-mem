@@ -45,11 +45,13 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
   (async () => {
     try {
-      const { setConnectedProviders, setV2Client, createV2Client } =
+      const { createStructuredOutputClient, setConnectedProviders, setV2Client } =
         await import("./services/ai/opencode-provider.js");
-      setV2Client(createV2Client(ctx.serverUrl));
+      setConnectedProviders([]);
+      setV2Client(undefined);
       const providerResult = await ctx.client.provider.list();
       if (providerResult.data?.connected) {
+        setV2Client(createStructuredOutputClient(ctx.client));
         setConnectedProviders(providerResult.data.connected);
       }
     } catch (error) {
