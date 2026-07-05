@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { stripJsoncComments } from "./services/jsonc.js";
 import { resolveSecretValue } from "./services/secret-resolver.js";
+import { isPlaceholderApiKey } from "./services/ai/api-key-placeholder.js";
 
 const CONFIG_DIR = join(homedir(), ".config", "opencode");
 const DATA_DIR = join(homedir(), ".opencode-mem");
@@ -284,10 +285,11 @@ const CONFIG_TEMPLATE = `{
    // "opencodeModel": "claude-haiku-4-5-20251001",
 
    // ============================================
-   // Auto-Capture Settings (REQUIRES EXTERNAL API)
+   // Auto-Capture Settings
    // ============================================
   
-  // IMPORTANT: Auto-capture ONLY works with external API
+  // IMPORTANT: Auto-capture only runs after either opencodeProvider/opencodeModel
+  // above is configured, or the manual fallback below is uncommented with real values.
   // It runs in background without blocking your main session
   // Note: Ollama may not support tool calling. Use OpenAI, Anthropic, or Groq for best results.
   
@@ -298,10 +300,10 @@ const CONFIG_TEMPLATE = `{
   // Any service that follows the OpenAI Chat Completions API can use it via custom "memoryApiUrl".
   "memoryProvider": "openai-chat",
   
-  // REQUIRED for auto-capture (all 3 must be set):
-  "memoryModel": "gpt-4o-mini",
-  "memoryApiUrl": "https://api.openai.com/v1",
-  "memoryApiKey": "sk-...",
+  // Manual fallback. Uncomment all 3 lines and replace memoryApiKey before use:
+  // "memoryModel": "gpt-4o-mini",
+  // "memoryApiUrl": "https://api.openai.com/v1",
+  // "memoryApiKey": "sk-...",
 
   // API Key Formats:
   // Direct value:        "sk-..."
@@ -576,6 +578,24 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
 
 let _globalFileConfig = loadConfigFromPaths(CONFIG_FILES);
 export let CONFIG = buildConfig(_globalFileConfig);
+
+type RuntimeConfig = ReturnType<typeof buildConfig>;
+
+function hasValue(value: string | undefined): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+export { isPlaceholderApiKey };
+
+export function hasAutoCaptureProviderConfig(config: RuntimeConfig = CONFIG): boolean {
+  const hasOpencodeProvider = hasValue(config.opencodeProvider) && hasValue(config.opencodeModel);
+  const hasManualProvider =
+    hasValue(config.memoryModel) &&
+    hasValue(config.memoryApiUrl) &&
+    !isPlaceholderApiKey(config.memoryApiKey);
+
+  return hasOpencodeProvider || hasManualProvider;
+}
 
 export function initConfig(directory: string): void {
   const projectPaths = [

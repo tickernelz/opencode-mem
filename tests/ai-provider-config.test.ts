@@ -92,6 +92,29 @@ describe("AI provider config", () => {
     });
   });
 
+  it("rejects placeholder API keys before a provider request is built", () => {
+    expect(() =>
+      buildMemoryProviderConfig({
+        memoryModel: "gpt-4o-mini",
+        memoryApiUrl: "https://api.openai.com/v1",
+        memoryApiKey: "sk-...",
+      })
+    ).toThrow("replace the placeholder memoryApiKey value");
+  });
+
+  it("still allows no-key local OpenAI-compatible endpoints", () => {
+    const providerConfig = buildMemoryProviderConfig({
+      memoryModel: "local-model",
+      memoryApiUrl: "http://127.0.0.1:11434/v1",
+    });
+
+    expect(providerConfig).toMatchObject({
+      model: "local-model",
+      apiUrl: "http://127.0.0.1:11434/v1",
+      apiKey: undefined,
+    });
+  });
+
   it("omits temperature for openai-chat when memoryTemperature is false", async () => {
     let capturedBody: Record<string, unknown> | undefined;
     globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {

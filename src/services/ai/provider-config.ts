@@ -1,4 +1,5 @@
 import type { ProviderConfig } from "./providers/base-provider.js";
+import { isPlaceholderApiKey } from "./api-key-placeholder.js";
 
 interface MemoryProviderRuntimeConfig {
   memoryModel?: string;
@@ -21,6 +22,12 @@ export function buildMemoryProviderConfig(
 ): ProviderConfig {
   if (!config.memoryModel || !config.memoryApiUrl) {
     throw new Error("External API not configured for memory provider");
+  }
+
+  if (isPlaceholderApiKey(config.memoryApiKey)) {
+    throw new Error(
+      "External API not configured for memory provider: replace the placeholder memoryApiKey value"
+    );
   }
 
   return {

@@ -9,7 +9,8 @@ const originalUserProfile = process.env.USERPROFILE;
 process.env.HOME = home;
 process.env.USERPROFILE = home;
 
-const { CONFIG, isConfigured } = await import("../src/config.js");
+const { CONFIG, hasAutoCaptureProviderConfig, isConfigured, isPlaceholderApiKey } =
+  await import("../src/config.js");
 
 afterAll(() => {
   process.env.HOME = originalHome;
@@ -96,6 +97,32 @@ describe("config", () => {
       expect(typeof CONFIG.showUserProfileToasts).toBe("boolean");
       expect(typeof CONFIG.showErrorToasts).toBe("boolean");
     });
+
+    it("should not treat template manual API placeholders as usable auto-capture config", () => {
+      expect(
+        hasAutoCaptureProviderConfig({
+          ...CONFIG,
+          opencodeProvider: undefined,
+          opencodeModel: undefined,
+          memoryModel: "gpt-4o-mini",
+          memoryApiUrl: "https://api.openai.com/v1",
+          memoryApiKey: "sk-...",
+        })
+      ).toBe(false);
+    });
+
+    it("should treat opencode provider settings as usable auto-capture config", () => {
+      expect(
+        hasAutoCaptureProviderConfig({
+          ...CONFIG,
+          opencodeProvider: "anthropic",
+          opencodeModel: "claude-haiku-4-5-20251001",
+          memoryModel: undefined,
+          memoryApiUrl: undefined,
+          memoryApiKey: undefined,
+        })
+      ).toBe(true);
+    });
   });
 
   describe("isConfigured", () => {
@@ -105,6 +132,19 @@ describe("config", () => {
 
     it("should return a boolean", () => {
       expect(typeof isConfigured()).toBe("boolean");
+    });
+  });
+
+  describe("placeholder API key detection", () => {
+    it("treats template API keys as placeholders", () => {
+      expect(isPlaceholderApiKey("sk-...")).toBe(true);
+      expect(isPlaceholderApiKey("sk-ant-...")).toBe(true);
+      expect(isPlaceholderApiKey("gsk_...")).toBe(true);
+    });
+
+    it("does not treat real-looking or absent API keys as placeholders", () => {
+      expect(isPlaceholderApiKey("sk-test-realish")).toBe(false);
+      expect(isPlaceholderApiKey(undefined)).toBe(false);
     });
   });
 });
