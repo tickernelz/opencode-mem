@@ -9,8 +9,13 @@ const originalUserProfile = process.env.USERPROFILE;
 process.env.HOME = home;
 process.env.USERPROFILE = home;
 
-const { CONFIG, hasAutoCaptureProviderConfig, isConfigured, isPlaceholderApiKey } =
-  await import("../src/config.js");
+const {
+  CONFIG,
+  getAutoCaptureProviderStatus,
+  hasAutoCaptureProviderConfig,
+  isConfigured,
+  isPlaceholderApiKey,
+} = await import("../src/config.js");
 
 afterAll(() => {
   process.env.HOME = originalHome;
@@ -122,6 +127,65 @@ describe("config", () => {
           memoryApiKey: undefined,
         })
       ).toBe(true);
+    });
+
+    it("should report manual provider mode when model, API URL, and API key are configured", () => {
+      expect(
+        getAutoCaptureProviderStatus({
+          ...CONFIG,
+          opencodeProvider: undefined,
+          opencodeModel: undefined,
+          memoryModel: "local-model",
+          memoryApiUrl: "http://127.0.0.1:11434/v1",
+          memoryApiKey: "local-api-key",
+        })
+      ).toEqual({ ready: true, mode: "manual", issues: [] });
+    });
+
+    it("should report missing memoryApiKey when model and API URL are configured without a key", () => {
+      expect(
+        getAutoCaptureProviderStatus({
+          ...CONFIG,
+          opencodeProvider: undefined,
+          opencodeModel: undefined,
+          memoryModel: "gpt-4o-mini",
+          memoryApiUrl: "https://api.openai.com/v1",
+          memoryApiKey: undefined,
+        })
+      ).toEqual({
+        ready: false,
+        issues: [
+          "opencodeProvider is not configured",
+          "opencodeModel is not configured",
+          "memoryApiKey is not configured",
+        ],
+      });
+    });
+
+    it("should report each missing manual provider field independently", () => {
+      expect(
+        getAutoCaptureProviderStatus({
+          ...CONFIG,
+          opencodeProvider: undefined,
+          opencodeModel: undefined,
+          memoryModel: undefined,
+          memoryApiUrl: undefined,
+          memoryApiKey: "sk-...",
+        })
+      ).toEqual({
+        ready: false,
+        issues: [
+          "opencodeProvider is not configured",
+          "opencodeModel is not configured",
+          "memoryModel is not configured",
+          "memoryApiUrl is not configured",
+          "memoryApiKey contains a placeholder value",
+        ],
+      });
+    });
+
+    it("should expose the resolved auto-capture provider status on CONFIG", () => {
+      expect(CONFIG.autoCaptureProviderStatus).toEqual(getAutoCaptureProviderStatus(CONFIG));
     });
   });
 

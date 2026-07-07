@@ -102,17 +102,29 @@ describe("AI provider config", () => {
     ).toThrow("replace the placeholder memoryApiKey value");
   });
 
-  it("still allows no-key local OpenAI-compatible endpoints", () => {
-    const providerConfig = buildMemoryProviderConfig({
-      memoryModel: "local-model",
-      memoryApiUrl: "http://127.0.0.1:11434/v1",
-    });
+  it("reports each missing manual provider field before a provider request is built", () => {
+    expect(() => buildMemoryProviderConfig({})).toThrow(
+      "missing memoryModel; missing memoryApiUrl; missing memoryApiKey"
+    );
+  });
 
-    expect(providerConfig).toMatchObject({
-      model: "local-model",
-      apiUrl: "http://127.0.0.1:11434/v1",
-      apiKey: undefined,
-    });
+  it("reports missing fields and placeholder API key together", () => {
+    expect(() =>
+      buildMemoryProviderConfig({
+        memoryApiKey: "sk-...",
+      })
+    ).toThrow(
+      "missing memoryModel; missing memoryApiUrl; replace the placeholder memoryApiKey value"
+    );
+  });
+
+  it("requires an API key for manual provider endpoints", () => {
+    expect(() =>
+      buildMemoryProviderConfig({
+        memoryModel: "gpt-4o-mini",
+        memoryApiUrl: "https://api.openai.com/v1",
+      })
+    ).toThrow("missing memoryApiKey");
   });
 
   it("omits temperature for openai-chat when memoryTemperature is false", async () => {

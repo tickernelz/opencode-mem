@@ -493,6 +493,8 @@ function getEmbeddingDimensions(model: string): number {
 }
 
 function buildConfig(fileConfig: OpenCodeMemConfig) {
+  const memoryApiKey = resolveSecretValue(fileConfig.memoryApiKey);
+
   return {
     storagePath: expandPath(fileConfig.storagePath ?? DEFAULTS.storagePath),
     userEmailOverride: fileConfig.userEmailOverride,
@@ -523,11 +525,18 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
       | "anthropic",
     memoryModel: fileConfig.memoryModel,
     memoryApiUrl: fileConfig.memoryApiUrl,
-    memoryApiKey: resolveSecretValue(fileConfig.memoryApiKey),
+    memoryApiKey,
     memoryTemperature: fileConfig.memoryTemperature,
     memoryExtraParams: fileConfig.memoryExtraParams,
     opencodeProvider: fileConfig.opencodeProvider,
     opencodeModel: fileConfig.opencodeModel,
+    autoCaptureProviderStatus: getAutoCaptureProviderStatus({
+      opencodeProvider: fileConfig.opencodeProvider,
+      opencodeModel: fileConfig.opencodeModel,
+      memoryModel: fileConfig.memoryModel,
+      memoryApiUrl: fileConfig.memoryApiUrl,
+      memoryApiKey,
+    }),
     vectorBackend: (fileConfig.vectorBackend ?? "usearch-first") as
       | "usearch-first"
       | "usearch"
@@ -581,20 +590,56 @@ export let CONFIG = buildConfig(_globalFileConfig);
 
 type RuntimeConfig = ReturnType<typeof buildConfig>;
 
+interface AutoCaptureProviderRuntimeConfig {
+  opencodeProvider?: string;
+  opencodeModel?: string;
+  memoryModel?: string;
+  memoryApiUrl?: string;
+  memoryApiKey?: string;
+}
+
+export type AutoCaptureProviderStatus =
+  | { ready: true; mode: "opencode" | "manual"; issues: [] }
+  | { ready: false; issues: string[] };
+
 function hasValue(value: string | undefined): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
 export { isPlaceholderApiKey };
 
-export function hasAutoCaptureProviderConfig(config: RuntimeConfig = CONFIG): boolean {
-  const hasOpencodeProvider = hasValue(config.opencodeProvider) && hasValue(config.opencodeModel);
-  const hasManualProvider =
-    hasValue(config.memoryModel) &&
-    hasValue(config.memoryApiUrl) &&
-    !isPlaceholderApiKey(config.memoryApiKey);
+export function getAutoCaptureProviderStatus(
+  config: AutoCaptureProviderRuntimeConfig
+): AutoCaptureProviderStatus {
+  const hasOpencodeProvider = hasValue(config.opencodeProvider);
+  const hasOpencodeModel = hasValue(config.opencodeModel);
+  if (hasOpencodeProvider && hasOpencodeModel) {
+    return { ready: true, mode: "opencode", issues: [] };
+  }
 
-  return hasOpencodeProvider || hasManualProvider;
+  const issues: string[] = [];
+  if (!hasOpencodeProvider) issues.push("opencodeProvider is not configured");
+  if (!hasOpencodeModel) issues.push("opencodeModel is not configured");
+
+  const hasMemoryModel = hasValue(config.memoryModel);
+  const hasMemoryApiUrl = hasValue(config.memoryApiUrl);
+  const hasMemoryApiKey = hasValue(config.memoryApiKey);
+  const hasPlaceholderMemoryApiKey = isPlaceholderApiKey(config.memoryApiKey);
+
+  if (!hasMemoryModel) issues.push("memoryModel is not configured");
+  if (!hasMemoryApiUrl) issues.push("memoryApiUrl is not configured");
+  if (!hasMemoryApiKey) issues.push("memoryApiKey is not configured");
+  if (hasPlaceholderMemoryApiKey) issues.push("memoryApiKey contains a placeholder value");
+
+  if (hasMemoryModel && hasMemoryApiUrl && hasMemoryApiKey && !hasPlaceholderMemoryApiKey) {
+    return { ready: true, mode: "manual", issues: [] };
+  }
+
+  return { ready: false, issues };
+}
+
+export function hasAutoCaptureProviderConfig(config: RuntimeConfig = CONFIG): boolean {
+  return getAutoCaptureProviderStatus(config).ready;
 }
 
 export function initConfig(directory: string): void {

@@ -17,9 +17,18 @@ import type { MemoryType } from "./types/index.js";
 import { getLanguageName } from "./services/language-detector.js";
 import type { MemoryScope } from "./services/client.js";
 
+function logAutoCaptureProviderStatus(): void {
+  if (!CONFIG.autoCaptureEnabled || CONFIG.autoCaptureProviderStatus.ready) return;
+
+  log(
+    `Auto-capture disabled by configuration. Issues: ${CONFIG.autoCaptureProviderStatus.issues.join("; ")}.`
+  );
+}
+
 export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   const { directory } = ctx;
   initConfig(directory);
+  logAutoCaptureProviderStatus();
   const tags = getTags(directory);
   let webServer: WebServer | null = null;
   let idleTimeout: Timer | null = null;

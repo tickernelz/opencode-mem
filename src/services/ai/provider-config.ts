@@ -20,20 +20,24 @@ export function buildMemoryProviderConfig(
   config: MemoryProviderRuntimeConfig,
   overrides: ProviderConfigOverrides = {}
 ): ProviderConfig {
-  if (!config.memoryModel || !config.memoryApiUrl) {
-    throw new Error("External API not configured for memory provider");
-  }
+  const memoryModel = config.memoryModel;
+  const memoryApiUrl = config.memoryApiUrl;
+  const memoryApiKey = config.memoryApiKey;
+  const issues: string[] = [];
 
-  if (isPlaceholderApiKey(config.memoryApiKey)) {
-    throw new Error(
-      "External API not configured for memory provider: replace the placeholder memoryApiKey value"
-    );
+  if (!memoryModel) issues.push("missing memoryModel");
+  if (!memoryApiUrl) issues.push("missing memoryApiUrl");
+  if (!memoryApiKey) issues.push("missing memoryApiKey");
+  if (isPlaceholderApiKey(memoryApiKey)) issues.push("replace the placeholder memoryApiKey value");
+
+  if (issues.length > 0) {
+    throw new Error(`External API not configured for memory provider: ${issues.join("; ")}`);
   }
 
   return {
-    model: config.memoryModel,
-    apiUrl: config.memoryApiUrl,
-    apiKey: config.memoryApiKey,
+    model: memoryModel || "",
+    apiUrl: memoryApiUrl || "",
+    apiKey: memoryApiKey || "",
     memoryTemperature: config.memoryTemperature,
     extraParams: config.memoryExtraParams,
     maxIterations: overrides.maxIterations ?? config.autoCaptureMaxIterations,

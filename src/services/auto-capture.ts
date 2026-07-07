@@ -2,7 +2,7 @@ import type { PluginInput } from "@opencode-ai/plugin";
 import { memoryClient } from "./client.js";
 import { getTags } from "./tags.js";
 import { log } from "./logger.js";
-import { CONFIG, hasAutoCaptureProviderConfig } from "../config.js";
+import { CONFIG } from "../config.js";
 import { userPromptManager } from "./user-prompt/user-prompt-manager.js";
 
 interface ToolCallInfo {
@@ -14,7 +14,6 @@ const MAX_TOOL_INPUT_LENGTH = 100;
 const RETRY_BASE_DELAY_MS = 2000;
 
 let isCaptureRunning = false;
-let loggedMissingProviderConfig = false;
 
 export async function performAutoCapture(
   ctx: PluginInput,
@@ -34,13 +33,7 @@ export async function performAutoCapture(
       return;
     }
 
-    if (!hasAutoCaptureProviderConfig()) {
-      if (!loggedMissingProviderConfig) {
-        log(
-          "Auto-capture skipped: configure opencodeProvider/opencodeModel or manual memory API settings with a real API key."
-        );
-        loggedMissingProviderConfig = true;
-      }
+    if (!CONFIG.autoCaptureProviderStatus.ready) {
       return;
     }
 
