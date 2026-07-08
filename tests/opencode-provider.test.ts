@@ -561,34 +561,43 @@ describe("generateStructuredOutput regression tests (issue #110)", () => {
     const globalFetch = globalThis.fetch;
     const calls: FetchCall[] = [];
 
-    globalThis.fetch = (async () => {
-      throw new TypeError("global fetch should not be used");
-    }) as typeof fetch;
+    const failingFetch: typeof fetch = Object.assign(
+      async () => {
+        throw new TypeError("global fetch should not be used");
+      },
+      { preconnect: globalFetch.preconnect }
+    );
+    globalThis.fetch = failingFetch;
 
-    setHostFetch(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const req = input instanceof Request ? input : new Request(input, init);
-      const method = req.method.toUpperCase();
-      const text = method === "GET" || method === "HEAD" ? "" : await req.text();
-      const call: FetchCall = {
-        url: req.url,
-        method,
-        body: text ? JSON.parse(text) : undefined,
-      };
-      calls.push(call);
+    const hostFetch: typeof fetch = Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const req = input instanceof Request ? input : new Request(input, init);
+        const method = req.method.toUpperCase();
+        const text = method === "GET" || method === "HEAD" ? "" : await req.text();
+        const call: FetchCall = {
+          url: req.url,
+          method,
+          body: text ? JSON.parse(text) : undefined,
+        };
+        calls.push(call);
 
-      if (call.method === "POST" && call.url.endsWith("/session")) {
-        return new Response(JSON.stringify({ id: "ses_host_fetch" }));
-      }
-      if (call.method === "POST" && call.url.includes("/session/ses_host_fetch/message")) {
-        return new Response(
-          JSON.stringify({ info: { structured_output: { topic: "host", count: 1 } }, parts: [] })
-        );
-      }
-      if (call.method === "DELETE") {
-        return new Response(JSON.stringify(true));
-      }
-      throw new Error(`unexpected host fetch: ${call.method} ${call.url}`);
-    });
+        if (call.method === "POST" && call.url.endsWith("/session")) {
+          return new Response(JSON.stringify({ id: "ses_host_fetch" }));
+        }
+        if (call.method === "POST" && call.url.includes("/session/ses_host_fetch/message")) {
+          return new Response(
+            JSON.stringify({ info: { structured_output: { topic: "host", count: 1 } }, parts: [] })
+          );
+        }
+        if (call.method === "DELETE") {
+          return new Response(JSON.stringify(true));
+        }
+        throw new Error(`unexpected host fetch: ${call.method} ${call.url}`);
+      },
+      { preconnect: globalFetch.preconnect }
+    );
+
+    setHostFetch(hostFetch);
 
     try {
       const client = createV2Client("http://localhost:4096");
