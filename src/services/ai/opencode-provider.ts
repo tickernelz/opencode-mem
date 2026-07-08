@@ -237,6 +237,9 @@ async function promptSession(base: string, args: PromptSessionArgs): Promise<Ass
     model: { providerID: args.providerID, modelID: args.modelID },
     system: args.systemPrompt,
     parts: [{ type: "text", text: args.userPrompt }],
+    // `noReply` suppresses assistant generation in current OpenCode builds,
+    // which also suppresses `info.structured_output`; structured capture needs
+    // the assistant run even though the temporary session is deleted afterward.
     format: {
       type: "json_schema",
       schema: args.jsonSchema,

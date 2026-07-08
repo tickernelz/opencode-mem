@@ -18,11 +18,41 @@ import { getLanguageName } from "./services/language-detector.js";
 import type { MemoryScope } from "./services/client.js";
 import {
   createV2Client,
+  resetHostFetch,
   setConnectedProviders,
   setHostFetch,
   setV2Client,
 } from "./services/ai/opencode-provider.js";
 import { getHostClientConfig } from "./services/ai/opencode-host-config.js";
+
+export function isStructuredSummaryPromptMessage(userMessage: string): boolean {
+  // This is the plugin's own structured-summary request. OpenCode echoes it
+  // through chat.message like a normal user message, but capturing it would
+  // create self-referential memories about the memory prompt instead of the
+  // user's conversation.
+  return userMessage.includes("Analyze this conversation.") && userMessage.includes('type="skip"');
+}
+
+export function configureOpencodeHostTransport(ctx: {
+  readonly client: unknown;
+  readonly serverUrl?: string | URL;
+}): void {
+  resetHostFetch();
+  const hostConfig = getHostClientConfig(ctx);
+  if (hostConfig.fetch) {
+    setHostFetch(hostConfig.fetch);
+  } else {
+    log("OpenCode host fetch unavailable; falling back to global fetch", {
+      clientKeys: hostConfig.clientKeys,
+      sdkConfigCount: hostConfig.sdkConfigCount,
+    });
+  }
+
+  const serverUrl = hostConfig.baseUrl ?? ctx.serverUrl;
+  if (serverUrl) {
+    setV2Client(createV2Client(serverUrl));
+  }
+}
 
 function logAutoCaptureProviderStatus(): void {
   if (!CONFIG.autoCaptureEnabled || CONFIG.autoCaptureProviderStatus.ready) return;
@@ -59,14 +89,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     })();
   }
 
-  const hostConfig = getHostClientConfig(ctx);
-  if (hostConfig.fetch) {
-    setHostFetch(hostConfig.fetch);
-  }
-  const serverUrl = hostConfig.baseUrl ?? ctx.serverUrl;
-  if (serverUrl) {
-    setV2Client(createV2Client(serverUrl));
-  }
+  configureOpencodeHostTransport(ctx);
 
   (async () => {
     try {
@@ -188,10 +211,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
         const userMessage = textParts.map((p) => p.text).join("\n");
         if (!userMessage.trim()) return;
 
-        if (
-          userMessage.includes("Analyze this conversation.") &&
-          userMessage.includes('type="skip"')
-        ) {
+        if (isStructuredSummaryPromptMessage(userMessage)) {
           return;
         }
 

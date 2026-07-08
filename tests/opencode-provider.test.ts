@@ -111,7 +111,7 @@ describe("generateStructuredOutput", () => {
     resetHostFetch();
   });
 
-  it("posts schema to session.prompt and returns parsed structured output", async () => {
+  it("posts schema without noReply and returns parsed structured output", async () => {
     mock = installFetchMock((call) => {
       if (call.method === "POST" && call.url.endsWith("/session")) {
         return { body: { id: "ses_test_1" } };

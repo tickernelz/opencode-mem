@@ -1,11 +1,15 @@
 export type HostClientConfig = {
   readonly baseUrl: string | undefined;
   readonly fetch: typeof fetch | undefined;
+  readonly clientKeys: readonly string[];
+  readonly sdkConfigCount: number;
 };
 
 export function getHostClientConfig(ctx: { readonly client: unknown }): HostClientConfig {
   const client = toRecord(ctx.client);
-  if (!client) return { baseUrl: undefined, fetch: undefined };
+  if (!client) {
+    return { baseUrl: undefined, fetch: undefined, clientKeys: [], sdkConfigCount: 0 };
+  }
 
   const configs = sdkConfigs(client);
   const baseUrl = configs.find((config) => typeof config["baseUrl"] === "string")?.["baseUrl"];
@@ -14,6 +18,8 @@ export function getHostClientConfig(ctx: { readonly client: unknown }): HostClie
   return {
     baseUrl: typeof baseUrl === "string" ? baseUrl : undefined,
     fetch: isFetch(customFetch) ? customFetch : undefined,
+    clientKeys: Object.keys(client),
+    sdkConfigCount: configs.length,
   };
 }
 
