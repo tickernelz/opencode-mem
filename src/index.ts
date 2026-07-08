@@ -294,19 +294,16 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           limit: tool.schema.number().optional(),
           scope: tool.schema.enum(["project", "all-projects"]).optional(),
         },
-        async execute(
-          args: {
-            mode?: "add" | "search" | "profile" | "list" | "forget" | "help";
-            content?: string;
-            query?: string;
-            tags?: string;
-            type?: MemoryType;
-            memoryId?: string;
-            limit?: number;
-            scope?: MemoryScope;
-          },
-          toolCtx: { sessionID: string }
-        ) {
+        async execute(args: {
+          mode?: "add" | "search" | "profile" | "list" | "forget" | "help";
+          content?: string;
+          query?: string;
+          tags?: string;
+          type?: MemoryType;
+          memoryId?: string;
+          limit?: number;
+          scope?: MemoryScope;
+        }) {
           if (!isConfigured()) {
             return JSON.stringify({
               success: false,
