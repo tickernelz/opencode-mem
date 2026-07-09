@@ -176,6 +176,7 @@ function formatError(error) {
 }
 
 const lockfile = readJson(lockfilePath);
+const rootPkg = readJson(join(projectRoot, "package.json"));
 const candidates = [];
 const failures = [];
 
@@ -213,19 +214,23 @@ for (const candidate of candidates) {
   const artifactSummary = candidate.artifacts.length > 0 ? candidate.artifacts.join(", ") : "none";
   const relativeDir = relative(projectRoot, candidate.packageDir).split(sep).join("/");
 
+  const isOptional = !!(
+    rootPkg.optionalDependencies && rootPkg.optionalDependencies[candidate.name]
+  );
+
   console.log(
-    `${candidate.name}: ${load.ok ? `loaded via ${load.mode}` : "load failed"}; artifacts=${artifactSummary}; reasons=${candidate.reasons.join("; ")}`
+    `${candidate.name}: ${load.ok ? `loaded via ${load.mode}` : "load failed"}${isOptional && !load.ok ? " (allowed for optional)" : ""}; artifacts=${artifactSummary}; reasons=${candidate.reasons.join("; ")}`
   );
 
   if (candidate.artifacts.length === 0 && !load.ok) {
-    failures.push(
-      `${candidate.name} at ${relativeDir} has native markers but no native artifacts and could not load: ${formatError(load.error)}`
-    );
+    const msg = `${candidate.name} at ${relativeDir} has native markers but no native artifacts and could not load: ${formatError(load.error)}`;
+    if (isOptional) console.log(`[WARN] ${msg}`);
+    else failures.push(msg);
   }
   if (candidate.artifacts.length > 0 && !load.ok) {
-    failures.push(
-      `${candidate.name} at ${relativeDir} has native artifacts but could not load on ${process.platform}/${process.arch}: ${formatError(load.error)}`
-    );
+    const msg = `${candidate.name} at ${relativeDir} has native artifacts but could not load on ${process.platform}/${process.arch}: ${formatError(load.error)}`;
+    if (isOptional) console.log(`[WARN] ${msg}`);
+    else failures.push(msg);
   }
 }
 
