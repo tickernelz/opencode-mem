@@ -24,16 +24,17 @@ jobs:
           - ubuntu-latest
           - windows-latest
           - macos-13
-          - macos-latest
+          - macos-15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: oven-sh/setup-bun@v2
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
+          package-manager-cache: false
 
       - name: Install source dependencies
         run: bun install
