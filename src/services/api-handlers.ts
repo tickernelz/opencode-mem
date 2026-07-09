@@ -6,6 +6,8 @@ import { log } from "./logger.js";
 import { CONFIG } from "../config.js";
 import type { MemoryType } from "../types/index.js";
 import { userPromptManager } from "./user-prompt/user-prompt-manager.js";
+import type { UserProfileData } from "./user-profile/types.js";
+import { sortProfileItems } from "../utils/profile.js";
 
 interface ApiResponse<T = any> {
   success: boolean;
@@ -933,6 +935,9 @@ export async function handleGetUserProfile(userId?: string): Promise<ApiResponse
         },
       };
     const profileData = JSON.parse(profile.profileData);
+    profileData.preferences = sortProfileItems(profileData.preferences as any[], "confidence");
+    profileData.patterns = sortProfileItems(profileData.patterns as any[], "frequency");
+    profileData.workflows = sortProfileItems(profileData.workflows as any[], "frequency");
     return {
       success: true,
       data: {
@@ -982,8 +987,7 @@ export async function handleGetProfileSnapshot(changelogId: string): Promise<Api
   try {
     if (!changelogId) return { success: false, error: "changelogId is required" };
     const { userProfileManager } = await import("./user-profile/user-profile-manager.js");
-    const changelogs = userProfileManager.getProfileChangelogs("", 1000);
-    const changelog = changelogs.find((c) => c.id === changelogId);
+    const changelog = userProfileManager.getChangelogById(changelogId);
     if (!changelog) return { success: false, error: "Changelog not found" };
     const profileData = JSON.parse(changelog.profileDataSnapshot);
     return {
@@ -1011,7 +1015,15 @@ export async function handleRefreshProfile(userId?: string): Promise<ApiResponse
       targetUserId = tags.user.userEmail || "unknown";
     }
     const profile = userProfileManager.getActiveProfile(targetUserId);
-    const decayApplied = profile ? userProfileManager.applyConfidenceDecay(profile.id) : false;
+    let decayApplied = false;
+    if (profile) {
+      const pData = JSON.parse(profile.profileData);
+      const { data: decayed, hasChanges } = userProfileManager.decayInMemory(pData);
+      if (hasChanges) {
+        userProfileManager.updateProfile(profile.id, decayed, 0, "Applied confidence decay");
+        decayApplied = true;
+      }
+    }
     const unanalyzedCount = userPromptManager.countUnanalyzedForUserLearning();
     return {
       success: true,
@@ -1025,6 +1037,306 @@ export async function handleRefreshProfile(userId?: string): Promise<ApiResponse
     };
   } catch (error) {
     log("handleRefreshProfile: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+// Temporary storage for pending AI cleanup results (userId → result)
+const pendingCleanups = new Map<
+  string,
+  {
+    cleaned: UserProfileData;
+    oldProfileData: UserProfileData;
+    diff: any;
+    allMergedIds: string[][];
+    allRemovedIds: string[];
+    expiresAt: number;
+  }
+>();
+
+export async function handleAICleanup(
+  userId?: string,
+  includeIds?: string[]
+): Promise<ApiResponse<any>> {
+  try {
+    const { userProfileManager } = await import("./user-profile/user-profile-manager.js");
+    const { getTags } = await import("./tags.js");
+    const { aiCleanupProfile, aiCleanupProfileFromIndexed, filterProfileForCleanup } =
+      await import("./user-profile/ai-cleanup.js");
+
+    let targetUserId = userId;
+    if (!targetUserId) {
+      const tags = getTags(process.cwd());
+      targetUserId = tags.user.userEmail || "unknown";
+    }
+
+    const profile = userProfileManager.getActiveProfile(targetUserId);
+    if (!profile) {
+      return { success: false, error: "No profile found to clean up" };
+    }
+
+    const profileData: UserProfileData = JSON.parse(profile.profileData);
+
+    let indexed;
+    let result;
+    if (includeIds && includeIds.length > 0) {
+      indexed = filterProfileForCleanup(profileData, includeIds);
+      result = await aiCleanupProfileFromIndexed(indexed);
+    } else {
+      result = await aiCleanupProfile(profileData);
+    }
+
+    pendingCleanups.set(targetUserId, {
+      cleaned: result.cleaned,
+      oldProfileData: profileData,
+      diff: result.diff,
+      allMergedIds: (result.diff?.merged || []).map((m: any) => m.ids || []),
+      allRemovedIds: (result.diff?.removed || []).map((r: any) => r.id),
+      expiresAt: Date.now() + 30 * 60 * 1000,
+    });
+
+    return {
+      success: true,
+      data: {
+        old: profileData,
+        new: result.cleaned,
+        changes: result.diff,
+      },
+    };
+  } catch (error) {
+    log("handleAICleanup: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleApplyCleanup(userId?: string, body?: any): Promise<ApiResponse<any>> {
+  try {
+    const { userProfileManager } = await import("./user-profile/user-profile-manager.js");
+    const { getTags } = await import("./tags.js");
+
+    let targetUserId = userId;
+    if (!targetUserId) {
+      const tags = getTags(process.cwd());
+      targetUserId = tags.user.userEmail || "unknown";
+    }
+
+    const pending = pendingCleanups.get(targetUserId);
+    if (!pending) {
+      return { success: false, error: "No pending cleanup found. Run AI cleanup first." };
+    }
+
+    if (Date.now() > pending.expiresAt) {
+      pendingCleanups.delete(targetUserId);
+      return { success: false, error: "Cleanup session expired. Run AI cleanup again." };
+    }
+
+    const profile = userProfileManager.getActiveProfile(targetUserId);
+    if (!profile) {
+      return { success: false, error: "Profile not found" };
+    }
+
+    const cleanedData = body?.profile || pending.cleaned;
+    const acceptedMerged: string[][] = body?.acceptedMerged || [];
+    const acceptedRemoved: string[] = body?.acceptedRemoved || [];
+
+    // Partial application: start from cleaned data (which has shrunk descriptions)
+    // and only apply removals for items the user unchecked.
+    if (acceptedMerged.length > 0 || acceptedRemoved.length > 0) {
+      const existingData: UserProfileData = JSON.parse(profile.profileData);
+      const result: UserProfileData = {
+        preferences: [...cleanedData.preferences],
+        patterns: [...cleanedData.patterns],
+        workflows: [...cleanedData.workflows],
+      };
+
+      // Remove items the user chose NOT to merge (revert to old descriptions)
+      for (const id of acceptedRemoved) {
+        const desc = findItemDesc(pending.oldProfileData, id);
+        if (desc) removeByDesc(result, desc, itemTypeFromId(id));
+      }
+
+      // For merges: just remove the source items; target is already in cleaned
+      for (const ids of acceptedMerged) {
+        for (let i = 1; i < ids.length; i++) {
+          const srcDesc = findItemDesc(pending.oldProfileData, ids[i] ?? "");
+          if (srcDesc) removeByDesc(result, srcDesc, itemTypeFromId(ids[i] ?? ""));
+        }
+      }
+
+      // Restore source items from unapproved merges
+      const acceptedTargetIds = new Set(acceptedMerged.map((g) => g[0]));
+      for (const groupIds of pending.allMergedIds || []) {
+        if (groupIds.length <= 1) continue;
+        if (acceptedTargetIds.has(groupIds[0])) continue;
+        for (let i = 1; i < groupIds.length; i++) {
+          const srcId = groupIds[i] ?? "";
+          if (!srcId) continue;
+          const srcDesc = findItemDesc(pending.oldProfileData, srcId);
+          if (!srcDesc) continue;
+          const srcItem = findItemByDesc(pending.oldProfileData, srcDesc);
+          if (srcItem) {
+            const { id: _id, ...rest } = srcItem as any;
+            if (srcId.startsWith("pref_")) result.preferences.push(rest);
+            else if (srcId.startsWith("pat_")) result.patterns.push(rest);
+            else if (srcId.startsWith("wf_")) result.workflows.push(rest);
+          }
+        }
+      }
+
+      // Restore items from unapproved removals
+      const acceptedRemovedSet = new Set(acceptedRemoved);
+      for (const removedId of pending.allRemovedIds || []) {
+        if (acceptedRemovedSet.has(removedId)) continue;
+        const desc = findItemDesc(pending.oldProfileData, removedId);
+        if (!desc) continue;
+        const srcItem = findItemByDesc(pending.oldProfileData, desc);
+        if (srcItem) {
+          const { id: _id, ...rest } = srcItem as any;
+          if (removedId.startsWith("pref_")) result.preferences.push(rest);
+          else if (removedId.startsWith("pat_")) result.patterns.push(rest);
+          else if (removedId.startsWith("wf_")) result.workflows.push(rest);
+        }
+      }
+
+      const success = userProfileManager.updateProfile(
+        profile.id,
+        result,
+        0,
+        "AI cleanup applied (partial)"
+      );
+      if (!success)
+        return { success: false, error: "Profile was modified by another session. Please retry." };
+      pendingCleanups.delete(targetUserId);
+      return {
+        success: true,
+        data: { message: "Partial cleanup applied", version: profile.version + 1 },
+      };
+    }
+
+    const success = userProfileManager.updateProfile(
+      profile.id,
+      cleanedData,
+      0,
+      "AI cleanup applied"
+    );
+
+    if (!success) {
+      return { success: false, error: "Profile was modified by another session. Please retry." };
+    }
+
+    pendingCleanups.delete(targetUserId);
+
+    return {
+      success: true,
+      data: { message: "Cleanup applied successfully", version: profile.version + 1 },
+    };
+  } catch (error) {
+    log("handleApplyCleanup: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+function itemTypeFromId(id: string): string {
+  if (id.startsWith("pref_")) return "preferences";
+  if (id.startsWith("pat_")) return "patterns";
+  return "workflows";
+}
+function findItemDesc(profile: UserProfileData, id: string): string | null {
+  if (typeof id !== "string" || !id.includes("_")) return null;
+  const parts = id.split("_");
+  const prefix = parts[0];
+  const idx = parseInt(parts[1] || "", 10);
+  if (isNaN(idx)) return null;
+
+  if (prefix === "pref") return profile.preferences[idx]?.description || null;
+  if (prefix === "pat") return profile.patterns[idx]?.description || null;
+  if (prefix === "wf") return profile.workflows[idx]?.description || null;
+
+  return null;
+}
+function findItemByDesc(profile: UserProfileData, desc: string): any | null {
+  for (const key of ["preferences", "patterns", "workflows"] as const) {
+    const found = (profile as any)[key].find((p: any) => p.description === desc);
+    if (found) return found;
+  }
+  return null;
+}
+function removeByDesc(profile: UserProfileData, desc: string, itemType?: string) {
+  if (!itemType || itemType === "preferences") {
+    profile.preferences = profile.preferences.filter((p) => p.description !== desc);
+  }
+  if (!itemType || itemType === "patterns") {
+    profile.patterns = profile.patterns.filter((p) => p.description !== desc);
+  }
+  if (!itemType || itemType === "workflows") {
+    profile.workflows = profile.workflows.filter((w) => w.description !== desc);
+  }
+}
+
+export async function handleUpdateProfileItem(body?: any): Promise<ApiResponse<any>> {
+  try {
+    const { userProfileManager } = await import("./user-profile/user-profile-manager.js");
+    const { getTags } = await import("./tags.js");
+
+    const tags = getTags(process.cwd());
+    const userId = tags.user.userEmail || "unknown";
+    if (!userId) return { success: false, error: "Unable to resolve user identity" };
+
+    const profile = userProfileManager.getActiveProfile(userId);
+    if (!profile) return { success: false, error: "No profile found" };
+
+    const { type, index, action, category, description, steps } = body || {};
+    if (!type || index === undefined || !action) {
+      return { success: false, error: "type, index, and action are required" };
+    }
+    if (!["preferences", "patterns", "workflows"].includes(type)) {
+      return { success: false, error: "type must be preferences, patterns, or workflows" };
+    }
+    if (!["edit", "delete"].includes(action)) {
+      return { success: false, error: "action must be edit or delete" };
+    }
+
+    const profileData: UserProfileData = JSON.parse(profile.profileData);
+    const items: any[] = (profileData as any)[type] || [];
+    // Re-sort to match handleGetUserProfile's display order
+    const metric = type === "preferences" ? "confidence" : "frequency";
+    const sorted = sortProfileItems(items as any[], metric);
+
+    if (index < 0 || index >= sorted.length) {
+      return { success: false, error: "index out of range" };
+    }
+
+    if (action === "delete") {
+      sorted.splice(index, 1);
+    } else {
+      const item = sorted[index];
+      if (!item) return { success: false, error: "Item not found" };
+      if (category !== undefined && type !== "workflows") item.category = category;
+      if (description !== undefined && description !== item.description) {
+        item.description = description;
+        item.centroid = undefined;
+        item.anchor = undefined;
+      }
+      if (steps !== undefined && Array.isArray(steps) && type === "workflows") item.steps = steps;
+    }
+
+    (profileData as any)[type] = sorted;
+
+    const changeSummary =
+      action === "delete"
+        ? `Deleted ${type.slice(0, -1)} at index ${index}`
+        : `Edited ${type.slice(0, -1)} at index ${index}`;
+
+    const success = userProfileManager.updateProfile(profile.id, profileData, 0, changeSummary);
+    if (!success)
+      return { success: false, error: "Profile was modified by another session. Please retry." };
+
+    return {
+      success: true,
+      data: { message: `${action} successful`, version: profile.version + 1 },
+    };
+  } catch (error) {
+    log("handleUpdateProfileItem: error", { error: String(error) });
     return { success: false, error: String(error) };
   }
 }

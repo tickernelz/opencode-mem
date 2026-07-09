@@ -96,6 +96,14 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       const providerResult = await ctx.client.provider.list();
       if (providerResult.data?.connected) {
         setConnectedProviders(providerResult.data.connected);
+        log("opencode providers connected", {
+          list: providerResult.data.connected,
+          configured: CONFIG.opencodeProvider || "(not set)",
+        });
+      } else {
+        log("opencode provider list empty or failed", {
+          data: JSON.stringify(providerResult.data).substring(0, 100),
+        });
       }
     } catch (error) {
       log("Failed to initialize opencode provider state", { error: String(error) });
@@ -447,17 +455,23 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                     category: "explicit",
                     description: sanitizedContent,
                     confidence: 1.0,
+                    frequency: 1,
                     evidence: ["manual-write"],
-                    lastUpdated: Date.now(),
+                    lastSeen: Date.now(),
                   };
 
                   const existingProfile = userProfileManager.getActiveProfile(userId);
 
                   if (existingProfile) {
                     const existingData = JSON.parse(existingProfile.profileData);
-                    const mergedData = userProfileManager.mergeProfileData(existingData, {
-                      preferences: [newPreference],
-                    });
+                    const mergedData = await userProfileManager.mergeProfileData(
+                      existingData,
+                      {
+                        preferences: [newPreference],
+                      },
+                      undefined,
+                      existingProfile.id
+                    );
                     userProfileManager.updateProfile(
                       existingProfile.id,
                       mergedData,

@@ -3,6 +3,7 @@ import { vectorSearch } from "./sqlite/vector-search.js";
 import { connectionManager } from "./sqlite/connection-manager.js";
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
+import { cosineSimilarity } from "../utils/math.js";
 
 interface DuplicateGroup {
   representative: {
@@ -103,7 +104,7 @@ export class DeduplicationService {
             if (mem1.container_tag !== mem2.container_tag) continue;
 
             const vector2 = new Float32Array(new Uint8Array(mem2.vector).buffer);
-            const similarity = this.cosineSimilarity(vector1, vector2);
+            const similarity = cosineSimilarity(vector1, vector2);
 
             if (similarity >= CONFIG.deduplicationSimilarityThreshold && similarity < 1.0) {
               similarGroup.duplicates.push({
@@ -128,26 +129,6 @@ export class DeduplicationService {
     } finally {
       this.isRunning = false;
     }
-  }
-
-  private cosineSimilarity(a: Float32Array, b: Float32Array): number {
-    if (a.length !== b.length) return 0;
-
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-
-    for (let i = 0; i < a.length; i++) {
-      const aVal = a[i] || 0;
-      const bVal = b[i] || 0;
-      dotProduct += aVal * bVal;
-      normA += aVal * aVal;
-      normB += bVal * bVal;
-    }
-
-    if (normA === 0 || normB === 0) return 0;
-
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 
   getStatus() {

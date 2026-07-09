@@ -26,6 +26,9 @@ import {
   handleGetProfileChangelog,
   handleGetProfileSnapshot,
   handleRefreshProfile,
+  handleAICleanup,
+  handleApplyCleanup,
+  handleUpdateProfileItem,
 } from "./api-handlers.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -251,6 +254,26 @@ async function handleRequest(req: Request): Promise<Response> {
       const body = (await req.json().catch(() => ({}))) as any;
       const userId = body.userId || undefined;
       const result = await handleRefreshProfile(userId);
+      return jsonResponse(result);
+    }
+
+    if (path === "/api/user-profile/ai-cleanup" && method === "POST") {
+      const body = (await req.json().catch(() => ({}))) as any;
+      const userId = body.userId || undefined;
+      const result = await handleAICleanup(userId);
+      return jsonResponse(result);
+    }
+
+    if (path === "/api/user-profile/ai-cleanup/apply" && method === "POST") {
+      const body = (await req.json().catch(() => ({}))) as any;
+      const userId = body.userId || undefined;
+      const result = await handleApplyCleanup(userId, body);
+      return jsonResponse(result);
+    }
+
+    if (path === "/api/user-profile/item" && method === "PATCH") {
+      const body = (await req.json().catch(() => ({}))) as any;
+      const result = await handleUpdateProfileItem(body);
       return jsonResponse(result);
     }
 

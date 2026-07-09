@@ -342,34 +342,35 @@ async function generateSummary(
 ): Promise<{ summary: string; type: string; tags: string[] } | null> {
   // Opencode provider path (when opencodeProvider + opencodeModel configured)
   if (CONFIG.opencodeProvider && CONFIG.opencodeModel) {
-    if (CONFIG.memoryModel) {
-      log("opencodeProvider takes precedence over memoryModel for auto-capture");
-    }
+    try {
+      if (CONFIG.memoryModel) {
+        log("opencodeProvider takes precedence over memoryModel for auto-capture");
+      }
 
-    const { isProviderConnected, getV2Client, generateStructuredOutput } =
-      await import("./ai/opencode-provider.js");
+      const { isProviderConnected, getV2Client, generateStructuredOutput } =
+        await import("./ai/opencode-provider.js");
 
-    if (!isProviderConnected(CONFIG.opencodeProvider)) {
-      throw new Error(
-        `opencode provider '${CONFIG.opencodeProvider}' is not connected. Check your opencode provider configuration.`
-      );
-    }
+      if (!isProviderConnected(CONFIG.opencodeProvider)) {
+        throw new Error(
+          `opencode provider '${CONFIG.opencodeProvider}' is not connected. Check your opencode provider configuration.`
+        );
+      }
 
-    const v2Client = getV2Client();
-    if (!v2Client) {
-      throw new Error(
-        "opencode-mem: v2 client not initialized; cannot perform structured-output capture"
-      );
-    }
+      const v2Client = getV2Client();
+      if (!v2Client) {
+        throw new Error(
+          "opencode-mem: v2 client not initialized; cannot perform structured-output capture"
+        );
+      }
 
-    const { detectLanguage, getLanguageName } = await import("./language-detector.js");
-    const targetLang =
-      CONFIG.autoCaptureLanguage === "auto" || !CONFIG.autoCaptureLanguage
-        ? detectLanguage(userPrompt)
-        : CONFIG.autoCaptureLanguage;
-    const langName = getLanguageName(targetLang);
+      const { detectLanguage, getLanguageName } = await import("./language-detector.js");
+      const targetLang =
+        CONFIG.autoCaptureLanguage === "auto" || !CONFIG.autoCaptureLanguage
+          ? detectLanguage(userPrompt)
+          : CONFIG.autoCaptureLanguage;
+      const langName = getLanguageName(targetLang);
 
-    const systemPrompt = `You are a technical memory recorder for a software development project.
+      const systemPrompt = `You are a technical memory recorder for a software development project.
 
 RULES:
 1. ONLY capture technical work (code, bugs, features, architecture, config)
@@ -389,31 +390,36 @@ FORMAT:
 SKIP if: greetings, casual chat, no code/decisions made
 CAPTURE if: code changed, bug fixed, feature added, decision made`;
 
-    const aiPrompt = `${context}
+      const aiPrompt = `${context}
 
 Analyze this conversation. If it contains technical work (code, bugs, features, decisions), create a concise summary and relevant tags. If it's non-technical (greetings, casual chat, incomplete requests), return type="skip" with empty summary.`;
 
-    const { z } = await import("zod");
-    const schema = z.object({
-      summary: z.string(),
-      type: z.string(),
-      tags: z.array(z.string()),
-    });
+      const { z } = await import("zod");
+      const schema = z.object({
+        summary: z.string(),
+        type: z.string(),
+        tags: z.array(z.string()),
+      });
 
-    const result = await generateStructuredOutput({
-      client: v2Client,
-      providerID: CONFIG.opencodeProvider,
-      modelID: CONFIG.opencodeModel,
-      systemPrompt,
-      userPrompt: aiPrompt,
-      schema,
-    });
+      const result = await generateStructuredOutput({
+        client: v2Client,
+        providerID: CONFIG.opencodeProvider,
+        modelID: CONFIG.opencodeModel,
+        systemPrompt,
+        userPrompt: aiPrompt,
+        schema,
+      });
 
-    return {
-      summary: result.summary,
-      type: result.type,
-      tags: (result.tags || []).map((t: string) => t.toLowerCase().trim()),
-    };
+      return {
+        summary: result.summary,
+        type: result.type,
+        tags: (result.tags || []).map((t: string) => t.toLowerCase().trim()),
+      };
+    } catch (e) {
+      log("auto-capture: opencode provider failed, falling back to external API", {
+        error: String(e),
+      });
+    }
   }
 
   // Existing manual config path

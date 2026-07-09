@@ -14,6 +14,7 @@ const state = {
   selectedMemories: new Set(),
   autoRefreshInterval: null,
   userProfile: null,
+  profilePages: { pref: 1, pat: 1, wf: 1 },
 };
 
 marked.setOptions({
@@ -31,9 +32,13 @@ function renderMarkdown(markdown) {
 async function fetchAPI(endpoint, options = {}) {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    const timeoutMs =
+      options.timeout ||
+      (options.method === "POST" && endpoint.includes("/ai-cleanup") ? 180000 : 60000);
+    const { timeout: _, ...fetchOptions } = options;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const response = await fetch(API_BASE + endpoint, {
-      ...options,
+      ...fetchOptions,
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
@@ -925,9 +930,38 @@ function renderUserProfile() {
     return flattened;
   };
 
+  const PAGE_SIZE = 20;
+  function paginate(items, page, type) {
+    const total = items.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const start = (page - 1) * PAGE_SIZE;
+    const pageItems = items.slice(start, start + PAGE_SIZE);
+    if (total <= PAGE_SIZE) return { items: pageItems, controls: "" };
+    if (page > totalPages) page = totalPages;
+    const pages = [];
+    for (let i = 1; i <= totalPages; i++) {
+      pages.push(
+        `<button class="btn-page${i === page ? " active" : ""}" data-page-type="${type}" data-page="${i}">${i}</button>`
+      );
+    }
+    const controls = `
+        <div class="pagination-bar">
+          <span class="pagination-info">${start + 1}-${Math.min(start + PAGE_SIZE, total)} / ${total}</span>
+          ${pages.join("")}
+        </div>`;
+    return { items: pageItems, controls };
+  }
+
   const preferences = parseField(data.preferences);
   const patterns = parseField(data.patterns);
   const workflows = parseField(data.workflows);
+
+  if (!state.profilePages) {
+    state.profilePages = { pref: 1, pat: 1, wf: 1 };
+  }
+  const pp = paginate(preferences, state.profilePages.pref, "pref");
+  const pt = paginate(patterns, state.profilePages.pat, "pat");
+  const pw = paginate(workflows, state.profilePages.wf, "wf");
 
   container.innerHTML = `
     <div class="profile-header">
@@ -961,35 +995,46 @@ function renderUserProfile() {
             ? `<p class="empty-text">${t("empty-preferences")}</p>`
             : `
           <div class="cards-grid">
-            ${preferences
-              .sort((a, b) => (b.confidence || 0) - (a.confidence || 0))
+            ${pp.items
               .map(
                 (p) => `
               <div class="compact-card preference-card">
                 <div class="card-top">
                   <span class="category-tag">${escapeHtml(p.category || "General")}</span>
-                  <div class="confidence-ring" style="--p:${Math.round((p.confidence || 0) * 100)}">
-                    <span>${Math.round((p.confidence || 0) * 100)}%</span>
+                  <div class="card-actions">
+                    <button class="btn-icon btn-edit-profile-item" data-type="preferences" data-index="${preferences.indexOf(p)}" title="${t("btn-edit") || "Edit"}"><i data-lucide="pencil" class="icon-xs"></i></button>
+                    <button class="btn-icon btn-delete-profile-item" data-type="preferences" data-index="${preferences.indexOf(p)}" title="${t("btn-delete") || "Delete"}"><i data-lucide="trash-2" class="icon-xs"></i></button>
+                  </div>
+                  <div class="confidence-ring" style="--p:${Math.round((p.confidence || 0) * 1000) / 10}">
+                    <span>${Math.round((p.confidence || 0) * 1000) / 10}%</span>
                   </div>
                 </div>
                 <div class="card-body">
                   <p class="card-text">${escapeHtml(p.description || "")}</p>
                 </div>
-                ${
-                  p.evidence && p.evidence.length > 0
-                    ? `
+                  ${
+                    p.evidence || p.frequency
+                      ? `
                 <div class="card-footer">
+                  <span class="evidence-count" title="${t("label-evidence-tooltip", { count: p.frequency || 1 })}">🎯 ${p.frequency || 1}</span>
+                  ${
+                    p.evidence && p.evidence.length > 0
+                      ? `
+                  <span class="evidence-sep">·</span>
                   <span class="evidence-toggle" title="${escapeHtml(Array.isArray(p.evidence) ? p.evidence.join("\n") : p.evidence)}">
                     <i data-lucide="info" class="icon-xs"></i> ${Array.isArray(p.evidence) ? p.evidence.length : 1} evidence
-                  </span>
+                  </span>`
+                      : ""
+                  }
                 </div>`
-                    : ""
-                }
+                      : ""
+                  }
               </div>
             `
               )
               .join("")}
           </div>
+          ${pp.controls}
         `
         }
       </div>
@@ -1001,21 +1046,41 @@ function renderUserProfile() {
             ? `<p class="empty-text">${t("empty-patterns")}</p>`
             : `
           <div class="cards-grid">
-            ${patterns
+            ${pt.items
               .map(
                 (p) => `
               <div class="compact-card pattern-card">
                 <div class="card-top">
                   <span class="category-tag">${escapeHtml(p.category || "General")}</span>
+                  <div class="card-actions">
+                    <button class="btn-icon btn-edit-profile-item" data-type="patterns" data-index="${patterns.indexOf(p)}" title="${t("btn-edit") || "Edit"}"><i data-lucide="pencil" class="icon-xs"></i></button>
+                    <button class="btn-icon btn-delete-profile-item" data-type="patterns" data-index="${patterns.indexOf(p)}" title="${t("btn-delete") || "Delete"}"><i data-lucide="trash-2" class="icon-xs"></i></button>
+                  </div>
+                  <div class="confidence-ring" style="--p:${Math.round((p.confidence || 0) * 1000) / 10}">
+                    <span>${Math.round((p.confidence || 0) * 1000) / 10}%</span>
+                  </div>
                 </div>
                 <div class="card-body">
                   <p class="card-text">${escapeHtml(p.description || "")}</p>
+                </div>
+                <div class="card-footer">
+                  <span class="evidence-count" title="${t("label-evidence-tooltip", { count: p.frequency || 1 })}">🎯 ${p.frequency || 1}</span>
+                  ${
+                    p.evidence && p.evidence.length > 0
+                      ? `
+                  <span class="evidence-sep">·</span>
+                  <span class="evidence-toggle" title="${escapeHtml(Array.isArray(p.evidence) ? p.evidence.join("\n") : p.evidence)}">
+                    <i data-lucide="info" class="icon-xs"></i> ${Array.isArray(p.evidence) ? p.evidence.length : 1} evidence
+                  </span>`
+                      : ""
+                  }
                 </div>
               </div>
             `
               )
               .join("")}
           </div>
+          ${pt.controls}
         `
         }
       </div>
@@ -1027,11 +1092,21 @@ function renderUserProfile() {
             ? `<p class="empty-text">${t("empty-workflows")}</p>`
             : `
           <div class="workflows-grid">
-            ${workflows
+            ${pw.items
+              .sort((a, b) => (b.frequency || 0) - (a.frequency || 0))
               .map(
                 (w) => `
               <div class="workflow-row">
-                <div class="workflow-title">${escapeHtml(w.description || "")}</div>
+                <div class="workflow-header">
+                  <div class="workflow-title">${escapeHtml(w.description || "")}</div>
+                  <div class="card-actions">
+                    <button class="btn-icon btn-edit-profile-item" data-type="workflows" data-index="${workflows.indexOf(w)}" title="${t("btn-edit") || "Edit"}"><i data-lucide="pencil" class="icon-xs"></i></button>
+                    <button class="btn-icon btn-delete-profile-item" data-type="workflows" data-index="${workflows.indexOf(w)}" title="${t("btn-delete") || "Delete"}"><i data-lucide="trash-2" class="icon-xs"></i></button>
+                  </div>
+                  <div class="confidence-ring" style="--p:${Math.round((w.confidence || 0) * 1000) / 10}">
+                    <span>${Math.round((w.confidence || 0) * 1000) / 10}%</span>
+                  </div>
+                </div>
                 <div class="workflow-steps-horizontal">
                   ${(w.steps || [])
                     .map(
@@ -1045,11 +1120,24 @@ function renderUserProfile() {
                     )
                     .join("")}
                 </div>
+                <div class="workflow-footer">
+                  <span class="evidence-count" title="${t("label-evidence-tooltip", { count: w.frequency || 1 })}">🎯 ${w.frequency || 1}</span>
+                  ${
+                    w.evidence && w.evidence.length > 0
+                      ? `
+                  <span class="evidence-sep">·</span>
+                  <span class="evidence-toggle" title="${escapeHtml(Array.isArray(w.evidence) ? w.evidence.join("\n") : w.evidence)}">
+                    <i data-lucide="info" class="icon-xs"></i> ${Array.isArray(w.evidence) ? w.evidence.length : 1} evidence
+                  </span>`
+                      : ""
+                  }
+                </div>
               </div>
             `
               )
               .join("")}
           </div>
+          ${pw.controls}
         `
         }
       </div>
@@ -1105,6 +1193,598 @@ async function refreshProfile() {
     showToast(result.error || t("toast-update-failed"), "error");
   }
 }
+async function showAICleanup() {
+  const modal = document.getElementById("ai-cleanup-modal");
+  const loading = document.getElementById("cleanup-loading");
+  const diffV2 = document.getElementById("cleanup-diff-v2");
+  const applyBtn = document.getElementById("cleanup-apply-btn");
+  const sections = document.getElementById("cleanup-sections");
+
+  modal.classList.remove("hidden");
+  loading.classList.add("hidden");
+  diffV2.classList.remove("hidden");
+  diffV2.style.cssText = "display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;";
+  applyBtn.classList.add("hidden");
+  document.getElementById("cleanup-toolbar")?.classList.add("hidden");
+  document.getElementById("cleanup-kept-section")?.classList.add("hidden");
+
+  if (!state.userProfile?.profileData) {
+    showToast("No profile data loaded", "error");
+    modal.classList.add("hidden");
+    return;
+  }
+
+  const pd = state.userProfile.profileData;
+  const allItems = [
+    ...(pd.preferences || []).map((p, i) => ({ ...p, _id: `pref_${i}`, _type: "pref" })),
+    ...(pd.patterns || []).map((p, i) => ({ ...p, _id: `pat_${i}`, _type: "pat" })),
+    ...(pd.workflows || []).map((w, i) => ({ ...w, _id: `wf_${i}`, _type: "wf" })),
+  ];
+
+  let html = `<div class="cleanup-select-header">
+    <h3>${t("label-ai-cleanup-select")}</h3>
+    <div class="cleanup-select-actions">
+      <button class="btn btn-secondary" id="sel-all">${t("label-ai-cleanup-select-all")}</button>
+      <button class="btn btn-secondary" id="sel-none">${t("label-ai-cleanup-deselect-all")}</button>
+      <button class="btn btn-secondary" id="sel-low">${t("label-ai-cleanup-select-low")}</button>
+      <button class="btn btn-secondary" id="sel-same-cat">${t("label-ai-cleanup-select-same-cat")}</button>
+    </div>
+  </div>`;
+
+  const cats = {};
+  for (const it of allItems) {
+    const cat = it.category || "(none)";
+    if (!cats[cat]) cats[cat] = { pref: [], pat: [], wf: [] };
+    cats[cat][it._type === "wf" ? "wf" : it._type === "pat" ? "pat" : "pref"].push(it);
+  }
+
+  html += `<div class="cleanup-select-grid">`;
+  for (const cat of Object.keys(cats).sort()) {
+    const items = [...cats[cat].pref, ...cats[cat].pat, ...cats[cat].wf];
+    html += `<div class="cleanup-cat-group">
+      <div class="cleanup-cat-header">
+        <span class="category-tag">${escapeHtml(cat)}</span>
+        <span class="cat-count">${items.length} items</span>
+      </div>`;
+    for (const it of items) {
+      const freq = it.frequency || 0;
+      const conf = it.confidence;
+      html += `<label class="cleanup-item-row">
+        <input type="checkbox" class="cleanup-sel-item" data-id="${it._id}" ${freq <= 3 ? "checked" : ""}>
+        <span class="cleanup-item-type">${it._type === "pref" ? "P" : it._type === "pat" ? "T" : "W"}</span>
+        <span class="cleanup-item-desc">${escapeHtml((it.description || "").substring(0, 80))}</span>
+        <span class="cleanup-item-stats">🎯${freq}${conf != null ? " | " + Math.round(conf * 100) + "%" : ""}</span>
+      </label>`;
+    }
+    html += `</div>`;
+  }
+  html += `</div>
+  <div class="cleanup-select-footer">
+    <span id="cleanup-sel-count">${t("label-ai-cleanup-selected", { count: allItems.filter((it) => (it.frequency || 0) <= 3).length })}</span>
+    <button class="btn btn-primary" id="sel-analyze">${t("label-ai-cleanup-analyze")}</button>
+  </div>`;
+
+  sections.innerHTML = html;
+
+  const getSelected = () =>
+    [...document.querySelectorAll(".cleanup-sel-item:checked")].map((cb) => cb.dataset.id);
+
+  const updateCount = () => {
+    document.getElementById("cleanup-sel-count").textContent = t("label-ai-cleanup-selected", {
+      count: getSelected().length,
+    });
+  };
+
+  sections.addEventListener("change", (e) => {
+    if (e.target.classList.contains("cleanup-sel-item")) updateCount();
+  });
+
+  document.getElementById("sel-all").addEventListener("click", () => {
+    document.querySelectorAll(".cleanup-sel-item").forEach((cb) => {
+      cb.checked = true;
+    });
+    updateCount();
+  });
+  document.getElementById("sel-none").addEventListener("click", () => {
+    document.querySelectorAll(".cleanup-sel-item").forEach((cb) => {
+      cb.checked = false;
+    });
+    updateCount();
+  });
+  document.getElementById("sel-low").addEventListener("click", () => {
+    document.querySelectorAll(".cleanup-sel-item").forEach((cb) => {
+      const it = allItems.find((x) => x._id === cb.dataset.id);
+      cb.checked = it && (it.frequency || 0) <= 3;
+    });
+    updateCount();
+  });
+  document.getElementById("sel-same-cat").addEventListener("click", () => {
+    document.querySelectorAll(".cleanup-sel-item").forEach((cb) => {
+      cb.checked = false;
+    });
+    // Select items from categories with 3+ items
+    for (const cat of Object.keys(cats)) {
+      const count = [...cats[cat].pref, ...cats[cat].pat, ...cats[cat].wf].length;
+      if (count >= 3) {
+        [...cats[cat].pref, ...cats[cat].pat, ...cats[cat].wf].forEach((it) => {
+          const cb = document.querySelector(`.cleanup-sel-item[data-id="${it._id}"]`);
+          if (cb) cb.checked = true;
+        });
+      }
+    }
+    updateCount();
+  });
+
+  document.getElementById("sel-analyze").addEventListener("click", async () => {
+    const ids = getSelected();
+    if (ids.length === 0) {
+      showToast("No items selected", "warn");
+      return;
+    }
+    sections.innerHTML = "";
+    loading.classList.remove("hidden");
+    try {
+      const result = await fetchAPI("/api/user-profile/ai-cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ includeIds: ids }),
+        timeout: 180000,
+      });
+      loading.classList.add("hidden");
+      if (!result.success) {
+        showToast(result.error || "Cleanup failed", "error");
+        return;
+      }
+      renderCleanupDiffV2(result.data);
+      diffV2.classList.remove("hidden");
+      state.pendingCleanup = result.data;
+    } catch (e) {
+      loading.classList.add("hidden");
+      showToast("Cleanup failed: " + e.message, "error");
+    }
+  });
+
+  setTimeout(() => applyLanguage?.(), 0);
+  lucide?.createIcons?.();
+}
+
+function renderCleanupDiffV2(data) {
+  const changes = data.changes;
+  const sections = document.getElementById("cleanup-sections");
+  const diffV2 = document.getElementById("cleanup-diff-v2");
+  diffV2.style.cssText = "";
+  sections.style.cssText = "";
+
+  let html = renderMergeSection(changes.merged || [], data.old);
+  html += renderRemoveSection(changes.removed || [], data.old);
+  sections.innerHTML = html;
+
+  renderKeptSection(changes.kept || []);
+  bindCleanupToolbar();
+
+  const applyBtn = document.getElementById("cleanup-apply-btn");
+  applyBtn.classList.remove("hidden");
+  applyBtn.textContent = t("label-ai-cleanup-apply") || "Apply Changes";
+
+  setTimeout(() => applyLanguage?.(), 0);
+  lucide?.createIcons?.();
+}
+
+function renderMergeSection(merged, old) {
+  if (merged.length === 0) return "";
+
+  let html = `<h4 class="section-divider"><i data-lucide="git-merge" class="icon-xs"></i> ${t("label-ai-cleanup-merged-header", { count: merged.length })}</h4>`;
+
+  merged.forEach((m, mi) => {
+    const mainId = m.ids[0];
+    const mergedFrom = m.ids.slice(1);
+    const mainDesc = m.result || "";
+    const mainSteps = findStepsById(mainId, old);
+    const mergedDescs = mergedFrom
+      .map((id) => {
+        const desc = findDescById(id, old);
+        const typeLabel = getTypeLabel(id);
+        const steps = findStepsById(id, old);
+        return desc ? { desc, typeLabel, steps } : null;
+      })
+      .filter(Boolean);
+
+    const stepsAfter = mainSteps?.length
+      ? `<div class="cleanup-steps">${renderStepsInline(mainSteps)}</div>`
+      : "";
+
+    html += `<div class="diff-card merge-card" data-group="${mi}">
+        <label class="diff-card-check">
+          <input type="checkbox" class="diff-checkbox" data-type="merged" data-index="${mi}" checked>
+          <span class="check-label">${t("label-ai-cleanup-merge-check")}</span>
+        </label>
+        <div class="merge-body">
+          <div class="merge-before">
+            ${mergedDescs
+              .map((d) => {
+                const stepsHtml = d.steps?.length
+                  ? `<div class="cleanup-steps">${renderStepsInline(d.steps)}</div>`
+                  : "";
+                return `<div class="merge-source"><span class="type-badge">${d.typeLabel}</span> ${escapeHtml(d.desc.substring(0, 80))}${d.desc.length > 80 ? "..." : ""}${stepsHtml}</div>`;
+              })
+              .join("")}
+          </div>
+          <div class="merge-arrow">▶</div>
+          <div class="merge-after">${escapeHtml(mainDesc.substring(0, 120))}${mainDesc.length > 120 ? "..." : ""}${stepsAfter}</div>
+        </div>
+      </div>`;
+  });
+
+  return html;
+}
+
+function renderRemoveSection(removed, old) {
+  if (removed.length === 0) return "";
+
+  let html = `<h4 class="section-divider"><i data-lucide="trash-2" class="icon-xs"></i> ${t("label-ai-cleanup-removed-header", { count: removed.length })}</h4>`;
+
+  removed.forEach((r, ri) => {
+    const desc = findDescById(r.id, old);
+    const steps = findStepsById(r.id, old);
+    const stepsHtml = steps?.length
+      ? `<div class="cleanup-steps">${renderStepsInline(steps)}</div>`
+      : "";
+    html += `<div class="diff-card remove-card" data-group="${ri}">
+        <label class="diff-card-check">
+          <input type="checkbox" class="diff-checkbox" data-type="removed" data-index="${ri}" checked>
+          <span class="check-label">${t("label-ai-cleanup-remove-check")}</span>
+        </label>
+        <div class="remove-body">
+          <div class="remove-desc">${escapeHtml(desc || r.id)}${stepsHtml}</div>
+          <div class="remove-reason">${escapeHtml(r.reason)}</div>
+        </div>
+      </div>`;
+  });
+
+  return html;
+}
+
+function renderKeptSection(kept) {
+  const keptCount = document.getElementById("cleanup-kept-count");
+  const keptList = document.getElementById("cleanup-kept-list");
+  const keptItems = kept || [];
+
+  keptCount.textContent = `(${keptItems.length})`;
+  keptList.innerHTML = keptItems
+    .map((k) => `<div class="kept-item">${escapeHtml(k)}</div>`)
+    .join("");
+
+  if (keptItems.length === 0) {
+    document.getElementById("cleanup-kept-section").classList.add("hidden");
+  } else {
+    document.getElementById("cleanup-kept-section").classList.remove("hidden");
+    keptList.classList.add("hidden");
+  }
+
+  document.getElementById("cleanup-kept-toggle").onclick = () => {
+    keptList.classList.toggle("hidden");
+    const icon = document.getElementById("cleanup-kept-toggle").querySelector("i");
+    if (icon) {
+      icon.setAttribute(
+        "data-lucide",
+        keptList.classList.contains("hidden") ? "chevron-down" : "chevron-up"
+      );
+    }
+    lucide?.createIcons?.();
+  };
+}
+
+function bindCleanupToolbar() {
+  document.querySelectorAll(".diff-checkbox").forEach((cb) => {
+    cb.addEventListener("change", updateCleanupStats);
+  });
+
+  updateCleanupStats();
+
+  document.getElementById("cleanup-select-all").onclick = () => {
+    document.querySelectorAll(".diff-checkbox").forEach((cb) => {
+      cb.checked = true;
+    });
+    updateCleanupStats();
+  };
+  document.getElementById("cleanup-deselect-all").onclick = () => {
+    document.querySelectorAll(".diff-checkbox").forEach((cb) => {
+      cb.checked = false;
+    });
+    updateCleanupStats();
+  };
+}
+
+function getTypeLabel(id) {
+  if (typeof id !== "string" || !id.includes("_")) return "?";
+  const prefix = id.split("_")[0];
+  if (prefix === "pref") return t("profile-type-pref") || "Pref";
+  if (prefix === "pat") return t("profile-type-pat") || "Pat";
+  if (prefix === "wf") return t("profile-type-wf") || "Wf";
+  return "?";
+}
+
+function findDescById(id, profileData) {
+  if (!profileData) return null;
+  if (typeof id === "string" && id.includes("_")) {
+    const parts = id.split("_");
+    const prefix = parts[0];
+    const idx = parseInt(parts[1], 10);
+    if (!isNaN(idx)) {
+      if (prefix === "pref" && profileData.preferences?.[idx]) {
+        return profileData.preferences[idx].description;
+      }
+      if (prefix === "pat" && profileData.patterns?.[idx]) {
+        return profileData.patterns[idx].description;
+      }
+      if (prefix === "wf" && profileData.workflows?.[idx]) {
+        return profileData.workflows[idx].description;
+      }
+    }
+  }
+  return null;
+}
+
+function findStepsById(id, profileData) {
+  if (!profileData || typeof id !== "string" || !id.includes("_")) return null;
+  const parts = id.split("_");
+  const idx = parseInt(parts[1], 10);
+  if (isNaN(idx) || parts[0] !== "wf") return null;
+  return profileData.workflows?.[idx]?.steps || null;
+}
+
+function renderStepsInline(steps) {
+  return steps
+    .map(
+      (s, i) =>
+        `<span class="step-inline"><span class="step-inline-num">${i + 1}</span> ${escapeHtml(s)}</span>`
+    )
+    .join('<span class="step-arrow-inline">→</span>');
+}
+
+function updateCleanupStats() {
+  const checkboxes = document.querySelectorAll(".diff-checkbox");
+  let selected = 0;
+  checkboxes.forEach((cb) => {
+    if (cb.checked) selected++;
+  });
+  const total = checkboxes.length;
+  document.getElementById("cleanup-stats").textContent = t("label-ai-cleanup-changes-selected", {
+    selected,
+    total,
+  });
+  const btn = document.getElementById("cleanup-apply-btn");
+  if (btn) {
+    btn.textContent =
+      selected > 0
+        ? `${t("label-ai-cleanup-apply")} (${selected})`
+        : t("label-ai-cleanup-apply") || "Apply";
+    btn.disabled = selected === 0;
+  }
+}
+
+async function applyAICleanup() {
+  const applyBtn = document.getElementById("cleanup-apply-btn");
+  applyBtn.disabled = true;
+
+  const acceptedMerged = [];
+  const acceptedRemoved = [];
+  document.querySelectorAll(".diff-checkbox").forEach((cb) => {
+    if (!cb.checked) return;
+    if (cb.dataset.type === "merged") {
+      const mi = parseInt(cb.dataset.index, 10);
+      const change = state.pendingCleanup?.changes?.merged?.[mi];
+      if (change) acceptedMerged.push(change.ids);
+    } else if (cb.dataset.type === "removed") {
+      const ri = parseInt(cb.dataset.index, 10);
+      const change = state.pendingCleanup?.changes?.removed?.[ri];
+      if (change) acceptedRemoved.push(change.id);
+    }
+  });
+
+  try {
+    const result = await fetchAPI("/api/user-profile/ai-cleanup/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        profile: state.pendingCleanup?.new,
+        acceptedMerged,
+        acceptedRemoved,
+      }),
+    });
+
+    if (result.success) {
+      showToast(t("toast-cleanup-success"), "success");
+      closeCleanupModal();
+      delete state.pendingCleanup;
+      await loadUserProfile();
+    } else {
+      showToast(result.error || t("toast-cleanup-apply-failed"), "error");
+    }
+  } catch (e) {
+    showToast(t("toast-cleanup-apply-failed") + ": " + e.message, "error");
+  }
+
+  applyBtn.disabled = false;
+}
+
+function closeCleanupModal() {
+  document.getElementById("ai-cleanup-modal").classList.add("hidden");
+  delete state.pendingCleanup;
+}
+
+function showProfileItemModal(type, index, action) {
+  const current = getCurrentItem(type, index);
+  if (!current) return;
+
+  const isEdit = action === "edit";
+  const isWorkflow = type === "workflows";
+  const modal = document.getElementById("profile-item-modal");
+
+  document.getElementById("profile-item-modal-title").textContent = isEdit
+    ? t("btn-edit") || "Edit Item"
+    : t("confirm-delete") || "Delete Item?";
+  document.getElementById("profile-item-category").value = current.category || "";
+  document.getElementById("profile-item-category").disabled = !isEdit;
+  document.getElementById("profile-item-description").value = current.description || "";
+  document.getElementById("profile-item-description").disabled = !isEdit;
+  document.getElementById("profile-item-category").closest(".form-group").style.display = isWorkflow
+    ? "none"
+    : "block";
+  document.getElementById("profile-item-save").textContent = isEdit
+    ? t("btn-save") || "Save"
+    : t("btn-delete") || "Delete";
+
+  const stepsSection = document.getElementById("steps-section");
+  if (isWorkflow && isEdit) {
+    stepsSection.style.display = "block";
+    renderStepsEditor(current.steps || []);
+  } else {
+    stepsSection.style.display = "none";
+  }
+
+  const saveBtn = document.getElementById("profile-item-save");
+  if (isEdit) saveBtn.classList.remove("danger");
+  else saveBtn.classList.add("danger");
+
+  modal.dataset.deleteStep = "1";
+  modal.classList.remove("hidden");
+  modal._profileAction = { type, index, action };
+}
+
+async function editProfileItem(type, index) {
+  showProfileItemModal(type, index, "edit");
+}
+
+async function deleteProfileItem(type, index) {
+  showProfileItemModal(type, index, "delete");
+}
+
+function submitProfileItemForm(e) {
+  e.preventDefault();
+  const modal = document.getElementById("profile-item-modal");
+  const { type, index, action } = modal._profileAction || {};
+  if (!type) return;
+
+  if (action === "edit") {
+    submitProfileEdit(type, index);
+  } else if (action === "delete") {
+    if (modal.dataset.deleteStep === "2") {
+      submitProfileDelete(type, index);
+    } else {
+      showDeleteConfirmation();
+    }
+  }
+}
+
+async function submitProfileEdit(type, index) {
+  const isWorkflow = type === "workflows";
+  const category = isWorkflow ? undefined : document.getElementById("profile-item-category").value;
+  const description = document.getElementById("profile-item-description").value;
+  const body = { type, index, action: "edit", category, description };
+
+  if (type === "workflows") {
+    body.steps = collectSteps();
+  }
+
+  const result = await fetchAPI("/api/user-profile/item", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (result.success) {
+    showToast(t("toast-update-success") || "Item updated", "success");
+    closeProfileItemModal();
+    await loadUserProfile();
+  } else {
+    showToast(result.error || t("toast-update-failed") || "Update failed", "error");
+  }
+}
+
+function showDeleteConfirmation() {
+  document.getElementById("profile-item-modal-title").textContent =
+    t("confirm-delete-title") || "Confirm Delete";
+  document.getElementById("profile-item-category").closest(".form-group").style.display = "none";
+  document.getElementById("profile-item-description").closest(".form-group").style.display = "none";
+  document.getElementById("profile-item-save").textContent = t("btn-delete") || "Delete";
+  document.getElementById("profile-item-save").classList.add("danger");
+  document.getElementById("profile-item-modal").dataset.deleteStep = "2";
+}
+
+async function submitProfileDelete(type, index) {
+  const result = await fetchAPI("/api/user-profile/item", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type, index, action: "delete" }),
+  });
+
+  if (result.success) {
+    showToast(t("toast-delete-success") || "Item deleted", "success");
+    closeProfileItemModal();
+    await loadUserProfile();
+  } else {
+    showToast(result.error || t("toast-delete-failed") || "Delete failed", "error");
+  }
+}
+
+function closeProfileItemModal() {
+  const modal = document.getElementById("profile-item-modal");
+  modal.classList.add("hidden");
+  document.getElementById("profile-item-category").disabled = false;
+  document.getElementById("profile-item-category").closest(".form-group").style.display = "block";
+  document.getElementById("profile-item-description").disabled = false;
+  document.getElementById("profile-item-description").closest(".form-group").style.display =
+    "block";
+  document.getElementById("steps-section").style.display = "none";
+  const saveBtn = document.getElementById("profile-item-save");
+  saveBtn.classList.remove("danger");
+  modal.dataset.deleteStep = "1";
+  delete modal._profileAction;
+}
+
+function getCurrentItem(type, index) {
+  if (!state.userProfile?.profileData) return null;
+  return state.userProfile.profileData[type]?.[index] || null;
+}
+
+function renderStepsEditor(steps) {
+  const container = document.getElementById("steps-container");
+  container.innerHTML = "";
+  (steps || []).forEach((step, i) => addStepRow(step, i));
+  if (!steps?.length) addStepRow("");
+}
+
+function addStepRow(text = "") {
+  const container = document.getElementById("steps-container");
+  const i = container.children.length;
+  const row = document.createElement("div");
+  row.className = "step-row";
+  row.innerHTML = `<span class="step-num">${i + 1}</span>
+    <input type="text" class="step-input" value="${escapeHtml(text)}" placeholder="Step ${i + 1}..." />
+    <button type="button" class="btn-icon btn-remove-step" title="${t("btn-delete") || "Delete"}">×</button>`;
+  row.querySelector(".btn-remove-step").addEventListener("click", () => removeStepRow(row));
+  container.appendChild(row);
+}
+
+function removeStepRow(row) {
+  row.remove();
+  updateStepNumbers();
+}
+
+function updateStepNumbers() {
+  const rows = document.querySelectorAll("#steps-container .step-row");
+  rows.forEach((row, i) => {
+    row.querySelector(".step-num").textContent = i + 1;
+    row.querySelector(".step-input").placeholder = `Step ${i + 1}...`;
+  });
+}
+
+function collectSteps() {
+  return [...document.querySelectorAll("#steps-container .step-input")]
+    .map((el) => el.value.trim())
+    .filter(Boolean);
+}
 
 function switchView(view) {
   state.currentView = view;
@@ -1154,6 +1834,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   document.getElementById("lang-toggle").textContent = getLanguage().toUpperCase();
+  setLanguage(getLanguage());
 
   document.getElementById("tag-filter").addEventListener("change", () => {
     state.selectedTag = document.getElementById("tag-filter").value;
@@ -1200,6 +1881,64 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   document.getElementById("edit-modal").addEventListener("click", (e) => {
     if (e.target.id === "edit-modal") closeModal();
+  });
+
+  document.getElementById("ai-cleanup-btn")?.addEventListener("click", showAICleanup);
+  document.getElementById("cleanup-modal-close")?.addEventListener("click", closeCleanupModal);
+  document.getElementById("cleanup-cancel-btn")?.addEventListener("click", closeCleanupModal);
+  document.getElementById("cleanup-apply-btn")?.addEventListener("click", applyAICleanup);
+
+  // Re-render diff on language change if visible
+  document.addEventListener("langchange", () => {
+    if (
+      state.pendingCleanup &&
+      !document.getElementById("ai-cleanup-modal").classList.contains("hidden")
+    ) {
+      const diffV2 = document.getElementById("cleanup-diff-v2");
+      if (!diffV2.classList.contains("hidden")) {
+        // Save checkbox states
+        const checkedStates = [];
+        document.querySelectorAll(".diff-checkbox").forEach((cb, i) => {
+          checkedStates[i] = cb.checked;
+        });
+        renderCleanupDiffV2(state.pendingCleanup);
+        // Restore checkbox states
+        document.querySelectorAll(".diff-checkbox").forEach((cb, i) => {
+          if (checkedStates[i] !== undefined) cb.checked = checkedStates[i];
+        });
+        updateCleanupStats();
+      }
+    }
+  });
+
+  document.getElementById("profile-item-form")?.addEventListener("submit", submitProfileItemForm);
+  document
+    .getElementById("profile-item-modal-close")
+    ?.addEventListener("click", closeProfileItemModal);
+  document.getElementById("profile-item-cancel")?.addEventListener("click", closeProfileItemModal);
+  document.getElementById("btn-add-step")?.addEventListener("click", () => addStepRow(""));
+
+  // Event delegation for dynamically generated profile edit/delete buttons
+  document.getElementById("profile-content").addEventListener("click", (e) => {
+    const editBtn = e.target.closest(".btn-edit-profile-item");
+    const deleteBtn = e.target.closest(".btn-delete-profile-item");
+    const pageBtn = e.target.closest(".btn-page");
+    if (editBtn) {
+      const type = editBtn.dataset.type;
+      const index = parseInt(editBtn.dataset.index, 10);
+      editProfileItem(type, index);
+    }
+    if (deleteBtn) {
+      const type = deleteBtn.dataset.type;
+      const index = parseInt(deleteBtn.dataset.index, 10);
+      deleteProfileItem(type, index);
+    }
+    if (pageBtn && !pageBtn.disabled) {
+      const pageType = pageBtn.dataset.pageType;
+      const page = parseInt(pageBtn.dataset.page, 10);
+      state.profilePages[pageType] = page;
+      refreshProfile();
+    }
   });
 
   await loadTags();

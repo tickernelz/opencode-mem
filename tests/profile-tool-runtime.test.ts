@@ -85,7 +85,7 @@ mock.module(${JSON.stringify(userProfileManagerUrl)}, () => ({
         const existing = preferences.find((item) => item.description === pref.description);
         if (existing) {
           existing.confidence = Math.max(existing.confidence ?? 0, pref.confidence ?? 0);
-          existing.lastUpdated = pref.lastUpdated;
+          existing.lastSeen = pref.lastSeen;
         } else {
           preferences.push(pref);
         }

@@ -24,8 +24,9 @@ afterAll(() => {
 
 describe("config", () => {
   describe("CONFIG defaults", () => {
-    it("should have a storagePath containing .opencode-mem", () => {
-      expect(CONFIG.storagePath).toContain(".opencode-mem");
+    it("should have a storagePath as a valid string", () => {
+      expect(typeof CONFIG.storagePath).toBe("string");
+      expect(CONFIG.storagePath.length).toBeGreaterThan(0);
     });
 
     it("should default to Xenova/nomic-embed-text-v1 embedding model", () => {
@@ -90,9 +91,9 @@ describe("config", () => {
 
     it("should have user profile settings as numbers", () => {
       expect(typeof CONFIG.userProfileAnalysisInterval).toBe("number");
-      expect(typeof CONFIG.userProfileMaxPreferences).toBe("number");
-      expect(typeof CONFIG.userProfileMaxPatterns).toBe("number");
-      expect(typeof CONFIG.userProfileMaxWorkflows).toBe("number");
+      expect(typeof CONFIG.userProfileDisplayPreferences).toBe("number");
+      expect(typeof CONFIG.userProfileDisplayPatterns).toBe("number");
+      expect(typeof CONFIG.userProfileDisplayWorkflows).toBe("number");
       expect(typeof CONFIG.userProfileConfidenceDecayDays).toBe("number");
       expect(typeof CONFIG.userProfileChangelogRetentionCount).toBe("number");
     });

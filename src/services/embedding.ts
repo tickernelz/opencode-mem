@@ -100,6 +100,7 @@ export class EmbeddingService {
         progress_callback: progressCallback,
       });
       this.isWarmedUp = true;
+      log("Embedding model warmed up", { model: CONFIG.embeddingModel });
     } catch (error) {
       this.initPromise = null;
       log("Failed to initialize embedding model", { error: String(error) });

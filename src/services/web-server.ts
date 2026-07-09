@@ -29,6 +29,9 @@ import {
   handleGetProfileChangelog,
   handleGetProfileSnapshot,
   handleRefreshProfile,
+  handleAICleanup,
+  handleApplyCleanup,
+  handleUpdateProfileItem,
 } from "./api-handlers.js";
 
 /**
@@ -70,6 +73,17 @@ function serveFetch(opts: {
   // Bodies stream both directions via the WHATWG Streams ↔ Node Streams
   // helpers that ship with Node 18+.
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    let destroyed = false;
+    const cleanup = () => {
+      if (destroyed) return;
+      destroyed = true;
+      if (!res.writableEnded) res.destroy();
+      if (!req.socket.destroyed) req.socket.destroy();
+    };
+    req.on("close", cleanup);
+    req.socket.on("error", cleanup);
+    req.socket.on("close", cleanup);
+
     try {
       const url = `http://${opts.hostname}:${opts.port}${req.url ?? "/"}`;
       const method = req.method ?? "GET";
@@ -78,20 +92,23 @@ function serveFetch(opts: {
         method,
         headers: req.headers as Record<string, string>,
         body: hasBody ? (Readable.toWeb(req) as unknown as ReadableStream) : undefined,
-        // `duplex: "half"` is required by Node fetch when sending a body
-        // stream. Cast keeps TS happy on older lib.dom.d.ts revisions.
         ...(hasBody ? ({ duplex: "half" } as Record<string, unknown>) : {}),
       });
 
       const webRes = await opts.fetch(webReq);
+      if (destroyed) return;
       res.statusCode = webRes.status;
       webRes.headers.forEach((value, name) => res.setHeader(name, value));
       res.setHeader("Connection", "close");
 
       if (webRes.body) {
-        Readable.fromWeb(webRes.body as unknown as Parameters<typeof Readable.fromWeb>[0]).pipe(
-          res
+        const src = Readable.fromWeb(
+          webRes.body as unknown as Parameters<typeof Readable.fromWeb>[0]
         );
+        res.on("close", () => {
+          if (!src.destroyed) src.destroy();
+        });
+        src.pipe(res);
       } else {
         res.end();
       }
@@ -100,7 +117,9 @@ function serveFetch(opts: {
         res.statusCode = 500;
         res.setHeader("Content-Type", "text/plain");
       }
-      res.end(`Internal Server Error: ${error instanceof Error ? error.message : String(error)}`);
+      if (!res.writableEnded) {
+        res.end(`Internal Server Error: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   });
 
@@ -112,7 +131,9 @@ function serveFetch(opts: {
       listenError = err;
     }
   });
-  server.listen({ port: opts.port, host: opts.hostname, reuseAddr: true });
+  // exclusive: false disables SO_EXCLUSIVEADDRUSE on Windows, allowing
+  // rebind after a crashed predecessor left orphaned sockets behind.
+  server.listen({ port: opts.port, host: opts.hostname, reuseAddr: true, exclusive: false });
   server.unref();
   server.timeout = 30000;
   server.keepAliveTimeout = 10000;
@@ -495,6 +516,29 @@ export class WebServer {
         const body = (await req.json().catch(() => ({}))) as any;
         const userId = body.userId || undefined;
         const result = await handleRefreshProfile(userId);
+        return this.jsonResponse(result);
+      }
+
+      if (path === "/api/user-profile/ai-cleanup" && method === "POST") {
+        const body = (await req.json().catch(() => ({}))) as any;
+        const userId = body.userId || undefined;
+        const includeIds = Array.isArray(body.includeIds)
+          ? (body.includeIds as string[])
+          : undefined;
+        const result = await handleAICleanup(userId, includeIds);
+        return this.jsonResponse(result);
+      }
+
+      if (path === "/api/user-profile/ai-cleanup/apply" && method === "POST") {
+        const body = (await req.json().catch(() => ({}))) as any;
+        const userId = body.userId || undefined;
+        const result = await handleApplyCleanup(userId, body);
+        return this.jsonResponse(result);
+      }
+
+      if (path === "/api/user-profile/item" && method === "PATCH") {
+        const body = (await req.json().catch(() => ({}))) as any;
+        const result = await handleUpdateProfileItem(body);
         return this.jsonResponse(result);
       }
 

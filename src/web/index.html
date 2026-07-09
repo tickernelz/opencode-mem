@@ -151,9 +151,19 @@
       <div class="profile-section hidden" id="profile-section">
         <div class="section-header">
           <h2 data-i18n="section-profile">└─ USER PROFILE ──</h2>
-          <button id="refresh-profile-btn" class="btn-secondary" data-i18n="btn-refresh">
-            <i data-lucide="refresh-cw" class="icon"></i> Refresh
-          </button>
+          <div class="profile-actions">
+            <button
+              id="ai-cleanup-btn"
+              class="btn-maintenance"
+              data-i18n="btn-ai-cleanup"
+              title="AI Cleanup"
+            >
+              <i data-lucide="sparkles" class="icon"></i> AI Cleanup
+            </button>
+            <button id="refresh-profile-btn" class="btn-secondary" data-i18n="btn-refresh">
+              <i data-lucide="refresh-cw" class="icon"></i> Refresh
+            </button>
+          </div>
         </div>
 
         <div id="profile-content" class="profile-content">
@@ -278,6 +288,102 @@
         </div>
         <div id="changelog-list" class="changelog-list">
           <div class="loading" data-i18n="loading-changelog">Loading changelog...</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="profile-item-modal" class="modal hidden">
+      <div class="modal-content profile-item-modal-content">
+        <div class="modal-header">
+          <h3 id="profile-item-modal-title" data-i18n="btn-edit">Edit Item</h3>
+          <button class="modal-close" id="profile-item-modal-close">
+            <i data-lucide="x" class="icon"></i>
+          </button>
+        </div>
+        <form id="profile-item-form">
+          <div class="form-group">
+            <label data-i18n="label-category">Category</label>
+            <input type="text" id="profile-item-category" />
+          </div>
+          <div class="form-group">
+            <label data-i18n="label-description">Description</label>
+            <textarea id="profile-item-description" rows="4"></textarea>
+          </div>
+          <div class="form-group" id="steps-section" style="display: none">
+            <label data-i18n="label-steps">Steps</label>
+            <div id="steps-container"></div>
+            <button
+              type="button"
+              class="btn-secondary btn-sm"
+              id="btn-add-step"
+              data-i18n="btn-add-step"
+            >
+              + Add Step
+            </button>
+          </div>
+          <div class="modal-actions">
+            <button
+              type="button"
+              class="btn-secondary"
+              id="profile-item-cancel"
+              data-i18n="btn-cancel"
+            >
+              Cancel
+            </button>
+            <button type="submit" class="btn-primary" id="profile-item-save">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="ai-cleanup-modal" class="modal hidden">
+      <div class="modal-content cleanup-modal-content">
+        <div class="modal-header">
+          <h3 data-i18n="label-ai-cleanup-title">AI Profile Cleanup</h3>
+          <button class="modal-close" id="cleanup-modal-close">
+            <i data-lucide="x" class="icon"></i>
+          </button>
+        </div>
+        <div id="cleanup-loading" class="cleanup-loading hidden">
+          <i data-lucide="loader" class="icon icon-spin"></i>
+          <span data-i18n="label-ai-cleanup-loading">AI is analyzing profile...</span>
+        </div>
+        <div id="cleanup-diff-v2" class="cleanup-diff-v2 hidden">
+          <div id="cleanup-toolbar" class="cleanup-toolbar">
+            <span id="cleanup-stats"></span>
+            <div class="toolbar-actions">
+              <button
+                class="btn-link"
+                id="cleanup-select-all"
+                data-i18n="label-ai-cleanup-select-all"
+              >
+                Select All
+              </button>
+              <button
+                class="btn-link"
+                id="cleanup-deselect-all"
+                data-i18n="label-ai-cleanup-deselect-all"
+              >
+                Deselect All
+              </button>
+            </div>
+          </div>
+          <div id="cleanup-sections"></div>
+          <div id="cleanup-kept-section" class="cleanup-section">
+            <h4 data-i18n="label-ai-cleanup-kept" class="collapse-header" id="cleanup-kept-toggle">
+              Remaining <span id="cleanup-kept-count"></span>
+              <i data-lucide="chevron-down" class="icon-xs"></i>
+            </h4>
+            <div id="cleanup-kept-list" class="cleanup-kept-list hidden"></div>
+          </div>
+        </div>
+        <div class="modal-actions" id="cleanup-actions">
+          <button id="cleanup-cancel-btn" class="btn-secondary" data-i18n="btn-cancel">
+            <i data-lucide="x" class="icon"></i> Cancel
+          </button>
+          <button id="cleanup-apply-btn" class="btn-primary hidden" data-i18n="btn-apply">
+            <i data-lucide="check" class="icon"></i> Apply
+          </button>
         </div>
       </div>
     </div>

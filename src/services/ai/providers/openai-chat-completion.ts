@@ -85,6 +85,15 @@ function extractFirstJSON(raw: string): string | null {
   return null;
 }
 
+function repairInnerQuotes(json: string): string {
+  let result = json.replace(
+    /([\u4e00-\u9fff\u3000-\u303f\uff00-\uffef])"([\u4e00-\u9fff\u3000-\u303f\uff00-\uffef])/g,
+    '$1\\"$2'
+  );
+  result = result.replace(/([\u4e00-\u9fff\u3000-\u303f\uff00-\uffef])"(?=\s*[,}\]])/g, '$1\\"');
+  return result;
+}
+
 export class OpenAIChatCompletionProvider extends BaseAIProvider {
   private readonly aiSessionManager: AISessionManager;
 
@@ -372,7 +381,18 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
                     return JSON.parse(raw);
                   } catch (e1) {
                     const fixed = extractFirstJSON(raw);
-                    if (fixed) return JSON.parse(fixed);
+                    if (fixed) {
+                      try {
+                        return JSON.parse(fixed);
+                      } catch {
+                        const repaired = repairInnerQuotes(fixed);
+                        if (repaired !== fixed) {
+                          try {
+                            return JSON.parse(repaired);
+                          } catch {}
+                        }
+                      }
+                    }
                     throw e1;
                   }
                 })();

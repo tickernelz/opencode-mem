@@ -2,27 +2,70 @@ export interface UserProfilePreference {
   category: string;
   description: string;
   confidence: number;
+  frequency: number;
   evidence: string[];
-  lastUpdated: number;
+  lastSeen: number;
+  centroid?: number[];
+  anchor?: number[];
+  weakHitCount?: number;
+  lastWeakHitAt?: number;
+  driftBelowCount?: number;
+  alpha?: number;
+  beta?: number;
+  weakAlpha?: number;
+  weakBeta?: number;
+  pendingValidation?: boolean;
+  lastMatchTime?: number;
+  firstSeen?: number;
 }
 
 export interface UserProfilePattern {
   category: string;
   description: string;
+  confidence: number;
   frequency: number;
+  evidence: string[];
   lastSeen: number;
+  centroid?: number[];
+  anchor?: number[];
+  weakHitCount?: number;
+  lastWeakHitAt?: number;
+  driftBelowCount?: number;
+  alpha?: number;
+  beta?: number;
+  weakAlpha?: number;
+  weakBeta?: number;
+  pendingValidation?: boolean;
+  lastMatchTime?: number;
+  firstSeen?: number;
 }
 
 export interface UserProfileWorkflow {
   description: string;
   steps: string[];
+  confidence: number;
   frequency: number;
+  evidence: string[];
+  lastSeen: number;
+  centroid?: number[];
+  anchor?: number[];
+  weakHitCount?: number;
+  lastWeakHitAt?: number;
+  driftBelowCount?: number;
+  alpha?: number;
+  beta?: number;
+  weakAlpha?: number;
+  weakBeta?: number;
+  pendingValidation?: boolean;
+  lastMatchTime?: number;
+  firstSeen?: number;
 }
 
 export interface UserProfileData {
   preferences: UserProfilePreference[];
   patterns: UserProfilePattern[];
   workflows: UserProfileWorkflow[];
+  learning_paths?: { topic: string; chain: string[]; description: string }[];
 }
 
 export interface UserProfile {

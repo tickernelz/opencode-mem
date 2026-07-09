@@ -60,11 +60,23 @@ interface OpenCodeMemConfig {
   deduplicationEnabled?: boolean;
   deduplicationSimilarityThreshold?: number;
   userProfileAnalysisInterval?: number;
-  userProfileMaxPreferences?: number;
-  userProfileMaxPatterns?: number;
-  userProfileMaxWorkflows?: number;
+  userProfileDisplayPreferences?: number;
+  userProfileDisplayPatterns?: number;
+  userProfileDisplayWorkflows?: number;
+  userProfileStaleDays?: number;
+  userProfileInjectPreferences?: number;
+  userProfileInjectPatterns?: number;
+  userProfileInjectWorkflows?: number;
   userProfileConfidenceDecayDays?: number;
   userProfileChangelogRetentionCount?: number;
+  userProfileEmbeddingThresholdSameCat?: number;
+  userProfileEmbeddingThresholdSameCatWeak?: number;
+  userProfileEmbeddingThresholdCrossCat?: number;
+  userProfileEmbeddingThresholdCrossCatWeak?: number;
+  userProfileCentroidDriftThreshold?: number;
+  userProfileEmbeddingMinDescriptionLength?: number;
+  userProfileMinEvidenceForRetention?: number;
+  userProfileValidationEnabled?: boolean;
   showAutoCaptureToasts?: boolean;
   showUserProfileToasts?: boolean;
   showErrorToasts?: boolean;
@@ -140,11 +152,23 @@ const DEFAULTS: Required<
   deduplicationEnabled: true,
   deduplicationSimilarityThreshold: 0.9,
   userProfileAnalysisInterval: 10,
-  userProfileMaxPreferences: 20,
-  userProfileMaxPatterns: 15,
-  userProfileMaxWorkflows: 10,
+  userProfileDisplayPreferences: 20,
+  userProfileDisplayPatterns: 15,
+  userProfileDisplayWorkflows: 10,
+  userProfileStaleDays: 2,
+  userProfileInjectPreferences: 5,
+  userProfileInjectPatterns: 5,
+  userProfileInjectWorkflows: 3,
   userProfileConfidenceDecayDays: 30,
   userProfileChangelogRetentionCount: 5,
+  userProfileEmbeddingThresholdSameCat: 0.8,
+  userProfileEmbeddingThresholdSameCatWeak: 0.5,
+  userProfileEmbeddingThresholdCrossCat: 0.9,
+  userProfileEmbeddingThresholdCrossCatWeak: 0.8,
+  userProfileCentroidDriftThreshold: 0.65,
+  userProfileEmbeddingMinDescriptionLength: 5,
+  userProfileMinEvidenceForRetention: 3,
+  userProfileValidationEnabled: false,
   showAutoCaptureToasts: true,
   showUserProfileToasts: true,
   showErrorToasts: true,
@@ -396,18 +420,28 @@ const CONFIG_TEMPLATE = `{
   // - User workflows (development habits, sequences, learning style)
   // - Skill level (overall and per-domain assessment)
   "userProfileAnalysisInterval": 10,
+
+  // Days before inactive items (all types) are eligible for removal
+  "userProfileStaleDays": 2,
+
+  // Number of preferences shown in UI
+  "userProfileDisplayPreferences": 20,
   
-  // Maximum number of preferences to keep in user profile (sorted by confidence)
-  // Preferences are things like "prefers code without comments", "likes concise responses"
-  "userProfileMaxPreferences": 20,
+  // Number of patterns shown in UI
+  "userProfileDisplayPatterns": 15,
   
-  // Maximum number of patterns to keep in user profile (sorted by frequency)
-  // Patterns are recurring topics like "often asks about database optimization"
-  "userProfileMaxPatterns": 15,
+  // Number of workflows shown in UI
+  "userProfileDisplayWorkflows": 10,
   
-  // Maximum number of workflows to keep in user profile (sorted by frequency)
-  // Workflows are sequences like "usually asks for tests after implementation"
-  "userProfileMaxWorkflows": 10,
+  // Number of preferences injected into LLM conversation context
+  // Keep this small — the strongest signals are enough; more dilute LLM attention
+  "userProfileInjectPreferences": 5,
+  
+  // Number of patterns injected into LLM conversation context
+  "userProfileInjectPatterns": 5,
+  
+  // Number of workflows injected into LLM conversation context
+  "userProfileInjectWorkflows": 3,
   
   // Days before preference confidence starts to decay (if not reinforced)
   // Preferences that aren't seen again will gradually lose confidence and be removed
@@ -416,7 +450,16 @@ const CONFIG_TEMPLATE = `{
   // Number of profile versions to keep in changelog (for rollback/debugging)
   // Older versions are automatically cleaned up
   "userProfileChangelogRetentionCount": 5,
-  
+
+  // Minimum evidence count for a preference/pattern to survive confidence decay
+  // Items confirmed fewer times are more likely to be pruned when confidence decays
+  "userProfileMinEvidenceForRetention": 3,
+
+  // Enable LLM validation of existing preferences against recent behavior.
+  // When enabled, each analysis round checks if top-5 preferences still match recent prompts.
+  // Experimental — disabled by default.
+  "userProfileValidationEnabled": false,
+
   // ============================================
   // Search Settings
   // ============================================
@@ -554,14 +597,44 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
       fileConfig.deduplicationSimilarityThreshold ?? DEFAULTS.deduplicationSimilarityThreshold,
     userProfileAnalysisInterval:
       fileConfig.userProfileAnalysisInterval ?? DEFAULTS.userProfileAnalysisInterval,
-    userProfileMaxPreferences:
-      fileConfig.userProfileMaxPreferences ?? DEFAULTS.userProfileMaxPreferences,
-    userProfileMaxPatterns: fileConfig.userProfileMaxPatterns ?? DEFAULTS.userProfileMaxPatterns,
-    userProfileMaxWorkflows: fileConfig.userProfileMaxWorkflows ?? DEFAULTS.userProfileMaxWorkflows,
+    userProfileDisplayPreferences:
+      fileConfig.userProfileDisplayPreferences ?? DEFAULTS.userProfileDisplayPreferences,
+    userProfileDisplayPatterns:
+      fileConfig.userProfileDisplayPatterns ?? DEFAULTS.userProfileDisplayPatterns,
+    userProfileDisplayWorkflows:
+      fileConfig.userProfileDisplayWorkflows ?? DEFAULTS.userProfileDisplayWorkflows,
+    userProfileInjectPreferences:
+      fileConfig.userProfileInjectPreferences ?? DEFAULTS.userProfileInjectPreferences,
+    userProfileInjectPatterns:
+      fileConfig.userProfileInjectPatterns ?? DEFAULTS.userProfileInjectPatterns,
+    userProfileInjectWorkflows:
+      fileConfig.userProfileInjectWorkflows ?? DEFAULTS.userProfileInjectWorkflows,
     userProfileConfidenceDecayDays:
       fileConfig.userProfileConfidenceDecayDays ?? DEFAULTS.userProfileConfidenceDecayDays,
     userProfileChangelogRetentionCount:
       fileConfig.userProfileChangelogRetentionCount ?? DEFAULTS.userProfileChangelogRetentionCount,
+    userProfileEmbeddingThresholdSameCat:
+      fileConfig.userProfileEmbeddingThresholdSameCat ??
+      DEFAULTS.userProfileEmbeddingThresholdSameCat,
+    userProfileEmbeddingThresholdSameCatWeak:
+      fileConfig.userProfileEmbeddingThresholdSameCatWeak ??
+      DEFAULTS.userProfileEmbeddingThresholdSameCatWeak,
+    userProfileEmbeddingThresholdCrossCat:
+      fileConfig.userProfileEmbeddingThresholdCrossCat ??
+      DEFAULTS.userProfileEmbeddingThresholdCrossCat,
+    userProfileEmbeddingThresholdCrossCatWeak:
+      fileConfig.userProfileEmbeddingThresholdCrossCatWeak ??
+      DEFAULTS.userProfileEmbeddingThresholdCrossCatWeak,
+    userProfileCentroidDriftThreshold:
+      fileConfig.userProfileCentroidDriftThreshold ?? DEFAULTS.userProfileCentroidDriftThreshold,
+    userProfileEmbeddingMinDescriptionLength:
+      fileConfig.userProfileEmbeddingMinDescriptionLength ??
+      DEFAULTS.userProfileEmbeddingMinDescriptionLength,
+    userProfileMinEvidenceForRetention:
+      fileConfig.userProfileMinEvidenceForRetention ?? DEFAULTS.userProfileMinEvidenceForRetention,
+    userProfileValidationEnabled:
+      fileConfig.userProfileValidationEnabled ?? DEFAULTS.userProfileValidationEnabled,
+    userProfileStaleDays: fileConfig.userProfileStaleDays ?? DEFAULTS.userProfileStaleDays,
     showAutoCaptureToasts: fileConfig.showAutoCaptureToasts ?? DEFAULTS.showAutoCaptureToasts,
     showUserProfileToasts: fileConfig.showUserProfileToasts ?? DEFAULTS.showUserProfileToasts,
     showErrorToasts: fileConfig.showErrorToasts ?? DEFAULTS.showErrorToasts,
