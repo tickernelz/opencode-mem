@@ -1,0 +1,60 @@
+name: Platform Package Smoke
+
+on:
+  pull_request:
+    paths:
+      - "package.json"
+      - "bun.lock"
+      - "tsconfig.json"
+      - "src/**"
+      - "scripts/smoke-test.mjs"
+      - "scripts/copy-web-assets.mjs"
+      - ".github/workflows/platform-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  package-smoke:
+    name: ${{ matrix.os }} / package smoke
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-13
+          - macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install source dependencies
+        run: bun install
+
+      - name: Build package artifacts
+        run: bun run build
+
+      - name: Pack and install published package shape
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          pack_dir="$RUNNER_TEMP/opencode-mem-pack"
+          smoke_dir="$RUNNER_TEMP/opencode-mem-smoke"
+          mkdir -p "$pack_dir" "$smoke_dir"
+
+          npm pack --pack-destination "$pack_dir"
+          tarball_path=$(find "$pack_dir" -name "opencode-mem-*.tgz" -print -quit)
+          test -n "$tarball_path"
+
+          cd "$smoke_dir"
+          npm init -y
+          npm install "$tarball_path"
+          cp "$GITHUB_WORKSPACE/scripts/smoke-test.mjs" ./smoke-test.mjs
+          node ./smoke-test.mjs
