@@ -11,7 +11,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -24,9 +24,10 @@ jobs:
       - run: bun run build
 
       - name: Setup Node.js for npm publish
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '24'
+          package-manager-cache: false
           registry-url: 'https://registry.npmjs.org'
 
       - name: Publish to npm
