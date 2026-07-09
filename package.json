@@ -57,6 +57,7 @@
   "optionalDependencies": {
     "usearch": "^2.21.4"
   },
+  "//": "Remove onnxruntime-node override after https://github.com/microsoft/onnxruntime/issues/27961 is resolved",
   "overrides": {
     "onnxruntime-node": "1.22.0"
   },
