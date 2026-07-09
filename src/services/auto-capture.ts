@@ -83,9 +83,20 @@ export async function performAutoCapture(
           latestMemory
         );
 
-        const summaryResult = await generateSummary(context, sessionID, prompt.content);
+        let summaryResult: { summary: string; type: string; tags: string[] } | null;
+        try {
+          summaryResult = await generateSummary(context, sessionID, prompt.content);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new Error(`Summary generation failed: ${message}`);
+        }
 
         if (!summaryResult || summaryResult.type === "skip") {
+          log("Auto-capture skipped", {
+            promptId: prompt.id,
+            sessionID,
+            type: summaryResult?.type,
+          });
           userPromptManager.deletePrompt(prompt.id);
           claimedPromptId = null;
           return;
@@ -115,6 +126,11 @@ export async function performAutoCapture(
           userPromptManager.linkMemoryToPrompt(prompt.id, result.id);
           userPromptManager.markAsCaptured(prompt.id);
           claimedPromptId = null;
+          log("Auto-capture memory persisted", {
+            promptId: prompt.id,
+            sessionID,
+            memoryId: result.id,
+          });
 
           if (CONFIG.showAutoCaptureToasts) {
             await ctx.client?.tui
@@ -130,7 +146,7 @@ export async function performAutoCapture(
           }
           return;
         } else {
-          throw new Error(result.error || "Database persistence failed");
+          throw new Error(`Memory persistence failed: ${result.error || "database write failed"}`);
         }
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : String(error);

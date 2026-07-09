@@ -25,10 +25,25 @@
 
 import type { z } from "zod";
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import {
+  diagnosticUrl,
+  readJson,
+  responseStatus,
+  type FetchEndpoint,
+} from "./opencode-diagnostics.js";
 
 let _connectedProviders: Set<string> = new Set();
 let _v2Client: OpencodeClient | undefined;
 let _v2BaseUrl: string | undefined;
+let _hostFetch: typeof fetch | undefined;
+
+export function setHostFetch(customFetch: typeof fetch): void {
+  _hostFetch = customFetch;
+}
+
+export function resetHostFetch(): void {
+  _hostFetch = undefined;
+}
 
 export function setConnectedProviders(providers: string[]): void {
   _connectedProviders = new Set(providers);
@@ -104,17 +119,19 @@ export async function generateStructuredOutput<T>(opts: StructuredOutputOptions<
     });
 
     if (info.error) {
-      const msg = info.error.data?.message ?? info.error.name;
-      throw new Error(`opencode-mem: opencode reported ${info.error.name}: ${msg}`);
-    }
-
-    if (info.structured === undefined || info.structured === null) {
       throw new Error(
-        "opencode-mem: opencode returned no structured output (info.structured was empty)"
+        `opencode-mem: opencode reported ${info.error.name}: ${formatAssistantError(info.error)}`
       );
     }
 
-    return schema.parse(info.structured);
+    const structuredOutput = info.structured_output ?? info.structured;
+    if (structuredOutput === undefined || structuredOutput === null) {
+      throw new Error(
+        "opencode-mem: opencode returned no structured output (info.structured_output/info.structured were empty)"
+      );
+    }
+
+    return schema.parse(structuredOutput);
   } finally {
     // Best-effort: leaving a transient session behind is cosmetic, not
     // worth failing a successful capture if cleanup itself errors.
@@ -135,33 +152,30 @@ function buildQuery(directory?: string): string {
   return `?directory=${encodeURIComponent(directory)}`;
 }
 
-async function readJson<T>(res: Response, context: string): Promise<T> {
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(
-      `opencode-mem: opencode ${context} failed (${res.status} ${res.statusText}): ${text || "<empty body>"}`
-    );
-  }
-  if (!text) {
-    throw new Error(`opencode-mem: opencode ${context} returned an empty response body`);
-  }
+async function fetchJson<T>(endpoint: FetchEndpoint, init: RequestInit): Promise<T> {
+  let res: Response;
   try {
-    return JSON.parse(text) as T;
-  } catch (err) {
+    res = await activeFetch()(new Request(endpoint.url, init));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `opencode-mem: opencode ${context} returned non-JSON body: ${text.slice(0, 200)}`
+      `opencode-mem: failed to fetch ${endpoint.label} at ${diagnosticUrl(endpoint.url)}: ${message}`
     );
   }
+
+  return readJson<T>(res, endpoint);
 }
 
 async function createSession(base: string, directory?: string): Promise<string> {
   const url = `${base}/session${buildQuery(directory)}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title: "opencode-mem capture" }),
-  });
-  const body = await readJson<{ id?: string }>(res, "POST /session");
+  const body = await fetchJson<{ id?: string }>(
+    { label: "POST /session", url },
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "opencode-mem capture" }),
+    }
+  );
   if (!body.id) {
     throw new Error(
       "opencode-mem: session.create returned no session id; cannot generate structured output"
@@ -183,7 +197,33 @@ interface PromptSessionArgs {
 
 interface AssistantInfo {
   structured?: unknown;
-  error?: { name: string; data?: { message?: string } };
+  structured_output?: unknown;
+  error?: { name: string; data?: { message?: string; [key: string]: unknown } };
+}
+
+function formatAssistantError(error: NonNullable<AssistantInfo["error"]>): string {
+  if (!error.data) return error.name;
+
+  const details = safeAssistantErrorDetails(error.data);
+  if (!error.data.message) return details;
+
+  return details ? `${error.data.message}; ${details}` : error.data.message;
+}
+
+function safeAssistantErrorDetails(
+  data: NonNullable<NonNullable<AssistantInfo["error"]>["data"]>
+): string {
+  const safeFields: Record<string, unknown> = {};
+  for (const key of ["statusCode", "providerID", "modelID"] as const) {
+    const value = data[key];
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      safeFields[key] = value;
+    }
+  }
+
+  const entries = Object.entries(safeFields);
+  if (entries.length === 0) return "";
+  return `details=${JSON.stringify(Object.fromEntries(entries))}`;
 }
 
 interface MessageV2WithParts {
@@ -197,19 +237,23 @@ async function promptSession(base: string, args: PromptSessionArgs): Promise<Ass
     model: { providerID: args.providerID, modelID: args.modelID },
     system: args.systemPrompt,
     parts: [{ type: "text", text: args.userPrompt }],
+    // `noReply` suppresses assistant generation in current OpenCode builds,
+    // which also suppresses `info.structured_output`; structured capture needs
+    // the assistant run even though the temporary session is deleted afterward.
     format: {
       type: "json_schema",
       schema: args.jsonSchema,
       ...(args.retryCount !== undefined ? { retryCount: args.retryCount } : {}),
     },
-    noReply: true,
   };
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await readJson<MessageV2WithParts>(res, "POST /session/{id}/message");
+  const data = await fetchJson<MessageV2WithParts>(
+    { label: "POST /session/{id}/message", url },
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
   if (!data.info) {
     throw new Error("opencode-mem: prompt response missing `info`");
   }
@@ -218,10 +262,24 @@ async function promptSession(base: string, args: PromptSessionArgs): Promise<Ass
 
 async function deleteSession(base: string, sessionID: string, directory?: string): Promise<void> {
   const url = `${base}/session/${encodeURIComponent(sessionID)}${buildQuery(directory)}`;
-  const res = await fetch(url, { method: "DELETE" });
+  let res: Response;
+  try {
+    res = await activeFetch()(new Request(url, { method: "DELETE" }));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `opencode-mem: failed to fetch DELETE /session/{id} at ${diagnosticUrl(url)}: ${message}`
+    );
+  }
   // DELETE /session/:id returns boolean. We only care that it ran; failures
   // are swallowed at the call site.
   if (!res.ok) {
-    throw new Error(`delete failed: ${res.status} ${res.statusText}`);
+    throw new Error(
+      `opencode-mem: opencode DELETE /session/{id} failed at ${diagnosticUrl(url)} (${responseStatus(res)})`
+    );
   }
+}
+
+function activeFetch(): typeof fetch {
+  return _hostFetch ?? globalThis.fetch;
 }

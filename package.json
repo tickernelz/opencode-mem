@@ -20,7 +20,7 @@
     }
   },
   "scripts": {
-    "build": "bunx tsc && bun scripts/copy-web-assets.mjs",
+    "build": "rm -rf dist && bunx tsc && bun scripts/copy-web-assets.mjs",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,js,css,html}\"",

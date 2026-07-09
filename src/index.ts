@@ -16,6 +16,43 @@ import { log } from "./services/logger.js";
 import type { MemoryType } from "./types/index.js";
 import { getLanguageName } from "./services/language-detector.js";
 import type { MemoryScope } from "./services/client.js";
+import {
+  createV2Client,
+  resetHostFetch,
+  setConnectedProviders,
+  setHostFetch,
+  setV2Client,
+} from "./services/ai/opencode-provider.js";
+import { getHostClientConfig } from "./services/ai/opencode-host-config.js";
+
+export function isStructuredSummaryPromptMessage(userMessage: string): boolean {
+  // This is the plugin's own structured-summary request. OpenCode echoes it
+  // through chat.message like a normal user message, but capturing it would
+  // create self-referential memories about the memory prompt instead of the
+  // user's conversation.
+  return userMessage.includes("Analyze this conversation.") && userMessage.includes('type="skip"');
+}
+
+export function configureOpencodeHostTransport(ctx: {
+  readonly client: unknown;
+  readonly serverUrl?: string | URL;
+}): void {
+  resetHostFetch();
+  const hostConfig = getHostClientConfig(ctx);
+  if (hostConfig.fetch) {
+    setHostFetch(hostConfig.fetch);
+  } else {
+    log("OpenCode host fetch unavailable; falling back to global fetch", {
+      clientKeys: hostConfig.clientKeys,
+      sdkConfigCount: hostConfig.sdkConfigCount,
+    });
+  }
+
+  const serverUrl = hostConfig.baseUrl ?? ctx.serverUrl;
+  if (serverUrl) {
+    setV2Client(createV2Client(serverUrl));
+  }
+}
 
 function logAutoCaptureProviderStatus(): void {
   if (!CONFIG.autoCaptureEnabled || CONFIG.autoCaptureProviderStatus.ready) return;
@@ -52,11 +89,10 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     })();
   }
 
+  configureOpencodeHostTransport(ctx);
+
   (async () => {
     try {
-      const { setConnectedProviders, setV2Client, createV2Client } =
-        await import("./services/ai/opencode-provider.js");
-      setV2Client(createV2Client(ctx.serverUrl));
       const providerResult = await ctx.client.provider.list();
       if (providerResult.data?.connected) {
         setConnectedProviders(providerResult.data.connected);
@@ -175,6 +211,10 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
         const userMessage = textParts.map((p) => p.text).join("\n");
         if (!userMessage.trim()) return;
 
+        if (isStructuredSummaryPromptMessage(userMessage)) {
+          return;
+        }
+
         userPromptManager.savePrompt(input.sessionID, output.message.id, directory, userMessage);
 
         const messagesResponse = await ctx.client.session.messages({
@@ -274,19 +314,16 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           limit: tool.schema.number().optional(),
           scope: tool.schema.enum(["project", "all-projects"]).optional(),
         },
-        async execute(
-          args: {
-            mode?: "add" | "search" | "profile" | "list" | "forget" | "help";
-            content?: string;
-            query?: string;
-            tags?: string;
-            type?: MemoryType;
-            memoryId?: string;
-            limit?: number;
-            scope?: MemoryScope;
-          },
-          toolCtx: { sessionID: string }
-        ) {
+        async execute(args: {
+          mode?: "add" | "search" | "profile" | "list" | "forget" | "help";
+          content?: string;
+          query?: string;
+          tags?: string;
+          type?: MemoryType;
+          memoryId?: string;
+          limit?: number;
+          scope?: MemoryScope;
+        }) {
           if (!isConfigured()) {
             return JSON.stringify({
               success: false,

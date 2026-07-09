@@ -5,7 +5,9 @@ import {
   generateStructuredOutput,
   getV2Client,
   isProviderConnected,
+  resetHostFetch,
   setConnectedProviders,
+  setHostFetch,
   setV2Client,
 } from "../src/services/ai/opencode-provider.js";
 
@@ -101,13 +103,15 @@ describe("generateStructuredOutput", () => {
 
   beforeEach(() => {
     mock = undefined;
+    resetHostFetch();
   });
 
   afterEach(() => {
     mock?.restore();
+    resetHostFetch();
   });
 
-  it("posts schema to session.prompt and returns parsed structured output", async () => {
+  it("posts schema without noReply and returns parsed structured output", async () => {
     mock = installFetchMock((call) => {
       if (call.method === "POST" && call.url.endsWith("/session")) {
         return { body: { id: "ses_test_1" } };
@@ -115,7 +119,7 @@ describe("generateStructuredOutput", () => {
       if (call.method === "POST" && call.url.includes("/session/ses_test_1/message")) {
         return {
           body: {
-            info: { structured: { topic: "auth", count: 3 } },
+            info: { structured_output: { topic: "auth", count: 3 } },
             parts: [],
           },
         };
@@ -146,7 +150,7 @@ describe("generateStructuredOutput", () => {
       modelID: "gpt-4o-mini",
     });
     expect(promptBody.system).toBe("system");
-    expect(promptBody.noReply).toBe(true);
+    expect(promptBody).not.toHaveProperty("noReply");
     const format = promptBody.format as Record<string, unknown>;
     expect(format.type).toBe("json_schema");
     expect(format.schema).toBeDefined();
@@ -156,7 +160,7 @@ describe("generateStructuredOutput", () => {
     expect(deleteCall!.url.endsWith("/session/ses_test_1")).toBe(true);
   });
 
-  it("rejects when info.error is present (StructuredOutputError)", async () => {
+  it("rejects with full info.error details when opencode reports an assistant error", async () => {
     mock = installFetchMock((call) => {
       if (call.method === "POST" && call.url.endsWith("/session")) {
         return { body: { id: "ses_err" } };
@@ -167,7 +171,12 @@ describe("generateStructuredOutput", () => {
             info: {
               error: {
                 name: "StructuredOutputError",
-                data: { message: "schema validation failed" },
+                data: {
+                  message: "schema validation failed",
+                  statusCode: 400,
+                  providerID: "anthropic",
+                  prompt: "secret prompt fragment",
+                },
               },
             },
             parts: [],
@@ -190,7 +199,20 @@ describe("generateStructuredOutput", () => {
         userPrompt: "u",
         schema,
       })
-    ).rejects.toThrow(/StructuredOutputError/);
+    ).rejects.toThrow(
+      /StructuredOutputError: schema validation failed; details=.*"statusCode":400.*"providerID":"anthropic"/
+    );
+
+    await generateStructuredOutput({
+      client,
+      providerID: "anthropic",
+      modelID: "claude-haiku-4-5",
+      systemPrompt: "s",
+      userPrompt: "u",
+      schema,
+    }).catch((error: unknown) => {
+      expect(String(error)).not.toContain("secret prompt fragment");
+    });
 
     expect(mock.calls.find((c) => c.method === "DELETE")).toBeDefined();
   });
@@ -251,7 +273,7 @@ describe("generateStructuredOutput", () => {
       if (call.method === "POST" && call.url.includes("/session/ses_delfail/message")) {
         return {
           body: {
-            info: { structured: { topic: "x", count: 1 } },
+            info: { structured_output: { topic: "x", count: 1 } },
             parts: [],
           },
         };
@@ -321,7 +343,7 @@ describe("generateStructuredOutput", () => {
       if (call.method === "POST" && call.url.includes("/session/ses_retry/message")) {
         return {
           body: {
-            info: { structured: { topic: "x", count: 1 } },
+            info: { structured_output: { topic: "x", count: 1 } },
             parts: [],
           },
         };
@@ -356,10 +378,12 @@ describe("generateStructuredOutput regression tests (issue #110)", () => {
 
   beforeEach(() => {
     mock = undefined;
+    resetHostFetch();
   });
 
   afterEach(() => {
     mock?.restore();
+    resetHostFetch();
   });
 
   it("forwards directory as query param on create/prompt/delete", async () => {
@@ -374,7 +398,7 @@ describe("generateStructuredOutput regression tests (issue #110)", () => {
       if (call.method === "POST" && call.url.includes("/session/ses_dir/message")) {
         return {
           body: {
-            info: { structured: { topic: "auth", count: 1 } },
+            info: { structured_output: { topic: "auth", count: 1 } },
             parts: [],
           },
         };
@@ -430,7 +454,7 @@ describe("generateStructuredOutput regression tests (issue #110)", () => {
       if (call.method === "POST" && call.url.includes("/session/ses_nodir/message")) {
         return {
           body: {
-            info: { structured: { topic: "x", count: 1 } },
+            info: { structured_output: { topic: "x", count: 1 } },
             parts: [],
           },
         };
@@ -469,7 +493,7 @@ describe("generateStructuredOutput regression tests (issue #110)", () => {
       if (call.method === "POST" && call.url.includes("/session/ses_slash/message")) {
         return {
           body: {
-            info: { structured: { topic: "x", count: 1 } },
+            info: { structured_output: { topic: "x", count: 1 } },
             parts: [],
           },
         };
@@ -509,7 +533,7 @@ describe("generateStructuredOutput regression tests (issue #110)", () => {
       if (call.method === "POST" && call.url.includes("/session/ses_url/message")) {
         return {
           body: {
-            info: { structured: { topic: "x", count: 1 } },
+            info: { structured_output: { topic: "x", count: 1 } },
             parts: [],
           },
         };
@@ -533,8 +557,115 @@ describe("generateStructuredOutput regression tests (issue #110)", () => {
     expect(mock.calls.length).toBe(3);
   });
 
+  it("uses the injected opencode host fetch instead of global fetch", async () => {
+    const globalFetch = globalThis.fetch;
+    const calls: FetchCall[] = [];
+
+    const failingFetch: typeof fetch = Object.assign(
+      async () => {
+        throw new TypeError("global fetch should not be used");
+      },
+      { preconnect: globalFetch.preconnect }
+    );
+    globalThis.fetch = failingFetch;
+
+    const hostFetch: typeof fetch = Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const req = input instanceof Request ? input : new Request(input, init);
+        const method = req.method.toUpperCase();
+        const text = method === "GET" || method === "HEAD" ? "" : await req.text();
+        const call: FetchCall = {
+          url: req.url,
+          method,
+          body: text ? JSON.parse(text) : undefined,
+        };
+        calls.push(call);
+
+        if (call.method === "POST" && call.url.endsWith("/session")) {
+          return new Response(JSON.stringify({ id: "ses_host_fetch" }));
+        }
+        if (call.method === "POST" && call.url.includes("/session/ses_host_fetch/message")) {
+          return new Response(
+            JSON.stringify({ info: { structured_output: { topic: "host", count: 1 } }, parts: [] })
+          );
+        }
+        if (call.method === "DELETE") {
+          return new Response(JSON.stringify(true));
+        }
+        throw new Error(`unexpected host fetch: ${call.method} ${call.url}`);
+      },
+      { preconnect: globalFetch.preconnect }
+    );
+
+    setHostFetch(hostFetch);
+
+    try {
+      const client = createV2Client("http://localhost:4096");
+      const result = await generateStructuredOutput({
+        client,
+        providerID: "openai",
+        modelID: "gpt-5.5",
+        systemPrompt: "s",
+        userPrompt: "u",
+        schema,
+      });
+
+      expect(result).toEqual({ topic: "host", count: 1 });
+      expect(calls.map((call) => call.method)).toEqual(["POST", "POST", "DELETE"]);
+    } finally {
+      globalThis.fetch = globalFetch;
+      resetHostFetch();
+    }
+  });
+
   it("surfaces a non-2xx response from POST /session", async () => {
-    mock = installFetchMock(() => ({ status: 502, body: { error: "bad gateway" } }));
+    mock = installFetchMock(() => ({
+      status: 502,
+      body: { error: "bad gateway", token: "secret-token" },
+    }));
+
+    const client = createV2Client("http://127.0.0.1:9999");
+    const promise = generateStructuredOutput({
+      client,
+      providerID: "github-copilot",
+      modelID: "gpt-4o-mini",
+      systemPrompt: "s",
+      userPrompt: "u",
+      schema,
+    });
+
+    await expect(promise).rejects.toThrow(
+      /POST \/session failed at http:\/\/127\.0\.0\.1:9999\/session \(502 Bad Gateway\): <redacted response body>/
+    );
+    await promise.catch((error: unknown) => {
+      expect(String(error)).not.toContain("secret-token");
+      expect(String(error)).not.toContain("bad gateway");
+    });
+
+    // No further calls should have been made (no prompt, no delete)
+    expect(mock!.calls.length).toBe(1);
+  });
+
+  it("redacts directory query params and response bodies from prompt failure diagnostics", async () => {
+    mock = installFetchMock((call) => {
+      if (
+        call.method === "POST" &&
+        call.url.includes("/session") &&
+        !call.url.includes("/message")
+      ) {
+        return { body: { id: "ses_redact" } };
+      }
+      if (call.method === "POST" && call.url.includes("/session/ses_redact/message")) {
+        return {
+          status: 500,
+          body: { error: "model unavailable", prompt: "private prompt", path: "/private/project" },
+        };
+      }
+      if (call.method === "DELETE") {
+        return { body: true };
+      }
+      throw new Error(`unexpected fetch: ${call.method} ${call.url}`);
+    });
 
     const client = createV2Client("http://127.0.0.1:9999");
     await expect(
@@ -545,11 +676,27 @@ describe("generateStructuredOutput regression tests (issue #110)", () => {
         systemPrompt: "s",
         userPrompt: "u",
         schema,
+        directory: "/private/project",
       })
-    ).rejects.toThrow(/POST \/session failed/);
+    ).rejects.toThrow(
+      /POST \/session\/\{id\}\/message failed at http:\/\/127\.0\.0\.1:9999\/session\/ses_redact\/message \(500 Internal Server Error\): <redacted response body>/
+    );
 
-    // No further calls should have been made (no prompt, no delete)
-    expect(mock!.calls.length).toBe(1);
+    await generateStructuredOutput({
+      client,
+      providerID: "github-copilot",
+      modelID: "gpt-4o-mini",
+      systemPrompt: "s",
+      userPrompt: "u",
+      schema,
+      directory: "/private/project",
+    }).catch((error: unknown) => {
+      const message = String(error);
+      expect(message).not.toContain("directory=");
+      expect(message).not.toContain("/private/project");
+      expect(message).not.toContain("private prompt");
+      expect(message).not.toContain("model unavailable");
+    });
   });
 
   it("surfaces a non-2xx response from POST /session/{id}/message and still cleans up", async () => {
@@ -580,7 +727,9 @@ describe("generateStructuredOutput regression tests (issue #110)", () => {
         userPrompt: "u",
         schema,
       })
-    ).rejects.toThrow(/POST \/session\/\{id\}\/message failed/);
+    ).rejects.toThrow(
+      /POST \/session\/\{id\}\/message failed at http:\/\/127\.0\.0\.1:9999\/session\/ses_prompt_500\/message \(500 Internal Server Error\): <redacted response body>/
+    );
 
     // delete is best-effort and should still run
     expect(mock!.calls.find((c) => c.method === "DELETE")).toBeDefined();
