@@ -7,6 +7,7 @@ on:
       - "bun.lock"
       - "tsconfig.json"
       - "src/**"
+      - "scripts/native-deps-smoke.mjs"
       - "scripts/smoke-test.mjs"
       - "scripts/copy-web-assets.mjs"
       - ".github/workflows/platform-smoke.yml"
@@ -55,6 +56,8 @@ jobs:
 
           cd "$smoke_dir"
           npm init -y
-          npm install "$tarball_path"
+          npm install --ignore-scripts "$tarball_path"
+          cp "$GITHUB_WORKSPACE/scripts/native-deps-smoke.mjs" ./native-deps-smoke.mjs
           cp "$GITHUB_WORKSPACE/scripts/smoke-test.mjs" ./smoke-test.mjs
+          node ./native-deps-smoke.mjs
           node ./smoke-test.mjs
