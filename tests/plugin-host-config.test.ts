@@ -81,7 +81,7 @@ describe("OpenCode host client config", () => {
     globalThis.fetch = fallbackFetch;
 
     try {
-      configureOpencodeHostTransport({
+      await configureOpencodeHostTransport({
         client: { provider: { list: async () => ({ data: { connected: [] } }) } },
         serverUrl: "http://localhost:4096",
       });

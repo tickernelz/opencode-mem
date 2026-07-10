@@ -21,8 +21,10 @@ const promptManagerUrl = new URL(
 ).href;
 const loggerUrl = new URL("../src/services/logger.js", import.meta.url).href;
 const languageUrl = new URL("../src/services/language-detector.js", import.meta.url).href;
-const opencodeProviderUrl = new URL("../src/services/ai/opencode-provider.js", import.meta.url)
-  .href;
+const opencodeProviderLoaderUrl = new URL(
+  "../src/services/ai/opencode-provider-loader.js",
+  import.meta.url
+).href;
 
 function runScenario() {
   const dir = mkdtempSync(join(tmpdir(), "opencode-mem-auto-capture-"));
@@ -153,17 +155,19 @@ mock.module(${JSON.stringify(languageUrl)}, () => ({
   detectLanguage: () => "en",
   getLanguageName: () => "English",
 }));
-mock.module(${JSON.stringify(opencodeProviderUrl)}, () => ({
-  isProviderConnected: () => true,
-  getV2Client: () => ({}),
-  generateStructuredOutput: async ({ userPrompt }) => {
-    summaryPrompts.push(userPrompt);
-    return {
-      summary: userPrompt.includes("First request") ? "summary-first" : "summary-second",
-      type: "discussion",
-      tags: [],
-    };
-  },
+mock.module(${JSON.stringify(opencodeProviderLoaderUrl)}, () => ({
+  loadOpencodeProvider: async () => ({
+    isProviderConnected: () => true,
+    getV2Client: () => ({}),
+    generateStructuredOutput: async ({ userPrompt }) => {
+      summaryPrompts.push(userPrompt);
+      return {
+        summary: userPrompt.includes("First request") ? "summary-first" : "summary-second",
+        type: "discussion",
+        tags: [],
+      };
+    },
+  }),
 }));
 
 const { performAutoCapture } = await import(${JSON.stringify(autoCaptureUrl)});
