@@ -24,13 +24,14 @@
  */
 
 import type { z } from "zod";
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import {
   diagnosticUrl,
   readJson,
   responseStatus,
   type FetchEndpoint,
 } from "./opencode-diagnostics.js";
+import { createLazyV2Client } from "./opencode-sdk-client.js";
 
 let _connectedProviders: Set<string> = new Set();
 let _v2Client: OpencodeClient | undefined;
@@ -64,7 +65,7 @@ export function getV2Client(): OpencodeClient | undefined {
 export function createV2Client(serverUrl: URL | string): OpencodeClient {
   const baseUrl = typeof serverUrl === "string" ? serverUrl : serverUrl.toString();
   _v2BaseUrl = baseUrl;
-  return createOpencodeClient({ baseUrl });
+  return createLazyV2Client(baseUrl);
 }
 
 export interface StructuredOutputOptions<T> {
