@@ -7,6 +7,7 @@ import type { UserPrompt } from "./user-prompt/user-prompt-manager.js";
 import { userProfileManager } from "./user-profile/user-profile-manager.js";
 import { sortProfileItems } from "../utils/profile.js";
 import type { UserProfile, UserProfileData } from "./user-profile/types.js";
+import { loadOpencodeProvider } from "./ai/opencode-provider-loader.js";
 
 let isLearningRunning = false;
 
@@ -448,7 +449,7 @@ async function analyzeUserProfile(
   if (CONFIG.opencodeProvider && CONFIG.opencodeModel) {
     log("user-profile-learning: trying opencode provider");
     try {
-      const { generateStructuredOutput } = await import("./ai/opencode-provider.js");
+      const { generateStructuredOutput } = await loadOpencodeProvider();
       const { getOpenCodeClient } = await import("./ai/profile-llm-client.js");
 
       log("user-profile-learning: opencode provider diag", {
@@ -692,7 +693,7 @@ If no clear chains, return { "paths": [] }.`;
   if (CONFIG.opencodeProvider && CONFIG.opencodeModel) {
     try {
       const { z } = await import("zod");
-      const { generateStructuredOutput } = await import("./ai/opencode-provider.js");
+      const { generateStructuredOutput } = await loadOpencodeProvider();
       const { getOpenCodeClient } = await import("./ai/profile-llm-client.js");
 
       let v2Client;

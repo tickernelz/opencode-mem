@@ -1,6 +1,7 @@
 import type { UserProfileData } from "./types.js";
 import { CONFIG } from "../../config.js";
 import { log } from "../logger.js";
+import { loadOpencodeProvider } from "../ai/opencode-provider-loader.js";
 
 export interface AICleanupResult {
   cleaned: UserProfileData;
@@ -191,7 +192,7 @@ async function callAICleanup(
   // Use opencode internal session when opencodeProvider is configured (same pattern as auto-capture)
   if (CONFIG.opencodeProvider && CONFIG.opencodeModel) {
     try {
-      const { getV2Client } = await import("../ai/opencode-provider.js");
+      const { getV2Client } = await loadOpencodeProvider();
       const v2Client = getV2Client();
       if (v2Client) {
         const result = await callViaOpencodeWithClient(v2Client, prompt);

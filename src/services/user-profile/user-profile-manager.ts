@@ -8,6 +8,7 @@ import { safeArray } from "./profile-utils.js";
 import { EmbeddingService } from "../embedding.js";
 import { log } from "../logger.js";
 import { cosineSimilarityNumbers, l2Normalize } from "../../utils/math.js";
+import { loadOpencodeProvider } from "../ai/opencode-provider-loader.js";
 
 const CENTROID_EMA_WEIGHT = 0.85;
 const CENTROID_EMA_WEIGHT_COMPLEMENT = 0.15;
@@ -1303,7 +1304,7 @@ Answer JSON only: { "duplicate": true|false, "reason": "one sentence explanation
     if (CONFIG.opencodeProvider && CONFIG.opencodeModel) {
       try {
         const { z } = await import("zod");
-        const { generateStructuredOutput } = await import("../ai/opencode-provider.js");
+        const { generateStructuredOutput } = await loadOpencodeProvider();
         const { getOpenCodeClient } = await import("../ai/profile-llm-client.js");
 
         let v2Client;
@@ -1503,7 +1504,7 @@ Answer JSON only: { "conflict": true|false, "reason": "one sentence explanation"
     if (CONFIG.opencodeProvider && CONFIG.opencodeModel) {
       try {
         const { z } = await import("zod");
-        const { generateStructuredOutput } = await import("../ai/opencode-provider.js");
+        const { generateStructuredOutput } = await loadOpencodeProvider();
         const { getOpenCodeClient } = await import("../ai/profile-llm-client.js");
 
         let v2Client;
@@ -1757,7 +1758,7 @@ Generate a concise, abstract description of the user's general behavioral tenden
     systemPrompt: string,
     userPrompt: string
   ): Promise<string | null> {
-    const { generateStructuredOutput } = await import("../ai/opencode-provider.js");
+    const { generateStructuredOutput } = await loadOpencodeProvider();
     const { getOpenCodeClient } = await import("../ai/profile-llm-client.js");
 
     let v2Client;

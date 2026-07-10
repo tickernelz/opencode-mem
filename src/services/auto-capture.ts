@@ -4,6 +4,7 @@ import { getTags } from "./tags.js";
 import { log } from "./logger.js";
 import { CONFIG } from "../config.js";
 import { userPromptManager, type UserPrompt } from "./user-prompt/user-prompt-manager.js";
+import { loadOpencodeProvider } from "./ai/opencode-provider-loader.js";
 
 interface ToolCallInfo {
   name: string;
@@ -349,7 +350,7 @@ async function generateSummary(
       }
 
       const { isProviderConnected, getV2Client, generateStructuredOutput } =
-        await import("./ai/opencode-provider.js");
+        await loadOpencodeProvider();
 
       // "inherit" resolves to the model opencode used for the captured prompt
       // (recorded by the chat.params hook). Without a concrete model id, the

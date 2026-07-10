@@ -16,14 +16,8 @@ import { log } from "./services/logger.js";
 import type { MemoryType } from "./types/index.js";
 import { getLanguageName } from "./services/language-detector.js";
 import type { MemoryScope } from "./services/client.js";
-import {
-  createV2Client,
-  resetHostFetch,
-  setConnectedProviders,
-  setHostFetch,
-  setV2Client,
-} from "./services/ai/opencode-provider.js";
 import { getHostClientConfig } from "./services/ai/opencode-host-config.js";
+import { loadOpencodeProvider } from "./services/ai/opencode-provider-loader.js";
 
 export function isStructuredSummaryPromptMessage(userMessage: string): boolean {
   // This is the plugin's own structured-summary request. OpenCode echoes it
@@ -33,10 +27,12 @@ export function isStructuredSummaryPromptMessage(userMessage: string): boolean {
   return userMessage.includes("Analyze this conversation.") && userMessage.includes('type="skip"');
 }
 
-export function configureOpencodeHostTransport(ctx: {
+export async function configureOpencodeHostTransport(ctx: {
   readonly client: unknown;
   readonly serverUrl?: string | URL;
-}): void {
+}): Promise<void> {
+  const { createV2Client, resetHostFetch, setHostFetch, setV2Client } =
+    await loadOpencodeProvider();
   resetHostFetch();
   const hostConfig = getHostClientConfig(ctx);
   if (hostConfig.fetch) {
@@ -89,12 +85,13 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     })();
   }
 
-  configureOpencodeHostTransport(ctx);
+  await configureOpencodeHostTransport(ctx);
 
   (async () => {
     try {
       const providerResult = await ctx.client.provider.list();
       if (providerResult.data?.connected) {
+        const { setConnectedProviders } = await loadOpencodeProvider();
         setConnectedProviders(providerResult.data.connected);
         log("opencode providers connected", {
           list: providerResult.data.connected,

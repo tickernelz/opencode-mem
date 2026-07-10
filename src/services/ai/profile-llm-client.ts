@@ -1,5 +1,6 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { CONFIG } from "../../config.js";
+import { loadOpencodeProvider } from "./opencode-provider-loader.js";
 
 let _cachedClient: OpencodeClient | null = null;
 let _cachedProvider: string | null = null;
@@ -17,7 +18,7 @@ export async function getOpenCodeClient(): Promise<OpencodeClient> {
     return _cachedClient;
   }
 
-  const { isProviderConnected, getV2Client } = await import("./opencode-provider.js");
+  const { isProviderConnected, getV2Client } = await loadOpencodeProvider();
 
   if (!isProviderConnected(provider)) {
     throw new Error(
