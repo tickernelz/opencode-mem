@@ -52,10 +52,8 @@
     "franc-min": "^6.2.0",
     "iso-639-3": "^3.0.1",
     "zod": "^4.3.6",
-    "@huggingface/transformers": "^4.2.0"
-  },
-  "optionalDependencies": {
-    "usearch": "^2.21.4"
+    "@huggingface/transformers": "^4.2.0",
+    "usearch": "2.26.0"
   },
   "//": "Remove onnxruntime-node override after https://github.com/microsoft/onnxruntime/issues/27961 is resolved",
   "overrides": {
