@@ -93,11 +93,35 @@ export class UserPromptManager {
 
     const stmt = this.db.prepare(`
       INSERT INTO user_prompts (id, session_id, message_id, project_path, content, created_at, captured)
-      VALUES (?, ?, ?, ?, ?, ?, 0)
+      SELECT ?, ?, ?, ?, ?, ?, 0
+      WHERE NOT EXISTS (
+        SELECT 1 FROM user_prompts WHERE session_id = ? AND message_id = ?
+      )
     `);
 
-    stmt.run(id, sessionId, messageId, projectPath, content, now);
-    return id;
+    const result = stmt.run(
+      id,
+      sessionId,
+      messageId,
+      projectPath,
+      content,
+      now,
+      sessionId,
+      messageId
+    );
+    if (result.changes > 0) return id;
+
+    const existing = this.db
+      .prepare(
+        `SELECT id FROM user_prompts
+         WHERE session_id = ? AND message_id = ?
+         ORDER BY created_at ASC
+         LIMIT 1`
+      )
+      .get(sessionId, messageId) as { id: string } | undefined;
+    if (existing) return existing.id;
+
+    throw new Error("Failed to save or locate user prompt");
   }
 
   setPromptModel(messageId: string, providerId: string, modelId: string): void {

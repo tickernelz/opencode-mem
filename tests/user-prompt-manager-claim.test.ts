@@ -127,6 +127,7 @@ describe("UserPromptManager.claimPrompt / releaseClaim", () => {
 
   it("ignores prompts that have exceeded max retries", () => {
     const id = mgr.savePrompt("session-retries", "msg-1", "/path", "hello retry");
+    activeIds.push(id);
 
     for (let i = 0; i < 4; i++) {
       mgr.recordFailedAttempt(id);
@@ -156,5 +157,54 @@ describe("UserPromptManager.claimPrompt / releaseClaim", () => {
     const prompts = mgr.getUncapturedPromptsForSession("session-batch");
 
     expect(prompts.map((prompt) => prompt.id)).toEqual([older, later]);
+  });
+
+  it("stores repeated delivery of the same session message only once", () => {
+    const first = mgr.savePrompt(
+      "session-duplicate",
+      "message-duplicate",
+      "/tmp/proj",
+      "same prompt"
+    );
+    const second = mgr.savePrompt(
+      "session-duplicate",
+      "message-duplicate",
+      "/tmp/proj",
+      "same prompt"
+    );
+    activeIds.push(first, second);
+
+    expect(second).toBe(first);
+    expect(mgr.countUnanalyzedForUserLearning()).toBe(1);
+  });
+
+  it("does not reopen profile learning when a handled message is delivered again", () => {
+    const first = mgr.savePrompt(
+      "session-handled",
+      "message-handled",
+      "/tmp/proj",
+      "already learned"
+    );
+    mgr.markAsUserLearningCaptured(first);
+
+    const repeated = mgr.savePrompt(
+      "session-handled",
+      "message-handled",
+      "/tmp/proj",
+      "already learned"
+    );
+    activeIds.push(first, repeated);
+
+    expect(repeated).toBe(first);
+    expect(mgr.countUnanalyzedForUserLearning()).toBe(0);
+  });
+
+  it("keeps the same message id distinct across sessions", () => {
+    const first = mgr.savePrompt("session-one", "shared-message", "/tmp/proj", "first session");
+    const second = mgr.savePrompt("session-two", "shared-message", "/tmp/proj", "second session");
+    activeIds.push(first, second);
+
+    expect(second).not.toBe(first);
+    expect(mgr.countUnanalyzedForUserLearning()).toBe(2);
   });
 });
