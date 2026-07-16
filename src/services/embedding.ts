@@ -26,6 +26,14 @@ async function ensureTransformersLoaded(): Promise<NonNullable<typeof _transform
   mod.env.allowLocalModels = true;
   mod.env.allowRemoteModels = true;
   mod.env.cacheDir = join(CONFIG.storagePath, ".cache");
+  // Force WASM backend to avoid onnxruntime-node NAPI incompatibility with Bun.
+  // onnxruntime-node uses Node-API which crashes Bun's NAPI implementation.
+  // WASM backend (onnxruntime-web) is slower (~1.6-2x) but fully compatible.
+  try {
+    (mod.env as any).backends.setPriority(["wasm", "cpu"]);
+  } catch (e) {
+    log("Failed to set backend priority to WASM", { error: String(e) });
+  }
   // Keep ONNX WASM single-threaded for Bun/Node runtimes without SharedArrayBuffer.
   try {
     (mod.env as any).backends.onnx.wasm.numThreads = 1;
