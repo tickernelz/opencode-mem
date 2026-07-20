@@ -35,10 +35,14 @@ async function fetchAPI(endpoint, options = {}) {
     const timeoutMs =
       options.timeout ||
       (options.method === "POST" && endpoint.includes("/ai-cleanup") ? 180000 : 60000);
-    const { timeout: _, ...fetchOptions } = options;
+    const { timeout: _, headers: extraHeaders, ...fetchOptions } = options;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const response = await fetch(API_BASE + endpoint, {
       ...fetchOptions,
+      headers: {
+        ...extraHeaders,
+        "x-opencode-mem-token": window.__OPENCODE_MEM_TOKEN__ || "",
+      },
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
@@ -966,7 +970,7 @@ function renderUserProfile() {
   container.innerHTML = `
     <div class="profile-header">
       <div class="profile-info">
-        <h3>${profile.displayName || profile.userId}</h3>
+        <h3>${escapeHtml(profile.displayName || profile.userId)}</h3>
         <div class="profile-stats">
           <div class="stat-pill">
             <span class="label">${t("profile-version")}</span>

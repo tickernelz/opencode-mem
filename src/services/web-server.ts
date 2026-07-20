@@ -5,6 +5,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "./logger.js";
 import { corsPreflightResponse, disallowedCorsResponse, isAllowedBrowserOrigin } from "./cors.js";
+import { getOrCreateAuthToken, isAuthorizedApiRequest, AUTH_HEADER } from "./auth-token.js";
 import {
   handleListTags,
   handleListMemories,
@@ -297,6 +298,7 @@ export class WebServer {
     try {
       const response = await fetch(`${this.getUrl()}/api/stats`, {
         method: "GET",
+        headers: { [AUTH_HEADER]: getOrCreateAuthToken() },
         signal: AbortSignal.timeout(2000),
       });
       return response.ok;
@@ -319,6 +321,10 @@ export class WebServer {
 
     if (method === "OPTIONS") {
       return corsPreflightResponse(req);
+    }
+
+    if (path.startsWith("/api/") && !isAuthorizedApiRequest(req)) {
+      return this.jsonResponse({ success: false, error: "Unauthorized" }, 401);
     }
 
     try {
@@ -569,7 +575,15 @@ export class WebServer {
         });
       }
 
-      const content = readFileSync(filePath, "utf-8");
+      let content = readFileSync(filePath, "utf-8");
+
+      if (filename === "index.html") {
+        const token = getOrCreateAuthToken();
+        content = content.replace(
+          "</head>",
+          `<script>window.__OPENCODE_MEM_TOKEN__=${JSON.stringify(token)};</script></head>`
+        );
+      }
 
       return new Response(content, {
         headers: {

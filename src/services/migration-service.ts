@@ -256,6 +256,9 @@ export class MigrationService {
 
             const scope = memory.containerTag.includes("_user_") ? "user" : "project";
             const hash = memory.containerTag.split("_").slice(2).join("_");
+            if (!/^[a-zA-Z0-9]+$/.test(hash)) {
+              throw new Error("Invalid containerTag: hash segment must be alphanumeric");
+            }
             const newShard = shardManager.getWriteShard(scope, hash);
             const newDb = connectionManager.getConnection(newShard.dbPath);
 

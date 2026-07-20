@@ -81,13 +81,15 @@ function toBlob(vector?: Float32Array): Uint8Array | null {
   return vector ? new Uint8Array(vector.buffer) : null;
 }
 
+const SAFE_HASH_PATTERN = /^[a-zA-Z0-9]+$/;
+
 function extractScopeFromTag(tag: string): { scope: "project"; hash: string } {
   const parts = tag.split("_");
-  if (parts.length >= 3) {
-    const hash = parts.slice(2).join("_");
-    return { scope: "project", hash };
+  const hash = parts.length >= 3 ? parts.slice(2).join("_") : tag;
+  if (!SAFE_HASH_PATTERN.test(hash)) {
+    throw new Error("Invalid containerTag: hash segment must be alphanumeric");
   }
-  return { scope: "project", hash: tag };
+  return { scope: "project", hash };
 }
 
 function getProjectPathFromTag(tag: string): string | undefined {
