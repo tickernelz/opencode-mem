@@ -1,11 +1,10 @@
-import { shardManager } from "./sqlite/shard-manager.js";
-import { vectorSearch } from "./sqlite/vector-search.js";
-import { connectionManager } from "./sqlite/connection-manager.js";
+import { tursoShardManager } from "./turso/shard-manager.js";
+import { tursoVectorSearch } from "./turso/vector-search.js";
+import { tursoConnectionManager } from "./turso/connection-manager.js";
+import { ensureTursoReady } from "./turso/ready.js";
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
 import { userPromptManager } from "./user-prompt/user-prompt-manager.js";
-import Database from "bun:sqlite";
-import { join } from "node:path";
 
 interface CleanupResult {
   deletedCount: number;
@@ -43,60 +42,58 @@ export class CleanupService {
     this.lastCleanupTime = Date.now();
 
     try {
+      await ensureTursoReady();
       const cutoffTime = Date.now() - CONFIG.autoCleanupRetentionDays * 24 * 60 * 60 * 1000;
 
-      const userShards = shardManager.getAllShards("user", "");
-      const projectShards = shardManager.getAllShards("project", "");
+      const userShards = await tursoShardManager.getAllShards("user", "");
+      const projectShards = await tursoShardManager.getAllShards("project", "");
       const allShards = [...userShards, ...projectShards];
 
       const pinnedMemoryIds = new Set<string>();
       for (const shard of allShards) {
-        const db = connectionManager.getConnection(shard.dbPath);
-        const pinned = db.prepare(`SELECT id FROM memories WHERE is_pinned = 1`).all() as any[];
-        pinned.forEach((row) => pinnedMemoryIds.add(row.id));
+        const db = await tursoConnectionManager.getConnection(shard.dbPath);
+        const pinned = await db.all(`SELECT id FROM memories WHERE is_pinned = 1`);
+        pinned.forEach((row) => pinnedMemoryIds.add(String(row.id)));
       }
 
-      const promptCleanupResult = userPromptManager.deleteOldPrompts(cutoffTime);
+      const promptCleanupResult = await userPromptManager.deleteOldPrompts(cutoffTime);
       const linkedMemoryIds = new Set(promptCleanupResult.linkedMemoryIds);
-
       const protectedMemoryIds = new Set([...pinnedMemoryIds, ...linkedMemoryIds]);
 
       let totalDeleted = 0;
       let userDeleted = 0;
       let projectDeleted = 0;
-      let linkedMemoriesDeleted = 0;
+      const linkedMemoriesDeleted = 0;
       let pinnedSkipped = 0;
 
       for (const shard of allShards) {
-        const db = connectionManager.getConnection(shard.dbPath);
-
-        const oldMemories = db
-          .prepare(
-            `
-          SELECT id, container_tag, is_pinned FROM memories 
+        const db = await tursoConnectionManager.getConnection(shard.dbPath);
+        const oldMemories = await db.all(
+          `
+          SELECT id, container_tag, is_pinned FROM memories
           WHERE updated_at < ?
-        `
-          )
-          .all(cutoffTime) as any[];
+        `,
+          [cutoffTime]
+        );
 
         for (const memory of oldMemories) {
           try {
-            if (memory.is_pinned === 1) {
+            if (Number(memory.is_pinned) === 1) {
               pinnedSkipped++;
               continue;
             }
 
-            if (protectedMemoryIds.has(memory.id)) {
+            if (protectedMemoryIds.has(String(memory.id))) {
               continue;
             }
 
-            await vectorSearch.deleteVector(db, memory.id, shard);
-            shardManager.decrementVectorCount(shard.id);
+            await tursoVectorSearch.deleteVector(db, String(memory.id));
+            await tursoShardManager.decrementVectorCount(shard.id);
             totalDeleted++;
 
-            if (memory.container_tag?.includes("_user_")) {
+            if (String(memory.container_tag).includes("_user_")) {
               userDeleted++;
-            } else if (memory.container_tag?.includes("_project_")) {
+            } else if (String(memory.container_tag).includes("_project_")) {
               projectDeleted++;
             }
           } catch (error) {
@@ -108,11 +105,8 @@ export class CleanupService {
       const promptsDeleted = promptCleanupResult.deleted - linkedMemoryIds.size;
 
       try {
-        const promptsDbPath = join(CONFIG.storagePath, "user-prompts.db");
-        const vacuumDb = new Database(promptsDbPath, { readonly: false, create: false });
-        vacuumDb.exec("VACUUM;");
-        vacuumDb.close();
-        log("Cleanup: VACUUM done", { db: promptsDbPath });
+        await userPromptManager.vacuum();
+        log("Cleanup: VACUUM done", { db: "user-prompts.db" });
       } catch (err) {
         log("Cleanup: VACUUM skipped (DB busy)", { error: String(err) });
       }

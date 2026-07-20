@@ -5,6 +5,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "./logger.js";
 import { corsPreflightResponse, disallowedCorsResponse, isAllowedBrowserOrigin } from "./cors.js";
+import { assertWebServerNetworkAuth, authorizeApiRequest } from "./web-api-auth.js";
 import { getOrCreateAuthToken, isAuthorizedApiRequest } from "./auth-token.js";
 import { WebAuth } from "./web-auth.js";
 import {
@@ -61,7 +62,7 @@ function serveFetch(opts: {
 }): PortableServerHandle {
   if (isBun) {
     const bunHandle = (
-      globalThis as { Bun: { serve: (opts: unknown) => { stop: () => void } } }
+      globalThis as unknown as { Bun: { serve: (opts: unknown) => { stop: () => void } } }
     ).Bun.serve({
       port: opts.port,
       hostname: opts.hostname,
@@ -160,6 +161,7 @@ interface WebServerConfig {
   host: string;
   enabled: boolean;
   auth?: WebAuth;
+  apiToken?: string;
 }
 
 export class WebServer {
@@ -191,6 +193,12 @@ export class WebServer {
     if (!this.config.enabled) {
       return;
     }
+
+    assertWebServerNetworkAuth(
+      this.config.host,
+      this.config.apiToken,
+      this.config.auth?.isEnabled() ?? false
+    );
 
     try {
       this.server = serveFetch({
@@ -298,8 +306,13 @@ export class WebServer {
 
   async checkServerAvailable(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.getUrl()}/api/health`, {
+      const headers = this.config.apiToken
+        ? { Authorization: `Bearer ${this.config.apiToken}` }
+        : undefined;
+      const endpoint = this.config.apiToken ? "/api/stats" : "/api/health";
+      const response = await fetch(`${this.getUrl()}${endpoint}`, {
         method: "GET",
+        headers,
         signal: AbortSignal.timeout(2000),
       });
       return response.ok;
@@ -308,14 +321,13 @@ export class WebServer {
     }
   }
 
-  // --- HTTP request handling (inlined from web-server-worker.ts) ---
+  // --- HTTP request handling ---
 
   private async handleRequest(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const path = url.pathname;
     const method = req.method;
     const origin = req.headers.get("Origin");
-
     const auth = this.config.auth;
     const corsOptions = { httpAuthEnabled: auth?.isEnabled() ?? false };
 
@@ -327,15 +339,21 @@ export class WebServer {
       return corsPreflightResponse(req, corsOptions);
     }
 
-    if (auth && auth.isEnabled()) {
+    if (auth?.isEnabled()) {
       const authCheck = auth.check(req, path);
-      if (!authCheck.ok && authCheck.response) {
-        return authCheck.response;
-      }
+      if (!authCheck.ok && authCheck.response) return authCheck.response;
     }
 
     if (path.startsWith("/api/") && path !== "/api/health" && !isAuthorizedApiRequest(req)) {
-      return this.jsonResponse({ success: false, error: "Unauthorized" }, 401);
+      const configuredTokenFailure = this.config.apiToken
+        ? authorizeApiRequest(req, this.config.apiToken)
+        : null;
+      if (!this.config.apiToken || configuredTokenFailure) {
+        return (
+          configuredTokenFailure ??
+          this.jsonResponse({ success: false, error: "Unauthorized" }, 401)
+        );
+      }
     }
 
     try {

@@ -1,7 +1,7 @@
-import { getDatabase } from "../sqlite/sqlite-bootstrap.js";
 import { join } from "node:path";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { connectionManager } from "../sqlite/connection-manager.js";
+import { tursoConnectionManager } from "../turso/connection-manager.js";
+import type { TursoDb } from "../turso/turso-db.js";
 import { CONFIG } from "../../config.js";
 import type { UserProfile, UserProfileChangelog, UserProfileData } from "./types.js";
 import { safeArray } from "./profile-utils.js";
@@ -69,14 +69,12 @@ function normalizeDescription(text: string): string {
     .trim();
 }
 
-const Database = getDatabase();
-type DatabaseType = typeof Database.prototype;
-
 const USER_PROFILES_DB_NAME = "user-profiles.db";
 
 export class UserProfileManager {
-  private db!: DatabaseType;
-  private readonly dbPath: string;
+  private db: TursoDb | null = null;
+  private dbPath: string;
+  private initPromise: Promise<void> | null = null;
   private coldBuffer: { preferences: any[]; patterns: any[]; workflows: any[] };
   private coldBufferPath: string;
   private dedupCheckedCache: Set<string> = new Set();
@@ -85,12 +83,49 @@ export class UserProfileManager {
     this.dbPath = join(CONFIG.storagePath || "", USER_PROFILES_DB_NAME);
     this.coldBufferPath = join(CONFIG.storagePath || "", "cold-buffer.json");
     this.coldBuffer = this.loadColdBuffer();
-    try {
-      this.db = connectionManager.getConnection(this.dbPath);
-      this.initDatabase();
-    } catch (e) {
-      log("user-profile-manager: db init failed, deferring", { error: String(e) });
+  }
+
+  reset(): void {
+    this.db = null;
+    this.initPromise = null;
+    this.dbPath = join(CONFIG.storagePath || "", USER_PROFILES_DB_NAME);
+    this.coldBufferPath = join(CONFIG.storagePath || "", "cold-buffer.json");
+  }
+
+  private async initialize(): Promise<void> {
+    if (this.initPromise) {
+      return this.initPromise;
     }
+
+    this.initPromise = (async () => {
+      try {
+        this.dbPath = join(CONFIG.storagePath || "", USER_PROFILES_DB_NAME);
+        this.coldBufferPath = join(CONFIG.storagePath || "", "cold-buffer.json");
+        this.db = await tursoConnectionManager.getConnection(this.dbPath);
+        await this.initDatabase();
+      } catch (error) {
+        this.initPromise = null;
+        this.db = null;
+        log("user-profile-manager: db init failed", { error: String(error) });
+        throw error;
+      }
+    })();
+
+    return this.initPromise;
+  }
+
+  private async ready(): Promise<TursoDb> {
+    if (!this.db || !this.initPromise) {
+      await this.initialize();
+    } else {
+      await this.initPromise;
+    }
+
+    if (!this.db) {
+      throw new Error("UserProfileManager: database not initialized");
+    }
+
+    return this.db;
   }
 
   private loadColdBuffer(): { preferences: any[]; patterns: any[]; workflows: any[] } {
@@ -125,69 +160,76 @@ export class UserProfileManager {
     }
   }
 
-  private initDatabase(): void {
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS user_profiles (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL UNIQUE,
-        display_name TEXT NOT NULL,
-        user_name TEXT NOT NULL,
-        user_email TEXT NOT NULL,
-        profile_data TEXT NOT NULL,
-        version INTEGER NOT NULL DEFAULT 1,
-        created_at INTEGER NOT NULL,
-        last_analyzed_at INTEGER NOT NULL,
-        total_prompts_analyzed INTEGER NOT NULL DEFAULT 0,
-        is_active BOOLEAN NOT NULL DEFAULT 1
-      )
-    `);
-
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS user_profile_changelogs (
-        id TEXT PRIMARY KEY,
-        profile_id TEXT NOT NULL,
-        version INTEGER NOT NULL,
-        change_type TEXT NOT NULL,
-        change_summary TEXT NOT NULL,
-        profile_data_snapshot TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        FOREIGN KEY (profile_id) REFERENCES user_profiles(id) ON DELETE CASCADE
-      )
-    `);
-
-    this.db.run("CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id)");
-    this.db.run(
-      "CREATE INDEX IF NOT EXISTS idx_user_profiles_is_active ON user_profiles(is_active)"
-    );
-    this.db.run(
-      "CREATE INDEX IF NOT EXISTS idx_user_profile_changelogs_profile_id ON user_profile_changelogs(profile_id)"
-    );
-    this.db.run(
-      "CREATE INDEX IF NOT EXISTS idx_user_profile_changelogs_version ON user_profile_changelogs(version DESC)"
-    );
+  private async initDatabase(): Promise<void> {
+    const db = this.db!;
+    await db.batch([
+      {
+        sql: `
+          CREATE TABLE IF NOT EXISTS user_profiles (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL UNIQUE,
+            display_name TEXT NOT NULL,
+            user_name TEXT NOT NULL,
+            user_email TEXT NOT NULL,
+            profile_data TEXT NOT NULL,
+            version INTEGER NOT NULL DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            last_analyzed_at INTEGER NOT NULL,
+            total_prompts_analyzed INTEGER NOT NULL DEFAULT 0,
+            is_active BOOLEAN NOT NULL DEFAULT 1
+          )
+        `,
+      },
+      {
+        sql: `
+          CREATE TABLE IF NOT EXISTS user_profile_changelogs (
+            id TEXT PRIMARY KEY,
+            profile_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            change_type TEXT NOT NULL,
+            change_summary TEXT NOT NULL,
+            profile_data_snapshot TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (profile_id) REFERENCES user_profiles(id) ON DELETE CASCADE
+          )
+        `,
+      },
+      { sql: "CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id)" },
+      {
+        sql: "CREATE INDEX IF NOT EXISTS idx_user_profiles_is_active ON user_profiles(is_active)",
+      },
+      {
+        sql: "CREATE INDEX IF NOT EXISTS idx_user_profile_changelogs_profile_id ON user_profile_changelogs(profile_id)",
+      },
+      {
+        sql: "CREATE INDEX IF NOT EXISTS idx_user_profile_changelogs_version ON user_profile_changelogs(version DESC)",
+      },
+    ]);
   }
 
-  getActiveProfile(userId: string): UserProfile | null {
-    const stmt = this.db.prepare(`
-      SELECT * FROM user_profiles 
+  async getActiveProfile(userId: string): Promise<UserProfile | null> {
+    const db = await this.ready();
+    const row = await db.get(
+      `
+      SELECT * FROM user_profiles
       WHERE user_id = ? AND is_active = 1
       LIMIT 1
-    `);
-
-    const row = stmt.get(userId) as any;
+    `,
+      [userId]
+    );
     if (!row) return null;
-
     return this.rowToProfile(row);
   }
 
-  createProfile(
+  async createProfile(
     userId: string,
     displayName: string,
     userName: string,
     userEmail: string,
     profileData: UserProfileData,
     promptsAnalyzed: number
-  ): string {
+  ): Promise<string> {
+    const db = await this.ready();
     const id = `profile_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const now = Date.now();
 
@@ -197,38 +239,40 @@ export class UserProfileManager {
       workflows: safeArray(profileData.workflows),
     };
 
-    const stmt = this.db.prepare(`
+    await db.run(
+      `
       INSERT INTO user_profiles (
-        id, user_id, display_name, user_name, user_email, 
-        profile_data, version, created_at, last_analyzed_at, 
+        id, user_id, display_name, user_name, user_email,
+        profile_data, version, created_at, last_analyzed_at,
         total_prompts_analyzed, is_active
       )
       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 1)
-    `);
-
-    stmt.run(
-      id,
-      userId,
-      displayName,
-      userName,
-      userEmail,
-      JSON.stringify(cleanedData),
-      now,
-      now,
-      promptsAnalyzed
+    `,
+      [
+        id,
+        userId,
+        displayName,
+        userName,
+        userEmail,
+        JSON.stringify(cleanedData),
+        now,
+        now,
+        promptsAnalyzed,
+      ]
     );
 
-    this.addChangelog(id, 1, "create", "Initial profile creation", cleanedData);
+    await this.addChangelog(id, 1, "create", "Initial profile creation", cleanedData);
 
     return id;
   }
 
-  updateProfile(
+  async updateProfile(
     profileId: string,
     profileData: UserProfileData,
     additionalPromptsAnalyzed: number,
     changeSummary: string
-  ): boolean {
+  ): Promise<boolean> {
+    const db = await this.ready();
     const now = Date.now();
 
     const cleanedData: UserProfileData = {
@@ -237,93 +281,101 @@ export class UserProfileManager {
       workflows: safeArray(profileData.workflows),
     };
 
-    const getVersionStmt = this.db.prepare(`SELECT version FROM user_profiles WHERE id = ?`);
-    const versionRow = getVersionStmt.get(profileId) as any;
-    const currentVersion = versionRow?.version || 0;
+    const versionRow = await db.get(`SELECT version FROM user_profiles WHERE id = ?`, [profileId]);
+    const currentVersion = Number(versionRow?.version ?? 0);
     const newVersion = currentVersion + 1;
 
-    const updateStmt = this.db.prepare(`
-      UPDATE user_profiles 
-      SET profile_data = ?, 
-          version = ?, 
-          last_analyzed_at = ?, 
+    const changes = await db.run(
+      `
+      UPDATE user_profiles
+      SET profile_data = ?,
+          version = ?,
+          last_analyzed_at = ?,
           total_prompts_analyzed = total_prompts_analyzed + ?
       WHERE id = ? AND version = ?
-    `);
-
-    const result = updateStmt.run(
-      JSON.stringify(cleanedData),
-      newVersion,
-      now,
-      additionalPromptsAnalyzed,
-      profileId,
-      currentVersion
+    `,
+      [
+        JSON.stringify(cleanedData),
+        newVersion,
+        now,
+        additionalPromptsAnalyzed,
+        profileId,
+        currentVersion,
+      ]
     );
 
-    if (result.changes === 0) {
+    if (changes === 0) {
       return false;
     }
 
-    this.addChangelog(profileId, newVersion, "update", changeSummary, cleanedData);
-
-    this.cleanupOldChangelogs(profileId);
+    await this.addChangelog(profileId, newVersion, "update", changeSummary, cleanedData);
+    await this.cleanupOldChangelogs(profileId);
 
     return true;
   }
 
-  private addChangelog(
+  private async addChangelog(
     profileId: string,
     version: number,
     changeType: string,
     changeSummary: string,
     profileData: UserProfileData
-  ): void {
+  ): Promise<void> {
+    const db = await this.ready();
     const id = `changelog_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const now = Date.now();
 
-    const stmt = this.db.prepare(`
+    await db.run(
+      `
       INSERT INTO user_profile_changelogs (
-        id, profile_id, version, change_type, change_summary, 
+        id, profile_id, version, change_type, change_summary,
         profile_data_snapshot, created_at
       )
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    stmt.run(id, profileId, version, changeType, changeSummary, JSON.stringify(profileData), now);
+    `,
+      [id, profileId, version, changeType, changeSummary, JSON.stringify(profileData), now]
+    );
   }
 
-  private cleanupOldChangelogs(profileId: string): void {
+  private async cleanupOldChangelogs(profileId: string): Promise<void> {
+    const db = await this.ready();
     const retentionCount = CONFIG.userProfileChangelogRetentionCount;
 
-    const stmt = this.db.prepare(`
-      DELETE FROM user_profile_changelogs 
-      WHERE profile_id = ? 
+    await db.run(
+      `
+      DELETE FROM user_profile_changelogs
+      WHERE profile_id = ?
       AND id NOT IN (
-        SELECT id FROM user_profile_changelogs 
-        WHERE profile_id = ? 
-        ORDER BY version DESC 
+        SELECT id FROM user_profile_changelogs
+        WHERE profile_id = ?
+        ORDER BY version DESC
         LIMIT ?
       )
-    `);
-
-    stmt.run(profileId, profileId, retentionCount);
+    `,
+      [profileId, profileId, retentionCount]
+    );
   }
 
-  getProfileChangelogs(profileId: string, limit: number = 10): UserProfileChangelog[] {
-    const stmt = this.db.prepare(`
-      SELECT * FROM user_profile_changelogs 
-      WHERE profile_id = ? 
-      ORDER BY version DESC 
+  async getProfileChangelogs(
+    profileId: string,
+    limit: number = 10
+  ): Promise<UserProfileChangelog[]> {
+    const db = await this.ready();
+    const rows = await db.all(
+      `
+      SELECT * FROM user_profile_changelogs
+      WHERE profile_id = ?
+      ORDER BY version DESC
       LIMIT ?
-    `);
-
-    const rows = stmt.all(profileId, limit) as any[];
+    `,
+      [profileId, limit]
+    );
     return rows.map((row) => this.rowToChangelog(row));
   }
 
-  getChangelogById(id: string): UserProfileChangelog | undefined {
-    const stmt = this.db.prepare(`SELECT * FROM user_profile_changelogs WHERE id = ?`);
-    const row = stmt.get(id) as any;
+  async getChangelogById(id: string): Promise<UserProfileChangelog | undefined> {
+    const db = await this.ready();
+    const row = await db.get(`SELECT * FROM user_profile_changelogs WHERE id = ?`, [id]);
     if (!row) return undefined;
     return this.rowToChangelog(row);
   }
@@ -383,21 +435,21 @@ export class UserProfileManager {
     return { items: filtered, hasChanges, before, removed: before - filtered.length };
   }
 
-  deleteProfile(profileId: string): void {
-    const stmt = this.db.prepare(`DELETE FROM user_profiles WHERE id = ?`);
-    stmt.run(profileId);
+  async deleteProfile(profileId: string): Promise<void> {
+    const db = await this.ready();
+    await db.run(`DELETE FROM user_profiles WHERE id = ?`, [profileId]);
   }
 
-  getProfileById(profileId: string): UserProfile | null {
-    const stmt = this.db.prepare(`SELECT * FROM user_profiles WHERE id = ?`);
-    const row = stmt.get(profileId) as any;
+  async getProfileById(profileId: string): Promise<UserProfile | null> {
+    const db = await this.ready();
+    const row = await db.get(`SELECT * FROM user_profiles WHERE id = ?`, [profileId]);
     if (!row) return null;
     return this.rowToProfile(row);
   }
 
-  getAllActiveProfiles(): UserProfile[] {
-    const stmt = this.db.prepare(`SELECT * FROM user_profiles WHERE is_active = 1`);
-    const rows = stmt.all() as any[];
+  async getAllActiveProfiles(): Promise<UserProfile[]> {
+    const db = await this.ready();
+    const rows = await db.all(`SELECT * FROM user_profiles WHERE is_active = 1`);
     return rows.map((row) => this.rowToProfile(row));
   }
 

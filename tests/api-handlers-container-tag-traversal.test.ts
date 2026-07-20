@@ -6,12 +6,11 @@ import { join } from "node:path";
 const tempDirs: string[] = [];
 const apiHandlersUrl = new URL("../src/services/api-handlers.js", import.meta.url).href;
 const embeddingUrl = new URL("../src/services/embedding.js", import.meta.url).href;
-const connectionManagerUrl = new URL(
-  "../src/services/sqlite/connection-manager.js",
-  import.meta.url
-).href;
-const shardManagerUrl = new URL("../src/services/sqlite/shard-manager.js", import.meta.url).href;
-const vectorSearchUrl = new URL("../src/services/sqlite/vector-search.js", import.meta.url).href;
+const connectionManagerUrl = new URL("../src/services/turso/connection-manager.js", import.meta.url)
+  .href;
+const shardManagerUrl = new URL("../src/services/turso/shard-manager.js", import.meta.url).href;
+const vectorSearchUrl = new URL("../src/services/turso/vector-search.js", import.meta.url).href;
+const readyUrl = new URL("../src/services/turso/ready.js", import.meta.url).href;
 const userPromptManagerUrl = new URL(
   "../src/services/user-prompt/user-prompt-manager.js",
   import.meta.url
@@ -36,40 +35,37 @@ mock.module(${JSON.stringify(embeddingUrl)}, () => ({
 }));
 
 mock.module(${JSON.stringify(connectionManagerUrl)}, () => ({
-  connectionManager: {
-    getConnection() {
-      return {
-        prepare() {
-          return { run() {}, get() { return null; }, all() { return []; } };
-        },
-        transaction(fn) {
-          return fn;
-        },
-        run() {},
-      };
-    },
-    closeAll() {},
+  tursoConnectionManager: {
+    getConnection: async () => ({}),
+    closeAll: async () => {},
   },
 }));
 
 mock.module(${JSON.stringify(shardManagerUrl)}, () => ({
-  shardManager: {
-    getWriteShard(scope, hash) {
+  tursoShardManager: {
+    async withScopeWriteLock(_scope, _hash, operation) {
+      return operation();
+    },
+    async getWriteShard(scope, hash) {
       writeShardCalls.push({ scope, hash });
       return { id: 1, scope, scopeHash: hash, shardIndex: 0, dbPath: "/tmp/shard.db" };
     },
-    getAllShards() {
+    async getAllShards() {
       return [];
     },
-    incrementVectorCount() {},
+    async incrementVectorCount() {},
   },
 }));
 
 mock.module(${JSON.stringify(vectorSearchUrl)}, () => ({
-  vectorSearch: {
-    getBackend: async () => ({ insert: async () => {} }),
-    listMemories: () => [],
+  tursoVectorSearch: {
+    insertVector: async () => {},
+    listMemories: async () => [],
   },
+}));
+
+mock.module(${JSON.stringify(readyUrl)}, () => ({
+  ensureTursoReady: async () => {},
 }));
 
 mock.module(${JSON.stringify(userPromptManagerUrl)}, () => ({

@@ -25,7 +25,7 @@ export async function performAutoCapture(
   isCaptureRunning = true;
 
   try {
-    const prompts = userPromptManager.getUncapturedPromptsForSession(sessionID);
+    const prompts = await userPromptManager.getUncapturedPromptsForSession(sessionID);
     if (prompts.length === 0) {
       return;
     }
@@ -54,7 +54,7 @@ async function capturePrompt(
   let attempt = prompt.capture_attempts || 0;
 
   try {
-    if (!userPromptManager.claimPrompt(prompt.id)) {
+    if (!(await userPromptManager.claimPrompt(prompt.id))) {
       return;
     }
     claimedPromptId = prompt.id;
@@ -111,7 +111,7 @@ async function capturePrompt(
             sessionID,
             type: summaryResult?.type,
           });
-          userPromptManager.deletePrompt(prompt.id);
+          await userPromptManager.deletePrompt(prompt.id);
           claimedPromptId = null;
           return;
         }
@@ -137,8 +137,8 @@ async function capturePrompt(
         });
 
         if (result.success) {
-          userPromptManager.linkMemoryToPrompt(prompt.id, result.id);
-          userPromptManager.markAsCaptured(prompt.id);
+          await userPromptManager.linkMemoryToPrompt(prompt.id, result.id);
+          await userPromptManager.markAsCaptured(prompt.id);
           claimedPromptId = null;
           log("Auto-capture memory persisted", {
             promptId: prompt.id,
@@ -165,7 +165,7 @@ async function capturePrompt(
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : String(error);
 
-        userPromptManager.recordFailedAttempt(prompt.id);
+        await userPromptManager.recordFailedAttempt(prompt.id);
 
         if (attempt < maxRetries) {
           log(`Auto-capture warning (attempt ${attempt}/${maxRetries})`, { error: errMsg });
@@ -196,7 +196,7 @@ async function capturePrompt(
   } finally {
     if (claimedPromptId !== null) {
       try {
-        userPromptManager.releaseClaim(claimedPromptId);
+        await userPromptManager.releaseClaim(claimedPromptId);
       } catch (releaseErr) {
         log(
           `Failed to release captured=2 claim for prompt ${claimedPromptId}: ${

@@ -8,6 +8,7 @@ on:
       - "tsconfig.json"
       - "src/**"
       - "scripts/native-deps-smoke.mjs"
+      - "scripts/verify-libsql-vector.mjs"
       - "scripts/smoke-test.mjs"
       - "scripts/copy-web-assets.mjs"
       - ".github/workflows/platform-smoke.yml"
@@ -39,6 +40,12 @@ jobs:
       - name: Install source dependencies
         run: bun install
 
+      - name: Typecheck source
+        run: bun run typecheck
+
+      - name: Run test suite
+        run: bun test
+
       - name: Build package artifacts
         run: bun run build
 
@@ -59,6 +66,8 @@ jobs:
           npm init -y
           npm install --ignore-scripts "$tarball_path"
           cp "$GITHUB_WORKSPACE/scripts/native-deps-smoke.mjs" ./native-deps-smoke.mjs
+          cp "$GITHUB_WORKSPACE/scripts/verify-libsql-vector.mjs" ./verify-libsql-vector.mjs
           cp "$GITHUB_WORKSPACE/scripts/smoke-test.mjs" ./smoke-test.mjs
           node ./native-deps-smoke.mjs
+          node ./verify-libsql-vector.mjs
           node ./smoke-test.mjs

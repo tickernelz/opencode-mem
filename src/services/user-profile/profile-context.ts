@@ -43,8 +43,8 @@ function escapeXmlAttr(value: unknown): string {
     .replace(/"/g, "&quot;");
 }
 
-export function getUserProfileContext(userId: string): string | null {
-  const profile = userProfileManager.getActiveProfile(userId);
+export async function getUserProfileContext(userId: string): Promise<string | null> {
+  const profile = await userProfileManager.getActiveProfile(userId);
 
   if (!profile) {
     return null;
@@ -78,47 +78,34 @@ export function getUserProfileContext(userId: string): string | null {
   const topWfs = sortedWfs.slice(0, injectWfs);
 
   if (topPrefs.length > 0) {
-    parts.push("<user_preferences>");
+    parts.push("User Preferences:");
     topPrefs.forEach((pref: any) => {
-      parts.push(
-        `<user_preference category="${escapeXmlAttr(pref.category)}">${escapeXmlText(pref.description)}</user_preference>`
-      );
+      parts.push(`- [${pref.category}] ${pref.description}`);
     });
-    parts.push("</user_preferences>");
   }
 
   if (topPats.length > 0) {
-    parts.push("<user_patterns>");
+    parts.push("\nUser Patterns:");
     topPats.forEach((pattern: any) => {
-      parts.push(
-        `<user_pattern category="${escapeXmlAttr(pattern.category)}">${escapeXmlText(pattern.description)}</user_pattern>`
-      );
+      parts.push(`- [${pattern.category}] ${pattern.description}`);
     });
-    parts.push("</user_patterns>");
   }
 
   if (topWfs.length > 0) {
-    parts.push("<user_workflows>");
+    parts.push("\nUser Workflows:");
     topWfs.forEach((workflow: any) => {
-      const frequency = workflow.frequency || 1;
       const steps = workflow.steps?.length
-        ? ` (${frequency}x: ${workflow.steps.join(" → ")})`
-        : ` (${frequency}x)`;
-      parts.push(
-        `<user_workflow frequency="${frequency}x">${escapeXmlText(workflow.description)}${steps}</user_workflow>`
-      );
+        ? ` (${workflow.frequency || 1}x: ${workflow.steps.join(" → ")})`
+        : ` (${workflow.frequency || 1}x)`;
+      parts.push(`- ${workflow.description}${steps}`);
     });
-    parts.push("</user_workflows>");
   }
 
   if ((profileData as any).learning_paths?.length > 0) {
-    parts.push("<learning_paths>");
+    parts.push("\nLearning Paths:");
     (profileData as any).learning_paths.slice(0, 3).forEach((path: any) => {
-      parts.push(
-        `<learning_path topic="${escapeXmlAttr(path.topic)}">${escapeXmlText(path.description)}</learning_path>`
-      );
+      parts.push(`- ${path.topic}: ${path.description}`);
     });
-    parts.push("</learning_paths>");
   }
 
   if (parts.length === 0) {

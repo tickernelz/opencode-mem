@@ -29,7 +29,7 @@ describe("OpenCode 1.3.x plugin-loader contract", () => {
 
   it("dist shard manager avoids CommonJS fs require in ESM output", () => {
     const source = readFileSync(
-      new URL("../dist/services/sqlite/shard-manager.js", import.meta.url),
+      new URL("../dist/services/turso/shard-manager.js", import.meta.url),
       "utf-8"
     );
 
@@ -70,7 +70,7 @@ describe("OpenCode 1.3.x plugin-loader contract", () => {
     expect(typeof serverFn).toBe("function");
 
     // Attempt to invoke server with a minimal mock PluginInput.
-    // The plugin may throw during warmup (missing sqlite/usearch in test env) — that is expected.
+    // The plugin may throw during warmup (missing Turso runtime in test env) — that is expected.
     // If it succeeds, assert the returned hooks have the expected shape.
     const mockInput = {
       client: {},
@@ -89,7 +89,7 @@ describe("OpenCode 1.3.x plugin-loader contract", () => {
       expect(typeof hooks["chat.message"]).toBe("function");
       expect(typeof hooks["event"]).toBe("function");
     } catch {
-      // Warmup/sqlite/usearch failure in test environment is acceptable.
+      // Warmup/Turso failure in test environment is acceptable.
       // The callable surface assertion above is sufficient for contract verification.
     }
   });

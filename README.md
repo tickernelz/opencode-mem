@@ -20,11 +20,11 @@ A persistent memory system for AI coding agents that enables long-term context r
 
 ## Core Features
 
-Local vector database with SQLite + USearch-first vector indexing and ExactScan fallback, persistent project memories, automatic user profile learning, unified memory-prompt timeline, full-featured web UI, intelligent prompt-based memory extraction, multi-provider AI support (OpenAI, Anthropic), 12+ local embedding models, smart deduplication, and built-in privacy protection.
+Local Turso/libSQL database with native vector search, persistent project memories, automatic user profile learning, unified memory-prompt timeline, full-featured web UI, intelligent prompt-based memory extraction, multi-provider AI support (OpenAI, Anthropic), 12+ local embedding models, smart deduplication, and built-in privacy protection.
 
 ## Prerequisites
 
-This plugin uses `USearch` for preferred in-memory vector indexing with automatic ExactScan fallback. No custom SQLite build or browser runtime shim is required.
+This plugin uses embedded Turso/libSQL with native vector indexes (`F32_BLOB`, `vector_top_k`). No separate vector database or custom SQLite build is required.
 
 **Recommended runtime:**
 
@@ -35,9 +35,23 @@ This plugin uses `USearch` for preferred in-memory vector indexing with automati
 
 **Notes:**
 
-- If `USearch` is unavailable or fails at runtime, the plugin automatically falls back to exact vector scanning.
-- SQLite remains the source of truth; search indexes are rebuilt from SQLite data when needed.
+- Vector embeddings are stored and searched directly in Turso/libSQL; inserts update the vector index automatically.
+- Vector search uses libSQL's DiskANN index via `vector_top_k` (approximate nearest neighbors).
 - Auto-capture and user profile learning require an AI provider that can return structured/tool-call output. Memory search/add/list still work without auto-capture provider configuration.
+
+### Upgrading from legacy SQLite shards
+
+On first startup after upgrading, opencode-mem automatically migrates existing memory shard databases to native Turso/libSQL vector format:
+
+- Each shard is backed up as `<shard>.db.legacy.bak` before rewrite
+- Progress is tracked per shard in `<shard>.db.turso-migrate.json`
+- A global marker `.turso-migrated` is written only after all shards verify successfully
+- Do not run multiple OpenCode instances against the same `storagePath` during migration; a lock file (`.turso-migrate.lock`) prevents concurrent migration
+- Manual dimension migrations use `.turso-operation.lock`; other plugin processes reject new memory writes until the migration finishes
+
+If migration is interrupted, the next startup resumes from the backup automatically.
+
+If a shard becomes incompatible (for example after changing `embeddingDimensions`), writes are blocked and the original database is left untouched. Use the Web UI's re-embed migration to build and verify a replacement before it is swapped into place. The previous shard remains available as `<shard>.db.pre-reembed-<pid>-<timestamp>.bak`.
 
 ## Getting Started
 
@@ -63,6 +77,10 @@ memory({ mode: "list", limit: 10 });
 
 Access the web interface at `http://127.0.0.1:4747` for visual memory browsing and management.
 
+**Network binding security:** Keep `webServerHost` on `127.0.0.1` unless you intentionally expose the UI. Binding to `0.0.0.0` (or any non-loopback host) requires `webServerApiToken`; all `/api/*` requests must then send `Authorization: Bearer <token>` or `X-Opencode-Mem-Token`. Open the UI with `?apiToken=<token>` so the browser stores and sends it.
+
+Dimension migrations generate every new embedding first, import them into a temporary indexed shard, verify the row count, and only then replace the original file. Failed migrations leave the source shard untouched.
+
 ## Configuration Essentials
 
 Configure at `~/.config/opencode/opencode-mem.jsonc`:
@@ -85,6 +103,9 @@ The plugin creates a full commented template at this path on first startup. This
   },
   "webServerEnabled": true,
   "webServerPort": 4747,
+  // Required when webServerHost is not 127.0.0.1/localhost:
+  // "webServerHost": "0.0.0.0",
+  // "webServerApiToken": "env://OPENCODE_MEM_WEB_TOKEN",
 
   "autoCaptureEnabled": true,
   "autoCaptureLanguage": "auto",

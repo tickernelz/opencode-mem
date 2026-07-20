@@ -30,7 +30,7 @@ export class AIProviderFactory {
     return ["openai-chat", "openai-responses", "anthropic", "google-gemini"];
   }
 
-  static cleanupExpiredSessions(): number {
+  static async cleanupExpiredSessions(): Promise<number> {
     return aiSessionManager.cleanupExpiredSessions();
   }
 }

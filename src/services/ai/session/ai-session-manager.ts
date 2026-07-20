@@ -1,4 +1,3 @@
-import { getDatabase } from "../../sqlite/sqlite-bootstrap.js";
 import { join } from "node:path";
 import type {
   AISession,
@@ -7,88 +6,132 @@ import type {
   AIProviderType,
   AIMessage,
 } from "./session-types.js";
-import { connectionManager } from "../../sqlite/connection-manager.js";
+import { tursoConnectionManager } from "../../turso/connection-manager.js";
 import { CONFIG } from "../../../config.js";
-
-const Database = getDatabase();
-type DatabaseType = typeof Database.prototype;
+import type { InValue } from "@libsql/client";
+import type { TursoDb } from "../../turso/turso-db.js";
 
 const AI_SESSIONS_DB_NAME = "ai-sessions.db";
 
 export class AISessionManager {
-  private db: DatabaseType;
-  private readonly dbPath: string;
+  private db: TursoDb | null = null;
+  private dbPath: string;
   private readonly sessionRetentionMs: number;
+  private initPromise: Promise<void> | null = null;
 
   constructor() {
     this.dbPath = join(CONFIG.storagePath, AI_SESSIONS_DB_NAME);
-    this.db = connectionManager.getConnection(this.dbPath);
     this.sessionRetentionMs = CONFIG.aiSessionRetentionDays * 24 * 60 * 60 * 1000;
-    this.initDatabase();
   }
 
-  private initDatabase(): void {
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS ai_sessions (
-        id TEXT PRIMARY KEY,
-        provider TEXT NOT NULL,
-        session_id TEXT NOT NULL,
-        conversation_id TEXT,
-        metadata TEXT,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        expires_at INTEGER NOT NULL
-      )
-    `);
-
-    this.db.run("CREATE INDEX IF NOT EXISTS idx_ai_sessions_session_id ON ai_sessions(session_id)");
-    this.db.run("CREATE INDEX IF NOT EXISTS idx_ai_sessions_expires_at ON ai_sessions(expires_at)");
-    this.db.run("CREATE INDEX IF NOT EXISTS idx_ai_sessions_provider ON ai_sessions(provider)");
-
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS ai_messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ai_session_id TEXT NOT NULL,
-        sequence INTEGER NOT NULL,
-        role TEXT NOT NULL,
-        content TEXT NOT NULL,
-        tool_calls TEXT,
-        tool_call_id TEXT,
-        content_blocks TEXT,
-        created_at INTEGER NOT NULL,
-        FOREIGN KEY (ai_session_id) REFERENCES ai_sessions(id) ON DELETE CASCADE
-      )
-    `);
-
-    this.db.run(
-      "CREATE INDEX IF NOT EXISTS idx_ai_messages_session ON ai_messages(ai_session_id, sequence)"
-    );
-    this.db.run(
-      "CREATE INDEX IF NOT EXISTS idx_ai_messages_role ON ai_messages(ai_session_id, role)"
-    );
+  reset(): void {
+    this.db = null;
+    this.initPromise = null;
+    this.dbPath = join(CONFIG.storagePath, AI_SESSIONS_DB_NAME);
   }
 
-  getSession(sessionId: string, provider: AIProviderType): AISession | null {
-    const stmt = this.db.prepare(`
-      SELECT * FROM ai_sessions 
+  private async initialize(): Promise<void> {
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+
+    this.dbPath = join(CONFIG.storagePath, AI_SESSIONS_DB_NAME);
+
+    this.initPromise = (async () => {
+      try {
+        this.db = await tursoConnectionManager.getConnection(this.dbPath);
+        await this.initDatabase();
+      } catch (error) {
+        this.initPromise = null;
+        this.db = null;
+        throw error;
+      }
+    })();
+
+    return this.initPromise;
+  }
+
+  private async ready(): Promise<TursoDb> {
+    if (!this.db || !this.initPromise) {
+      await this.initialize();
+    } else {
+      await this.initPromise;
+    }
+
+    if (!this.db) {
+      throw new Error("AISessionManager: database not initialized");
+    }
+
+    return this.db;
+  }
+
+  private async initDatabase(): Promise<void> {
+    const db = this.db!;
+    await db.batch([
+      {
+        sql: `
+          CREATE TABLE IF NOT EXISTS ai_sessions (
+            id TEXT PRIMARY KEY,
+            provider TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            conversation_id TEXT,
+            metadata TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL
+          )
+        `,
+      },
+      { sql: "CREATE INDEX IF NOT EXISTS idx_ai_sessions_session_id ON ai_sessions(session_id)" },
+      { sql: "CREATE INDEX IF NOT EXISTS idx_ai_sessions_expires_at ON ai_sessions(expires_at)" },
+      { sql: "CREATE INDEX IF NOT EXISTS idx_ai_sessions_provider ON ai_sessions(provider)" },
+      {
+        sql: `
+          CREATE TABLE IF NOT EXISTS ai_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ai_session_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            tool_calls TEXT,
+            tool_call_id TEXT,
+            content_blocks TEXT,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (ai_session_id) REFERENCES ai_sessions(id) ON DELETE CASCADE
+          )
+        `,
+      },
+      {
+        sql: "CREATE INDEX IF NOT EXISTS idx_ai_messages_session ON ai_messages(ai_session_id, sequence)",
+      },
+      {
+        sql: "CREATE INDEX IF NOT EXISTS idx_ai_messages_role ON ai_messages(ai_session_id, role)",
+      },
+    ]);
+  }
+
+  async getSession(sessionId: string, provider: AIProviderType): Promise<AISession | null> {
+    const db = await this.ready();
+    const row = await db.get(
+      `
+      SELECT * FROM ai_sessions
       WHERE session_id = ? AND provider = ? AND expires_at > ?
-    `);
-    const row = stmt.get(sessionId, provider, Date.now()) as any;
-
-    if (!row) return null;
-
-    return this.rowToSession(row);
+    `,
+      [sessionId, provider, Date.now()]
+    );
+    return row ? this.rowToSession(row) : null;
   }
 
-  createSession(params: SessionCreateParams): AISession {
+  async createSession(params: SessionCreateParams): Promise<AISession> {
+    const db = await this.ready();
     const id = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const now = Date.now();
     const expiresAt = now + this.sessionRetentionMs;
 
-    this.db.run(
+    await db.run(
       `
       INSERT INTO ai_sessions (
-        id, provider, session_id, conversation_id, 
+        id, provider, session_id, conversation_id,
         metadata, created_at, updated_at, expires_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `,
@@ -104,12 +147,17 @@ export class AISessionManager {
       ]
     );
 
-    return this.getSession(params.sessionId, params.provider)!;
+    return (await this.getSession(params.sessionId, params.provider))!;
   }
 
-  updateSession(sessionId: string, provider: AIProviderType, updates: SessionUpdateParams): void {
+  async updateSession(
+    sessionId: string,
+    provider: AIProviderType,
+    updates: SessionUpdateParams
+  ): Promise<void> {
+    const db = await this.ready();
     const fields: string[] = [];
-    const values: any[] = [];
+    const values: InValue[] = [];
 
     if (updates.conversationId !== undefined) {
       fields.push("conversation_id = ?");
@@ -123,13 +171,11 @@ export class AISessionManager {
 
     fields.push("updated_at = ?");
     values.push(Date.now());
+    values.push(sessionId, provider);
 
-    values.push(sessionId);
-    values.push(provider);
-
-    this.db.run(
+    await db.run(
       `
-      UPDATE ai_sessions 
+      UPDATE ai_sessions
       SET ${fields.join(", ")}
       WHERE session_id = ? AND provider = ?
     `,
@@ -137,22 +183,24 @@ export class AISessionManager {
     );
   }
 
-  cleanupExpiredSessions(): number {
-    const result = this.db.run(`DELETE FROM ai_sessions WHERE expires_at < ?`, [Date.now()]);
-    return result.changes;
+  async cleanupExpiredSessions(): Promise<number> {
+    const db = await this.ready();
+    return db.run(`DELETE FROM ai_sessions WHERE expires_at < ?`, [Date.now()]);
   }
 
-  deleteSession(sessionId: string, provider: AIProviderType): void {
-    this.db.run(`DELETE FROM ai_sessions WHERE session_id = ? AND provider = ?`, [
+  async deleteSession(sessionId: string, provider: AIProviderType): Promise<void> {
+    const db = await this.ready();
+    await db.run(`DELETE FROM ai_sessions WHERE session_id = ? AND provider = ?`, [
       sessionId,
       provider,
     ]);
   }
 
-  addMessage(message: Omit<AIMessage, "id" | "createdAt">): void {
-    this.db.run(
+  async addMessage(message: Omit<AIMessage, "id" | "createdAt">): Promise<void> {
+    const db = await this.ready();
+    await db.run(
       `INSERT INTO ai_messages (
-        ai_session_id, sequence, role, content, 
+        ai_session_id, sequence, role, content,
         tool_calls, tool_call_id, content_blocks, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -168,52 +216,53 @@ export class AISessionManager {
     );
   }
 
-  getMessages(aiSessionId: string): AIMessage[] {
-    const stmt = this.db.prepare(
-      "SELECT * FROM ai_messages WHERE ai_session_id = ? ORDER BY sequence ASC"
+  async getMessages(aiSessionId: string): Promise<AIMessage[]> {
+    const db = await this.ready();
+    const rows = await db.all(
+      "SELECT * FROM ai_messages WHERE ai_session_id = ? ORDER BY sequence ASC",
+      [aiSessionId]
     );
-    const rows = stmt.all(aiSessionId) as any[];
-
-    return rows.map(this.rowToMessage);
+    return rows.map((row) => this.rowToMessage(row));
   }
 
-  getLastSequence(aiSessionId: string): number {
-    const stmt = this.db.prepare(
-      "SELECT MAX(sequence) as max_seq FROM ai_messages WHERE ai_session_id = ?"
+  async getLastSequence(aiSessionId: string): Promise<number> {
+    const db = await this.ready();
+    const row = await db.get(
+      "SELECT MAX(sequence) as max_seq FROM ai_messages WHERE ai_session_id = ?",
+      [aiSessionId]
     );
-    const row = stmt.get(aiSessionId) as any;
-
-    return row?.max_seq ?? -1;
+    return row?.max_seq != null ? Number(row.max_seq) : -1;
   }
 
-  clearMessages(aiSessionId: string): void {
-    this.db.run("DELETE FROM ai_messages WHERE ai_session_id = ?", [aiSessionId]);
+  async clearMessages(aiSessionId: string): Promise<void> {
+    const db = await this.ready();
+    await db.run("DELETE FROM ai_messages WHERE ai_session_id = ?", [aiSessionId]);
   }
 
-  private rowToSession(row: any): AISession {
+  private rowToSession(row: Record<string, unknown>): AISession {
     return {
-      id: row.id,
+      id: String(row.id),
       provider: row.provider as AIProviderType,
-      sessionId: row.session_id,
-      conversationId: row.conversation_id,
-      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      expiresAt: row.expires_at,
+      sessionId: String(row.session_id),
+      conversationId: row.conversation_id ? String(row.conversation_id) : undefined,
+      metadata: row.metadata ? JSON.parse(String(row.metadata)) : undefined,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+      expiresAt: Number(row.expires_at),
     };
   }
 
-  private rowToMessage(row: any): AIMessage {
+  private rowToMessage(row: Record<string, unknown>): AIMessage {
     return {
-      id: row.id,
-      aiSessionId: row.ai_session_id,
-      sequence: row.sequence,
-      role: row.role,
-      content: row.content,
-      toolCalls: row.tool_calls ? JSON.parse(row.tool_calls) : undefined,
-      toolCallId: row.tool_call_id,
-      contentBlocks: row.content_blocks ? JSON.parse(row.content_blocks) : undefined,
-      createdAt: row.created_at,
+      id: Number(row.id),
+      aiSessionId: String(row.ai_session_id),
+      sequence: Number(row.sequence),
+      role: row.role as AIMessage["role"],
+      content: String(row.content),
+      toolCalls: row.tool_calls ? JSON.parse(String(row.tool_calls)) : undefined,
+      toolCallId: row.tool_call_id ? String(row.tool_call_id) : undefined,
+      contentBlocks: row.content_blocks ? JSON.parse(String(row.content_blocks)) : undefined,
+      createdAt: Number(row.created_at),
     };
   }
 }

@@ -49,13 +49,13 @@ interface OpenCodeMemConfig {
   memoryExtraParams?: Record<string, unknown>;
   opencodeProvider?: string;
   opencodeModel?: string;
-  vectorBackend?: "usearch-first" | "usearch" | "exact-scan";
   aiSessionRetentionDays?: number;
   webServerEnabled?: boolean;
   webServerPort?: number;
   webServerHost?: string;
   webServerAuthPassword?: string;
   webServerAuthUsername?: string;
+  webServerApiToken?: string;
   maxVectorsPerShard?: number;
   autoCleanupEnabled?: boolean;
   autoCleanupRetentionDays?: number;
@@ -114,6 +114,7 @@ const DEFAULTS: Required<
     | "userNameOverride"
     | "webServerAuthPassword"
     | "webServerAuthUsername"
+    | "webServerApiToken"
   >
 > & {
   embeddingApiUrl?: string;
@@ -126,12 +127,12 @@ const DEFAULTS: Required<
   memoryExtraParams?: Record<string, unknown>;
   opencodeProvider?: string;
   opencodeModel?: string;
-  vectorBackend?: "usearch-first" | "usearch" | "exact-scan";
   autoCaptureLanguage?: string;
   userEmailOverride?: string;
   userNameOverride?: string;
   webServerAuthPassword?: string;
   webServerAuthUsername?: string;
+  webServerApiToken?: string;
   memory?: {
     defaultScope?: "project" | "all-projects";
   };
@@ -148,13 +149,10 @@ const DEFAULTS: Required<
   autoCaptureMaxIterations: 5,
   autoCaptureIterationTimeout: 30000,
   autoCaptureMaxRetries: 3,
-  vectorBackend: "usearch-first",
   aiSessionRetentionDays: 7,
   webServerEnabled: true,
   webServerPort: 4747,
   webServerHost: "127.0.0.1",
-  webServerAuthPassword: undefined,
-  webServerAuthUsername: undefined,
   maxVectorsPerShard: 50000,
   autoCleanupEnabled: true,
   autoCleanupRetentionDays: 30,
@@ -266,17 +264,12 @@ const CONFIG_TEMPLATE = `{
   // Host address for web UI (use 127.0.0.1 for local only, 0.0.0.0 for network access)
   "webServerHost": "127.0.0.1",
 
-  // HTTP Basic Auth for the web UI (recommended whenever webServerHost != 127.0.0.1).
-  // Leave webServerAuthPassword unset to keep the UI open (the previous default).
-  // When set, the server demands HTTP Basic Auth credentials on every request.
-  // The browser's native Basic Auth dialog handles the prompt; closing the
-  // browser discards the cached credentials, so reopening requires signing in again.
-  // Accepts the same secret formats as memoryApiKey:
-  //   "literal-value"           direct plaintext
-  //   "env://SOME_ENV_VAR"      resolved from an environment variable
-  //   "file:///path/to/secret"  read from a file (chmod 600 recommended)
+  // Optional HTTP Basic Auth for the web UI. Accepts literal, env://, or file:// secrets.
   // "webServerAuthPassword": "",
   // "webServerAuthUsername": "",
+
+  // Required when webServerHost is not loopback. Protects /api/* with Bearer / X-Opencode-Mem-Token.
+  // "webServerApiToken": "env://OPENCODE_MEM_WEB_TOKEN",
   
   // ============================================
   // Database Settings
@@ -559,15 +552,24 @@ function getEmbeddingDimensions(model: string): number {
 
 function buildConfig(fileConfig: OpenCodeMemConfig) {
   const memoryApiKey = resolveSecretValue(fileConfig.memoryApiKey);
+  const embeddingDimensions =
+    fileConfig.embeddingDimensions ??
+    getEmbeddingDimensions(fileConfig.embeddingModel ?? DEFAULTS.embeddingModel);
+
+  if (
+    !Number.isInteger(embeddingDimensions) ||
+    embeddingDimensions <= 0 ||
+    embeddingDimensions > 65536
+  ) {
+    throw new Error(`Invalid embeddingDimensions config: ${embeddingDimensions}`);
+  }
 
   return {
     storagePath: expandPath(fileConfig.storagePath ?? DEFAULTS.storagePath),
     userEmailOverride: fileConfig.userEmailOverride,
     userNameOverride: fileConfig.userNameOverride,
     embeddingModel: fileConfig.embeddingModel ?? DEFAULTS.embeddingModel,
-    embeddingDimensions:
-      fileConfig.embeddingDimensions ??
-      getEmbeddingDimensions(fileConfig.embeddingModel ?? DEFAULTS.embeddingModel),
+    embeddingDimensions,
     embeddingApiUrl: fileConfig.embeddingApiUrl,
     embeddingApiKey: fileConfig.embeddingApiUrl
       ? resolveSecretValue(fileConfig.embeddingApiKey ?? process.env.OPENAI_API_KEY)
@@ -602,16 +604,15 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
       memoryApiUrl: fileConfig.memoryApiUrl,
       memoryApiKey,
     }),
-    vectorBackend: (fileConfig.vectorBackend ?? "usearch-first") as
-      | "usearch-first"
-      | "usearch"
-      | "exact-scan",
     aiSessionRetentionDays: fileConfig.aiSessionRetentionDays ?? DEFAULTS.aiSessionRetentionDays,
     webServerEnabled: fileConfig.webServerEnabled ?? DEFAULTS.webServerEnabled,
     webServerPort: fileConfig.webServerPort ?? DEFAULTS.webServerPort,
     webServerHost: fileConfig.webServerHost ?? DEFAULTS.webServerHost,
     webServerAuthPassword: resolveSecretValue(fileConfig.webServerAuthPassword),
     webServerAuthUsername: fileConfig.webServerAuthUsername,
+    webServerApiToken: fileConfig.webServerApiToken
+      ? resolveSecretValue(fileConfig.webServerApiToken)
+      : undefined,
     maxVectorsPerShard: fileConfig.maxVectorsPerShard ?? DEFAULTS.maxVectorsPerShard,
     autoCleanupEnabled: fileConfig.autoCleanupEnabled ?? DEFAULTS.autoCleanupEnabled,
     autoCleanupRetentionDays:
