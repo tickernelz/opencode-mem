@@ -54,6 +54,8 @@ interface OpenCodeMemConfig {
   webServerEnabled?: boolean;
   webServerPort?: number;
   webServerHost?: string;
+  webServerAuthPassword?: string;
+  webServerAuthUsername?: string;
   maxVectorsPerShard?: number;
   autoCleanupEnabled?: boolean;
   autoCleanupRetentionDays?: number;
@@ -109,6 +111,8 @@ const DEFAULTS: Required<
     | "autoCaptureLanguage"
     | "userEmailOverride"
     | "userNameOverride"
+    | "webServerAuthPassword"
+    | "webServerAuthUsername"
   >
 > & {
   embeddingApiUrl?: string;
@@ -125,6 +129,8 @@ const DEFAULTS: Required<
   autoCaptureLanguage?: string;
   userEmailOverride?: string;
   userNameOverride?: string;
+  webServerAuthPassword?: string;
+  webServerAuthUsername?: string;
   memory?: {
     defaultScope?: "project" | "all-projects";
   };
@@ -146,6 +152,8 @@ const DEFAULTS: Required<
   webServerEnabled: true,
   webServerPort: 4747,
   webServerHost: "127.0.0.1",
+  webServerAuthPassword: undefined,
+  webServerAuthUsername: undefined,
   maxVectorsPerShard: 50000,
   autoCleanupEnabled: true,
   autoCleanupRetentionDays: 30,
@@ -255,6 +263,18 @@ const CONFIG_TEMPLATE = `{
   
   // Host address for web UI (use 127.0.0.1 for local only, 0.0.0.0 for network access)
   "webServerHost": "127.0.0.1",
+
+  // HTTP Basic Auth for the web UI (recommended whenever webServerHost != 127.0.0.1).
+  // Leave webServerAuthPassword unset to keep the UI open (the previous default).
+  // When set, the server demands HTTP Basic Auth credentials on every request.
+  // The browser's native Basic Auth dialog handles the prompt; closing the
+  // browser discards the cached credentials, so reopening requires signing in again.
+  // Accepts the same secret formats as memoryApiKey:
+  //   "literal-value"           direct plaintext
+  //   "env://SOME_ENV_VAR"      resolved from an environment variable
+  //   "file:///path/to/secret"  read from a file (chmod 600 recommended)
+  // "webServerAuthPassword": "",
+  // "webServerAuthUsername": "",
   
   // ============================================
   // Database Settings
@@ -588,6 +608,8 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     webServerEnabled: fileConfig.webServerEnabled ?? DEFAULTS.webServerEnabled,
     webServerPort: fileConfig.webServerPort ?? DEFAULTS.webServerPort,
     webServerHost: fileConfig.webServerHost ?? DEFAULTS.webServerHost,
+    webServerAuthPassword: resolveSecretValue(fileConfig.webServerAuthPassword),
+    webServerAuthUsername: fileConfig.webServerAuthUsername,
     maxVectorsPerShard: fileConfig.maxVectorsPerShard ?? DEFAULTS.maxVectorsPerShard,
     autoCleanupEnabled: fileConfig.autoCleanupEnabled ?? DEFAULTS.autoCleanupEnabled,
     autoCleanupRetentionDays:

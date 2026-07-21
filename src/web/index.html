@@ -14,6 +14,15 @@
   </head>
   <body>
     <div class="container">
+      <div id="auth-warning" class="auth-warning hidden" role="alert">
+        <div class="auth-warning-icon"><i data-lucide="alert-triangle"></i></div>
+        <div class="auth-warning-body">
+          <span class="auth-warning-text" data-i18n="auth-warning-text">
+            Cross-origin editing disabled. Set webServerAuthPassword to enable.
+          </span>
+        </div>
+      </div>
+
       <header class="header">
         <div class="header-top">
           <h1 class="title" data-i18n="title">┌─ OPENCODE MEMORY EXPLORER ─┐</h1>

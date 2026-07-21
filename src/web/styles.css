@@ -2274,3 +2274,37 @@ textarea:focus-visible {
   font-size: 12px;
   color: var(--text-secondary, #888);
 }
+
+.auth-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid #ffcc00;
+  background: rgba(255, 204, 0, 0.08);
+  color: #ffcc00;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.auth-warning.hidden {
+  display: none;
+}
+.auth-warning-icon {
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.auth-warning-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: #ffcc00;
+}
+.auth-warning-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.auth-warning-text {
+  color: #e0e0e0;
+}

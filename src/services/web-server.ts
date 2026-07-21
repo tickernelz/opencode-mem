@@ -5,6 +5,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "./logger.js";
 import { corsPreflightResponse, disallowedCorsResponse, isAllowedBrowserOrigin } from "./cors.js";
+import { WebAuth } from "./web-auth.js";
 import {
   handleListTags,
   handleListMemories,
@@ -157,6 +158,7 @@ interface WebServerConfig {
   port: number;
   host: string;
   enabled: boolean;
+  auth?: WebAuth;
 }
 
 export class WebServer {
@@ -295,7 +297,7 @@ export class WebServer {
 
   async checkServerAvailable(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.getUrl()}/api/stats`, {
+      const response = await fetch(`${this.getUrl()}/api/health`, {
         method: "GET",
         signal: AbortSignal.timeout(2000),
       });
@@ -313,15 +315,33 @@ export class WebServer {
     const method = req.method;
     const origin = req.headers.get("Origin");
 
-    if (!isAllowedBrowserOrigin(origin)) {
+    const auth = this.config.auth;
+    const corsOptions = { httpAuthEnabled: auth?.isEnabled() ?? false };
+
+    if (!isAllowedBrowserOrigin(origin, corsOptions)) {
       return disallowedCorsResponse();
     }
 
     if (method === "OPTIONS") {
-      return corsPreflightResponse(req);
+      return corsPreflightResponse(req, corsOptions);
+    }
+
+    if (auth && auth.isEnabled()) {
+      const authCheck = auth.check(req, path);
+      if (!authCheck.ok && authCheck.response) {
+        return authCheck.response;
+      }
     }
 
     try {
+      if (path === "/api/health" && method === "GET") {
+        return this.jsonResponse({
+          success: true,
+          status: "ok",
+          authEnabled: auth?.isEnabled() ?? false,
+        });
+      }
+
       if (path === "/" || path === "/index.html") {
         return this.serveStaticFile("index.html", "text/html");
       }

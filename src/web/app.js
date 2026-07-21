@@ -1813,6 +1813,50 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+function isLoopbackHostname(hostname) {
+  if (!hostname) return false;
+  if (LOOPBACK_HOSTS.has(hostname.toLowerCase())) return true;
+  // IPv4-mapped IPv6 loopback (e.g. "::ffff:127.0.0.1") and friends.
+  if (hostname.startsWith("::ffff:")) {
+    return isLoopbackHostname(hostname.slice(7));
+  }
+  return false;
+}
+
+async function checkAuthWarning() {
+  const banner = document.getElementById("auth-warning");
+  if (!banner) return;
+
+  // Trust the server's report of auth state over guessing from a possibly
+  // proxied Host header. The /api/health endpoint is intentionally
+  // unauthenticated and exempt from CORS so this fetch is always cheap.
+  let authEnabled = false;
+  try {
+    const response = await fetch("/api/health", { credentials: "same-origin" });
+    if (response.ok) {
+      const data = await response.json();
+      authEnabled = data && data.authEnabled === true;
+    }
+  } catch (error) {
+    // If the probe fails the warning is moot — the UI is unusable anyway.
+    return;
+  }
+
+  if (authEnabled) {
+    banner.classList.add("hidden");
+    return;
+  }
+
+  if (isLoopbackHostname(window.location.hostname)) {
+    banner.classList.add("hidden");
+    return;
+  }
+
+  banner.classList.remove("hidden");
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("tab-project").addEventListener("click", () => switchView("project"));
   document.getElementById("tab-profile").addEventListener("click", () => switchView("profile"));
@@ -1945,6 +1989,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadMemories();
   await loadStats();
   await checkMigrationStatus();
+  checkAuthWarning();
 
   startAutoRefresh();
 

@@ -10,6 +10,7 @@ import { performAutoCapture } from "./services/auto-capture.js";
 import { performUserProfileLearning } from "./services/user-memory-learning.js";
 import { userPromptManager } from "./services/user-prompt/user-prompt-manager.js";
 import { startWebServer, WebServer } from "./services/web-server.js";
+import { WebAuth } from "./services/web-auth.js";
 
 import { isConfigured, CONFIG, initConfig } from "./config.js";
 import { log } from "./services/logger.js";
@@ -108,10 +109,15 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   })();
 
   if (CONFIG.webServerEnabled) {
+    const webAuth = new WebAuth({
+      password: CONFIG.webServerAuthPassword,
+      username: CONFIG.webServerAuthUsername,
+    });
     startWebServer({
       port: CONFIG.webServerPort,
       host: CONFIG.webServerHost,
       enabled: CONFIG.webServerEnabled,
+      auth: webAuth,
     })
       .then((server) => {
         webServer = server;
@@ -138,7 +144,9 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
               .showToast({
                 body: {
                   title: "Memory Explorer",
-                  message: `Web UI started at ${url}`,
+                  message: webAuth.isEnabled()
+                    ? `Web UI started at ${url} (auth required)`
+                    : `Web UI started at ${url}`,
                   variant: "success",
                   duration: 5000,
                 },
