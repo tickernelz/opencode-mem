@@ -16,6 +16,12 @@ export async function performUserProfileLearning(
   directory: string
 ): Promise<void> {
   if (isLearningRunning) return;
+  if (!CONFIG.autoCaptureProviderStatus || !CONFIG.autoCaptureProviderStatus.ready) {
+    log("user-profile-learning: skipped (provider not ready)", {
+      issues: CONFIG.autoCaptureProviderStatus?.issues ?? ["status undefined"],
+    });
+    return;
+  }
   isLearningRunning = true;
   try {
     const count = userPromptManager.countUnanalyzedForUserLearning();
