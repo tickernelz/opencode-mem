@@ -587,9 +587,7 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     autoCaptureMaxRetries: fileConfig.autoCaptureMaxRetries ?? DEFAULTS.autoCaptureMaxRetries,
     autoCaptureLanguage: fileConfig.autoCaptureLanguage,
     memoryProvider: (fileConfig.memoryProvider ?? "openai-chat") as
-      | "openai-chat"
-      | "openai-responses"
-      | "anthropic",
+      "openai-chat" | "openai-responses" | "anthropic",
     memoryModel: fileConfig.memoryModel,
     memoryApiUrl: fileConfig.memoryApiUrl,
     memoryApiKey,
@@ -679,8 +677,7 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
         fileConfig.chatMessage?.excludeCurrentSession ?? DEFAULTS.chatMessage.excludeCurrentSession,
       maxAgeDays: fileConfig.chatMessage?.maxAgeDays,
       injectOn: (fileConfig.chatMessage?.injectOn ?? DEFAULTS.chatMessage.injectOn) as
-        | "first"
-        | "always",
+        "first" | "always",
     },
   };
 }
@@ -699,8 +696,7 @@ interface AutoCaptureProviderRuntimeConfig {
 }
 
 export type AutoCaptureProviderStatus =
-  | { ready: true; mode: "opencode" | "manual"; issues: [] }
-  | { ready: false; issues: string[] };
+  { ready: true; mode: "opencode" | "manual"; issues: [] } | { ready: false; issues: string[] };
 
 function hasValue(value: string | undefined): boolean {
   return typeof value === "string" && value.trim().length > 0;
