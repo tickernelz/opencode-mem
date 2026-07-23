@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { corsPreflightResponse, disallowedCorsResponse, isAllowedBrowserOrigin } from "./cors.js";
+import { getOrCreateAuthToken, isAuthorizedApiRequest } from "./auth-token.js";
 import {
   handleListTags,
   handleListMemories,
@@ -61,6 +62,10 @@ async function handleRequest(req: Request): Promise<Response> {
 
   if (method === "OPTIONS") {
     return corsPreflightResponse(req);
+  }
+
+  if (path.startsWith("/api/") && !isAuthorizedApiRequest(req)) {
+    return jsonResponse({ success: false, error: "Unauthorized" }, 401);
   }
 
   try {
@@ -304,7 +309,15 @@ function serveStaticFile(filename: string, contentType: string): Response {
       });
     }
 
-    const content = readFileSync(filePath, "utf-8");
+    let content = readFileSync(filePath, "utf-8");
+
+    if (filename === "index.html") {
+      const token = getOrCreateAuthToken();
+      content = content.replace(
+        "</head>",
+        `<script>window.__OPENCODE_MEM_TOKEN__=${JSON.stringify(token)};</script></head>`
+      );
+    }
 
     return new Response(content, {
       headers: {

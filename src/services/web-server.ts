@@ -5,6 +5,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "./logger.js";
 import { corsPreflightResponse, disallowedCorsResponse, isAllowedBrowserOrigin } from "./cors.js";
+import { getOrCreateAuthToken, isAuthorizedApiRequest } from "./auth-token.js";
 import { WebAuth } from "./web-auth.js";
 import {
   handleListTags,
@@ -333,6 +334,10 @@ export class WebServer {
       }
     }
 
+    if (path.startsWith("/api/") && path !== "/api/health" && !isAuthorizedApiRequest(req)) {
+      return this.jsonResponse({ success: false, error: "Unauthorized" }, 401);
+    }
+
     try {
       if (path === "/api/health" && method === "GET") {
         return this.jsonResponse({
@@ -589,7 +594,15 @@ export class WebServer {
         });
       }
 
-      const content = readFileSync(filePath, "utf-8");
+      let content = readFileSync(filePath, "utf-8");
+
+      if (filename === "index.html") {
+        const token = getOrCreateAuthToken();
+        content = content.replace(
+          "</head>",
+          `<script>window.__OPENCODE_MEM_TOKEN__=${JSON.stringify(token)};</script></head>`
+        );
+      }
 
       return new Response(content, {
         headers: {
