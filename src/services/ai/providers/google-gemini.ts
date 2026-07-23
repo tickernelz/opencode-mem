@@ -24,14 +24,14 @@ export class GoogleGeminiProvider extends BaseAIProvider {
     return true;
   }
 
-  private addToolResponse(
+  private async addToolResponse(
     sessionId: string,
     messages: any[],
     toolCallId: string,
     content: string
-  ): void {
-    const sequence = this.aiSessionManager.getLastSequence(sessionId) + 1;
-    this.aiSessionManager.addMessage({
+  ): Promise<void> {
+    const sequence = (await this.aiSessionManager.getLastSequence(sessionId)) + 1;
+    await this.aiSessionManager.addMessage({
       aiSessionId: sessionId,
       sequence,
       role: "tool",
@@ -58,16 +58,16 @@ export class GoogleGeminiProvider extends BaseAIProvider {
     toolSchema: ChatCompletionTool,
     sessionId: string
   ): Promise<ToolCallResult> {
-    let session = this.aiSessionManager.getSession(sessionId, "google-gemini");
+    let session = await this.aiSessionManager.getSession(sessionId, "google-gemini");
 
     if (!session) {
-      session = this.aiSessionManager.createSession({
+      session = await this.aiSessionManager.createSession({
         provider: "google-gemini",
         sessionId,
       });
     }
 
-    const existingMessages = this.aiSessionManager.getMessages(session.id);
+    const existingMessages = await this.aiSessionManager.getMessages(session.id);
     const contents: any[] = [];
 
     // System instruction is separate in Gemini API
@@ -116,8 +116,8 @@ export class GoogleGeminiProvider extends BaseAIProvider {
     }
 
     if (contents.length === 0 || contents[contents.length - 1].role !== "user") {
-      const userSequence = this.aiSessionManager.getLastSequence(session.id) + 1;
-      this.aiSessionManager.addMessage({
+      const userSequence = (await this.aiSessionManager.getLastSequence(session.id)) + 1;
+      await this.aiSessionManager.addMessage({
         aiSessionId: session.id,
         sequence: userSequence,
         role: "user",
@@ -201,7 +201,7 @@ export class GoogleGeminiProvider extends BaseAIProvider {
         }
 
         const modelMsg = candidate.content;
-        const assistantSequence = this.aiSessionManager.getLastSequence(session.id) + 1;
+        const assistantSequence = (await this.aiSessionManager.getLastSequence(session.id)) + 1;
 
         // Map Gemini response back to our internal message format
         const assistantMsg: any = {
@@ -226,7 +226,7 @@ export class GoogleGeminiProvider extends BaseAIProvider {
           }
         }
 
-        this.aiSessionManager.addMessage(assistantMsg);
+        await this.aiSessionManager.addMessage(assistantMsg);
         contents.push(modelMsg);
 
         if (assistantMsg.toolCalls.length > 0) {
@@ -237,7 +237,7 @@ export class GoogleGeminiProvider extends BaseAIProvider {
                 const result = UserProfileValidator.validate(parsed);
                 if (!result.valid) throw new Error(result.errors.join(", "));
 
-                this.addToolResponse(
+                await this.addToolResponse(
                   session.id,
                   contents,
                   toolCall.id,
@@ -246,7 +246,7 @@ export class GoogleGeminiProvider extends BaseAIProvider {
                 return { success: true, data: result.data, iterations };
               } catch (validationError) {
                 const errorMessage = `Validation failed: ${String(validationError)}`;
-                this.addToolResponse(
+                await this.addToolResponse(
                   session.id,
                   contents,
                   toolCall.id,
@@ -260,8 +260,8 @@ export class GoogleGeminiProvider extends BaseAIProvider {
 
         // Retry if no tool call was made
         const retryPrompt = "Please use the save_memories tool as instructed.";
-        const retrySequence = this.aiSessionManager.getLastSequence(session.id) + 1;
-        this.aiSessionManager.addMessage({
+        const retrySequence = (await this.aiSessionManager.getLastSequence(session.id)) + 1;
+        await this.aiSessionManager.addMessage({
           aiSessionId: session.id,
           sequence: retrySequence,
           role: "user",

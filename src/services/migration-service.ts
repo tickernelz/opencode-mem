@@ -1,9 +1,14 @@
-import { shardManager } from "./sqlite/shard-manager.js";
-import { connectionManager } from "./sqlite/connection-manager.js";
-import { vectorSearch } from "./sqlite/vector-search.js";
+import { existsSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { tursoShardManager } from "./turso/shard-manager.js";
+import { tursoConnectionManager } from "./turso/connection-manager.js";
+import { tursoVectorSearch } from "./turso/vector-search.js";
+import { ensureTursoReady } from "./turso/ready.js";
 import { embeddingService } from "./embedding.js";
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
+import { formatTagsForEmbedding } from "./turso/vector-utils.js";
+import type { MemoryRecord, ShardInfo } from "./turso/types.js";
+import { acquireTursoOperationLock } from "./turso/operation-lock.js";
 
 export interface DimensionMismatch {
   needsMigration: boolean;
@@ -39,33 +44,29 @@ export class MigrationService {
   private progressCallback?: (progress: MigrationProgress) => void;
 
   async detectDimensionMismatch(): Promise<DimensionMismatch> {
-    const userShards = shardManager.getAllShards("user", "");
-    const projectShards = shardManager.getAllShards("project", "");
+    await ensureTursoReady();
+    const userShards = await tursoShardManager.getAllShards("user", "");
+    const projectShards = await tursoShardManager.getAllShards("project", "");
     const allShards = [...userShards, ...projectShards];
 
     const mismatches: DimensionMismatch["shardMismatches"] = [];
 
     for (const shard of allShards) {
       try {
-        const db = connectionManager.getConnection(shard.dbPath);
-
-        const metadataResult = db
-          .prepare(
-            `
-          SELECT key, value FROM shard_metadata 
+        const db = await tursoConnectionManager.getConnection(shard.dbPath);
+        const metadataResult = await db.all(
+          `
+          SELECT key, value FROM shard_metadata
           WHERE key IN ('embedding_dimensions', 'embedding_model')
         `
-          )
-          .all() as Array<{ key: string; value: string }>;
+        );
 
         const metadata = Object.fromEntries(metadataResult.map((row) => [row.key, row.value]));
-
-        const storedDimensions = parseInt(metadata.embedding_dimensions || "0");
-        const storedModel = metadata.embedding_model || "unknown";
+        const storedDimensions = parseInt(String(metadata.embedding_dimensions || "0"));
+        const storedModel = String(metadata.embedding_model || "unknown");
 
         if (storedDimensions !== CONFIG.embeddingDimensions) {
-          const vectorCount = vectorSearch.countAllVectors(db);
-
+          const vectorCount = await tursoVectorSearch.countAllVectors(db);
           mismatches.push({
             shardId: shard.id,
             dbPath: shard.dbPath,
@@ -99,10 +100,12 @@ export class MigrationService {
     }
 
     this.isRunning = true;
+    let releaseOperationLock: (() => void) | undefined;
     this.progressCallback = progressCallback;
     const startTime = Date.now();
 
     try {
+      releaseOperationLock = acquireTursoOperationLock(`dimension-${strategy}`);
       const mismatch = await this.detectDimensionMismatch();
 
       if (!mismatch.needsMigration) {
@@ -117,9 +120,9 @@ export class MigrationService {
 
       if (strategy === "fresh-start") {
         return await this.freshStartMigration(mismatch, startTime);
-      } else {
-        return await this.reEmbedMigration(mismatch, startTime);
       }
+
+      return await this.reEmbedMigration(mismatch, startTime);
     } catch (error) {
       log("Migration: failed", { error: String(error) });
       return {
@@ -131,6 +134,7 @@ export class MigrationService {
         error: String(error),
       };
     } finally {
+      releaseOperationLock?.();
       this.isRunning = false;
       this.progressCallback = undefined;
     }
@@ -149,22 +153,22 @@ export class MigrationService {
     let deletedShards = 0;
 
     for (const [index, shardInfo] of mismatch.shardMismatches.entries()) {
-      try {
-        this.reportProgress({
-          phase: "cleanup",
-          processed: index,
-          total: mismatch.shardMismatches.length,
-          currentShard: String(shardInfo.shardId),
-        });
+      this.reportProgress({
+        phase: "cleanup",
+        processed: index,
+        total: mismatch.shardMismatches.length,
+        currentShard: String(shardInfo.shardId),
+      });
 
-        await shardManager.deleteShard(shardInfo.shardId);
-        deletedShards++;
-      } catch (error) {
-        log("Migration: error deleting shard", {
-          shardId: shardInfo.shardId,
-          error: String(error),
-        });
+      const archivePath = await tursoShardManager.archiveShard(shardInfo.shardId, "fresh-start");
+      if (!archivePath) {
+        throw new Error(`Migration source shard ${shardInfo.shardId} no longer exists`);
       }
+      log("Migration: archived shard for fresh start", {
+        shardId: shardInfo.shardId,
+        archivePath,
+      });
+      deletedShards++;
     }
 
     this.reportProgress({
@@ -189,7 +193,10 @@ export class MigrationService {
     await embeddingService.warmup();
     embeddingService.clearCache();
 
-    const totalMemories = mismatch.shardMismatches.reduce((sum, s) => sum + s.vectorCount, 0);
+    const totalMemories = mismatch.shardMismatches.reduce(
+      (sum, shard) => sum + shard.vectorCount,
+      0
+    );
 
     this.reportProgress({
       phase: "preparing",
@@ -208,109 +215,30 @@ export class MigrationService {
         currentShard: String(shardInfo.shardId),
       });
 
-      try {
-        const db = connectionManager.getConnection(shardInfo.dbPath);
-        const memories = vectorSearch.getAllMemories(db);
+      const shard = await tursoShardManager.getShardById(shardInfo.shardId);
+      if (!shard) {
+        throw new Error(`Migration source shard ${shardInfo.shardId} no longer exists`);
+      }
 
-        const tempMemories: Array<{
-          id: string;
-          content: string;
-          containerTag: string;
-          type: string | null;
-          createdAt: number;
-          updatedAt: number;
-          metadata: string | null;
-          displayName: string | null;
-          userName: string | null;
-          userEmail: string | null;
-          projectPath: string | null;
-          projectName: string | null;
-          gitRepoUrl: string | null;
-          isPinned: number;
-        }> = [];
-
-        for (const memory of memories) {
-          tempMemories.push({
-            id: memory.id,
-            content: memory.content,
-            containerTag: memory.container_tag,
-            type: memory.type,
-            createdAt: memory.created_at,
-            updatedAt: memory.updated_at,
-            metadata: memory.metadata,
-            displayName: memory.display_name,
-            userName: memory.user_name,
-            userEmail: memory.user_email,
-            projectPath: memory.project_path,
-            projectName: memory.project_name,
-            gitRepoUrl: memory.git_repo_url,
-            isPinned: memory.is_pinned || 0,
-          });
-        }
-
-        await shardManager.deleteShard(shardInfo.shardId);
-
-        for (const memory of tempMemories) {
-          try {
-            const vector = await embeddingService.embedWithTimeout(memory.content);
-
-            const scope = memory.containerTag.includes("_user_") ? "user" : "project";
-            const hash = memory.containerTag.split("_").slice(2).join("_");
-            if (!/^[a-zA-Z0-9]+$/.test(hash)) {
-              throw new Error("Invalid containerTag: hash segment must be alphanumeric");
-            }
-            const newShard = shardManager.getWriteShard(scope, hash);
-            const newDb = connectionManager.getConnection(newShard.dbPath);
-
-            await vectorSearch.insertVector(
-              newDb,
-              {
-                id: memory.id,
-                content: memory.content,
-                vector,
-                containerTag: memory.containerTag,
-                type: memory.type || undefined,
-                createdAt: memory.createdAt,
-                updatedAt: memory.updatedAt,
-                metadata: memory.metadata || undefined,
-                displayName: memory.displayName || undefined,
-                userName: memory.userName || undefined,
-                userEmail: memory.userEmail || undefined,
-                projectPath: memory.projectPath || undefined,
-                projectName: memory.projectName || undefined,
-                gitRepoUrl: memory.gitRepoUrl || undefined,
-              },
-              newShard
-            );
-
-            if (memory.isPinned === 1) {
-              vectorSearch.pinMemory(newDb, memory.id);
-            }
-
-            shardManager.incrementVectorCount(newShard.id);
-            reEmbeddedCount++;
+      const migrated = await tursoShardManager.withScopeWriteLock(
+        shard.scope,
+        shard.scopeHash,
+        () =>
+          this.rebuildShardSafely(shard, (processed) => {
             processedCount++;
-
             this.reportProgress({
               phase: "re-embedding",
               processed: processedCount,
               total: totalMemories,
               currentShard: String(shardInfo.shardId),
             });
-          } catch (error) {
-            log("Migration: error re-embedding memory", {
-              memoryId: memory.id,
-              error: String(error),
+            log("Migration: memory staged for re-embed", {
+              shardId: shardInfo.shardId,
+              memoryId: processed,
             });
-            processedCount++;
-          }
-        }
-      } catch (error) {
-        log("Migration: error processing shard", {
-          shardId: shardInfo.shardId,
-          error: String(error),
-        });
-      }
+          })
+      );
+      reEmbeddedCount += migrated;
     }
 
     this.reportProgress({
@@ -322,10 +250,131 @@ export class MigrationService {
     return {
       success: true,
       strategy: "re-embed",
-      deletedShards: mismatch.shardMismatches.length,
+      deletedShards: 0,
       reEmbeddedMemories: reEmbeddedCount,
       duration: Date.now() - startTime,
     };
+  }
+
+  private async rebuildShardSafely(
+    shard: ShardInfo,
+    onProcessed: (memoryId: string) => void
+  ): Promise<number> {
+    const sourceDb = await tursoConnectionManager.getConnection(shard.dbPath);
+    const memories = await sourceDb.all(`
+      SELECT
+        id, content, container_tag, tags, type, created_at, updated_at, metadata,
+        display_name, user_name, user_email, project_path, project_name, git_repo_url, is_pinned
+      FROM memories
+      ORDER BY created_at DESC
+    `);
+    const nonce = `${process.pid}-${Date.now()}`;
+    const stagedPath = `${shard.dbPath}.reembed-${nonce}.tmp`;
+    const backupPath = `${shard.dbPath}.pre-reembed-${nonce}.bak`;
+    const swapStatePath = `${shard.dbPath}.reembed-swap.json`;
+
+    try {
+      const stagedDb = await tursoConnectionManager.getConnection(stagedPath);
+      await tursoShardManager.initShardDb(stagedDb);
+
+      // Stage bounded batches. Model or database failures only discard this
+      // temporary shard; the source is not touched until full verification.
+      const batchSize = 50;
+      for (let offset = 0; offset < memories.length; offset += batchSize) {
+        const stagedBatch: Array<{ record: MemoryRecord; isPinned: boolean }> = [];
+        for (const memory of memories.slice(offset, offset + batchSize)) {
+          const content = String(memory.content);
+          const tags = memory.tags
+            ? String(memory.tags)
+                .split(",")
+                .map((tag) => tag.trim())
+                .filter(Boolean)
+            : [];
+          const embeddingInput = tags.length > 0 ? `${content}\nTags: ${tags.join(", ")}` : content;
+          const vector = await embeddingService.embedWithTimeout(embeddingInput);
+          const tagsVector =
+            tags.length > 0
+              ? await embeddingService.embedWithTimeout(formatTagsForEmbedding(tags))
+              : undefined;
+
+          stagedBatch.push({
+            record: {
+              id: String(memory.id),
+              content,
+              vector,
+              tagsVector,
+              containerTag: String(memory.container_tag),
+              tags: memory.tags ? String(memory.tags) : undefined,
+              type: memory.type ? String(memory.type) : undefined,
+              createdAt: Number(memory.created_at),
+              updatedAt: Number(memory.updated_at),
+              metadata: memory.metadata ? String(memory.metadata) : undefined,
+              displayName: memory.display_name ? String(memory.display_name) : undefined,
+              userName: memory.user_name ? String(memory.user_name) : undefined,
+              userEmail: memory.user_email ? String(memory.user_email) : undefined,
+              projectPath: memory.project_path ? String(memory.project_path) : undefined,
+              projectName: memory.project_name ? String(memory.project_name) : undefined,
+              gitRepoUrl: memory.git_repo_url ? String(memory.git_repo_url) : undefined,
+            },
+            isPinned: Number(memory.is_pinned ?? 0) === 1,
+          });
+          onProcessed(String(memory.id));
+        }
+
+        await stagedDb.transaction("write", async (tx) => {
+          for (const item of stagedBatch) {
+            await tursoVectorSearch.insertVectorInTransaction(tx, item.record);
+            if (item.isPinned) {
+              await tx.execute({
+                sql: `UPDATE memories SET is_pinned = 1 WHERE id = ?`,
+                args: [item.record.id],
+              });
+            }
+          }
+        });
+      }
+
+      const countRow = await stagedDb.get(`SELECT COUNT(*) AS count FROM memories`);
+      const stagedCount = Number(countRow?.count ?? 0);
+      if (stagedCount !== memories.length) {
+        throw new Error(
+          `Migration staged count mismatch for shard ${shard.id}: expected ${memories.length}, got ${stagedCount}`
+        );
+      }
+
+      await tursoConnectionManager.closeConnection(stagedPath);
+      writeFileSync(
+        swapStatePath,
+        JSON.stringify({ dbPath: shard.dbPath, stagedPath, backupPath }),
+        "utf-8"
+      );
+      await tursoConnectionManager.closeConnection(shard.dbPath);
+      renameSync(shard.dbPath, backupPath);
+      try {
+        renameSync(stagedPath, shard.dbPath);
+      } catch (error) {
+        renameSync(backupPath, shard.dbPath);
+        throw error;
+      }
+
+      await tursoShardManager.setVectorCount(shard.id, stagedCount);
+      unlinkSync(swapStatePath);
+      log("Migration: safely replaced re-embedded shard", {
+        shardId: shard.id,
+        memories: stagedCount,
+        backupPath,
+      });
+      return stagedCount;
+    } catch (error) {
+      await tursoConnectionManager.closeConnection(stagedPath);
+      if (existsSync(stagedPath)) {
+        unlinkSync(stagedPath);
+      }
+      if (existsSync(swapStatePath) && existsSync(shard.dbPath)) {
+        unlinkSync(swapStatePath);
+      }
+      throw error;
+    }
   }
 
   private reportProgress(progress: MigrationProgress): void {

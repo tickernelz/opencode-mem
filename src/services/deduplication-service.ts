@@ -1,9 +1,11 @@
-import { shardManager } from "./sqlite/shard-manager.js";
-import { vectorSearch } from "./sqlite/vector-search.js";
-import { connectionManager } from "./sqlite/connection-manager.js";
+import { tursoShardManager } from "./turso/shard-manager.js";
+import { tursoVectorSearch } from "./turso/vector-search.js";
+import { tursoConnectionManager } from "./turso/connection-manager.js";
+import { ensureTursoReady } from "./turso/ready.js";
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
 import { cosineSimilarity } from "../utils/math.js";
+import { parseExtractedVector } from "./turso/vector-utils.js";
 
 interface DuplicateGroup {
   representative: {
@@ -39,18 +41,19 @@ export class DeduplicationService {
     this.isRunning = true;
 
     try {
-      const userShards = shardManager.getAllShards("user", "");
-      const projectShards = shardManager.getAllShards("project", "");
+      await ensureTursoReady();
+      const userShards = await tursoShardManager.getAllShards("user", "");
+      const projectShards = await tursoShardManager.getAllShards("project", "");
       const allShards = [...userShards, ...projectShards];
 
       let exactDeleted = 0;
       const nearDuplicateGroups: DuplicateGroup[] = [];
 
       for (const shard of allShards) {
-        const db = connectionManager.getConnection(shard.dbPath);
-        const memories = vectorSearch.getAllMemories(db);
+        const db = await tursoConnectionManager.getConnection(shard.dbPath);
+        const memories = await tursoVectorSearch.getAllMemoriesWithExtractedVectors(db);
 
-        const contentMap = new Map<string, any[]>();
+        const contentMap = new Map<string, (typeof memories)[number][]>();
 
         for (const memory of memories) {
           const key = `${memory.container_tag}:${memory.content}`;
@@ -67,8 +70,8 @@ export class DeduplicationService {
 
             for (const dup of toDelete) {
               try {
-                await vectorSearch.deleteVector(db, dup.id, shard);
-                shardManager.decrementVectorCount(shard.id);
+                await tursoVectorSearch.deleteVector(db, String(dup.id));
+                await tursoShardManager.decrementVectorCount(shard.id);
                 exactDeleted++;
               } catch (error) {
                 log("Deduplication: delete error", {
@@ -80,39 +83,39 @@ export class DeduplicationService {
           }
         }
 
-        const uniqueMemories = Array.from(contentMap.values()).map((arr) => arr[0]);
+        const uniqueMemories = Array.from(contentMap.values()).map((arr) => arr[0]!);
         const processedIds = new Set<string>();
 
         for (let i = 0; i < uniqueMemories.length; i++) {
-          const mem1 = uniqueMemories[i];
-          if (!mem1.vector || processedIds.has(mem1.id)) continue;
+          const mem1 = uniqueMemories[i]!;
+          const vector1 = parseExtractedVector(mem1.vector_json);
+          if (!vector1 || processedIds.has(String(mem1.id))) continue;
 
-          const vector1 = new Float32Array(new Uint8Array(mem1.vector).buffer);
           const similarGroup: DuplicateGroup = {
             representative: {
-              id: mem1.id,
-              content: mem1.content,
-              containerTag: mem1.container_tag,
-              createdAt: mem1.created_at,
+              id: String(mem1.id),
+              content: String(mem1.content),
+              containerTag: String(mem1.container_tag),
+              createdAt: Number(mem1.created_at),
             },
             duplicates: [],
           };
 
           for (let j = i + 1; j < uniqueMemories.length; j++) {
-            const mem2 = uniqueMemories[j];
-            if (!mem2.vector || processedIds.has(mem2.id)) continue;
+            const mem2 = uniqueMemories[j]!;
+            const vector2 = parseExtractedVector(mem2.vector_json);
+            if (!vector2 || processedIds.has(String(mem2.id))) continue;
             if (mem1.container_tag !== mem2.container_tag) continue;
 
-            const vector2 = new Float32Array(new Uint8Array(mem2.vector).buffer);
             const similarity = cosineSimilarity(vector1, vector2);
 
             if (similarity >= CONFIG.deduplicationSimilarityThreshold && similarity < 1.0) {
               similarGroup.duplicates.push({
-                id: mem2.id,
-                content: mem2.content,
+                id: String(mem2.id),
+                content: String(mem2.content),
                 similarity,
               });
-              processedIds.add(mem2.id);
+              processedIds.add(String(mem2.id));
             }
           }
 

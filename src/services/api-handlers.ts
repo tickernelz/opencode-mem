@@ -1,13 +1,24 @@
 import { embeddingService } from "./embedding.js";
-import { shardManager } from "./sqlite/shard-manager.js";
-import { vectorSearch } from "./sqlite/vector-search.js";
-import { connectionManager } from "./sqlite/connection-manager.js";
+import { tursoShardManager } from "./turso/shard-manager.js";
+import { tursoVectorSearch } from "./turso/vector-search.js";
+import { tursoConnectionManager } from "./turso/connection-manager.js";
+import { ensureTursoReady } from "./turso/ready.js";
+import { formatTagsForEmbedding } from "./turso/vector-utils.js";
+import { extractScopeFromContainerTag, tryExtractScopeFromContainerTag } from "./memory-scope.js";
 import { log } from "./logger.js";
 import { CONFIG } from "../config.js";
 import type { MemoryType } from "../types/index.js";
 import { userPromptManager } from "./user-prompt/user-prompt-manager.js";
 import type { UserProfileData } from "./user-profile/types.js";
 import { sortProfileItems } from "../utils/profile.js";
+import type { ShardInfo } from "./turso/types.js";
+
+async function getAllMemoryShards(): Promise<ShardInfo[]> {
+  await ensureTursoReady();
+  const projectShards = await tursoShardManager.getAllShards("project", "");
+  const userShards = await tursoShardManager.getAllShards("user", "");
+  return [...projectShards, ...userShards];
+}
 
 interface ApiResponse<T = any> {
   success: boolean;
@@ -77,56 +88,48 @@ function safeJSONParse(jsonString: any): any {
   }
 }
 
-function toBlob(vector?: Float32Array): Uint8Array | null {
-  return vector ? new Uint8Array(vector.buffer) : null;
+function extractScopeFromTag(tag: string): { scope: "user" | "project"; hash: string } {
+  return extractScopeFromContainerTag(tag);
 }
 
-const SAFE_HASH_PATTERN = /^[a-zA-Z0-9]+$/;
-
-function extractScopeFromTag(tag: string): { scope: "project"; hash: string } {
-  const parts = tag.split("_");
-  const hash = parts.length >= 3 ? parts.slice(2).join("_") : tag;
-  if (!SAFE_HASH_PATTERN.test(hash)) {
-    throw new Error("Invalid containerTag: hash segment must be alphanumeric");
-  }
-  return { scope: "project", hash };
-}
-
-function getProjectPathFromTag(tag: string): string | undefined {
-  const projectShards = shardManager.getAllShards("project", "");
-  for (const shard of projectShards) {
-    const db = connectionManager.getConnection(shard.dbPath);
-    const tags = vectorSearch.getDistinctTags(db);
-    for (const t of tags) {
-      if (t.container_tag === tag && t.project_path) {
-        return t.project_path;
+function getProjectPathFromTag(tag: string): Promise<string | undefined> {
+  return (async () => {
+    const shards = await getAllMemoryShards();
+    for (const shard of shards) {
+      const db = await tursoConnectionManager.getConnection(shard.dbPath);
+      const tags = await tursoVectorSearch.getDistinctTags(db);
+      for (const t of tags) {
+        if (t.container_tag === tag && t.project_path) {
+          return String(t.project_path);
+        }
       }
     }
-  }
-  return undefined;
+    return undefined;
+  })();
 }
 
 export async function handleListTags(): Promise<ApiResponse<{ project: TagInfo[] }>> {
   try {
+    await ensureTursoReady();
     // Tags are stored as SQLite metadata; embedding model is not needed.
     // Calling warmup() here would block on local transformer init in the worker
     // thread and hang every read API. Only handlers that compute similarity
     // (e.g. handleSearch) should warm up the embedding service.
-    const projectShards = shardManager.getAllShards("project", "");
+    const projectShards = await tursoShardManager.getAllShards("project", "");
     const tagsMap = new Map<string, TagInfo>();
     for (const shard of projectShards) {
-      const db = connectionManager.getConnection(shard.dbPath);
-      const tags = vectorSearch.getDistinctTags(db);
+      const db = await tursoConnectionManager.getConnection(shard.dbPath);
+      const tags = await tursoVectorSearch.getDistinctTags(db);
       for (const t of tags) {
-        if (t.container_tag && !tagsMap.has(t.container_tag)) {
-          tagsMap.set(t.container_tag, {
-            tag: t.container_tag,
-            displayName: t.display_name,
-            userName: t.user_name,
-            userEmail: t.user_email,
-            projectPath: t.project_path,
-            projectName: t.project_name,
-            gitRepoUrl: t.git_repo_url,
+        if (t.container_tag && !tagsMap.has(String(t.container_tag))) {
+          tagsMap.set(String(t.container_tag), {
+            tag: String(t.container_tag),
+            displayName: t.display_name ? String(t.display_name) : undefined,
+            userName: t.user_name ? String(t.user_name) : undefined,
+            userEmail: t.user_email ? String(t.user_email) : undefined,
+            projectPath: t.project_path ? String(t.project_path) : undefined,
+            projectName: t.project_name ? String(t.project_name) : undefined,
+            gitRepoUrl: t.git_repo_url ? String(t.git_repo_url) : undefined,
           });
         }
       }
@@ -151,15 +154,16 @@ export async function handleListMemories(
   includePrompts: boolean = true
 ): Promise<ApiResponse<PaginatedResponse<Memory | any>>> {
   try {
+    await ensureTursoReady();
     // Listing only reads SQLite rows; no vector ops happen here.
     // See handleListTags comment - keep embedding init out of read paths.
     let allMemories: any[] = [];
     if (tag) {
       const { scope: tagScope, hash } = extractScopeFromTag(tag);
-      const shards = shardManager.getAllShards(tagScope, hash);
+      const shards = await tursoShardManager.getAllShards(tagScope, hash);
       for (const shard of shards) {
-        const db = connectionManager.getConnection(shard.dbPath);
-        const memories = vectorSearch.listMemories(db, tag, 10000);
+        const db = await tursoConnectionManager.getConnection(shard.dbPath);
+        const memories = await tursoVectorSearch.listMemories(db, tag, 10000);
         allMemories.push(...memories);
       }
     } else {
@@ -171,11 +175,11 @@ export async function handleListMemories(
       // unbrowseable in the UI — a confusing UX gap. The filter keeps the
       // defense-in-depth check on container_tag, just widens it to both
       // canonical scope markers.
-      const projectShards = shardManager.getAllShards("project", "");
-      const userShards = shardManager.getAllShards("user", "");
+      const projectShards = await tursoShardManager.getAllShards("project", "");
+      const userShards = await tursoShardManager.getAllShards("user", "");
       for (const shard of [...projectShards, ...userShards]) {
-        const db = connectionManager.getConnection(shard.dbPath);
-        const memories = vectorSearch.getAllMemories(db);
+        const db = await tursoConnectionManager.getConnection(shard.dbPath);
+        const memories = await tursoVectorSearch.getAllMemories(db);
         allMemories.push(
           ...memories.filter(
             (m: any) =>
@@ -209,8 +213,8 @@ export async function handleListMemories(
 
     let timeline: any[] = memoriesWithType;
     if (includePrompts) {
-      const projectPath = tag ? getProjectPathFromTag(tag) : undefined;
-      const prompts = userPromptManager.getCapturedPrompts(projectPath);
+      const projectPath = tag ? await getProjectPathFromTag(tag) : undefined;
+      const prompts = await userPromptManager.getCapturedPrompts(projectPath);
       const promptsWithType = prompts.map((p) => ({
         type: "prompt",
         id: p.id,
@@ -316,6 +320,7 @@ export async function handleAddMemory(data: {
     if (!data.content || !data.containerTag) {
       return { success: false, error: "content and containerTag are required" };
     }
+    await ensureTursoReady();
     await embeddingService.warmup();
     const tags = (data.tags || []).map((t) => t.trim().toLowerCase());
     const embeddingInput =
@@ -324,80 +329,40 @@ export async function handleAddMemory(data: {
     const vector = await embeddingService.embedWithTimeout(embeddingInput);
     let tagsVector: Float32Array | undefined = undefined;
     if (tags.length > 0) {
-      tagsVector = await embeddingService.embedWithTimeout(tags.join(", "));
+      tagsVector = await embeddingService.embedWithTimeout(formatTagsForEmbedding(tags));
     }
 
     const { scope, hash } = extractScopeFromTag(data.containerTag);
 
-    const shard = shardManager.getWriteShard(scope, hash);
+    return tursoShardManager.withScopeWriteLock(scope, hash, async () => {
+      const shard = await tursoShardManager.getWriteShard(scope, hash);
 
-    const id = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    const now = Date.now();
+      const id = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const now = Date.now();
 
-    const record = {
-      id,
-      content: data.content,
-      vector,
-      tagsVector,
-      containerTag: data.containerTag,
-      tags: tags.length > 0 ? tags.join(",") : undefined,
-      type: data.type,
-      createdAt: now,
-      updatedAt: now,
-      displayName: data.displayName,
-      userName: data.userName,
-      userEmail: data.userEmail,
-      projectPath: data.projectPath,
-      projectName: data.projectName,
-      gitRepoUrl: data.gitRepoUrl,
-      metadata: JSON.stringify({ source: "api" }),
-    };
-    const db = connectionManager.getConnection(shard.dbPath);
-
-    // Use transaction for atomic SQLite insert
-    const insertMemory = db.transaction(() => {
-      const insertStmt = db.prepare(`
-        INSERT INTO memories (
-          id, content, vector, tags_vector, container_tag, tags, type, created_at, updated_at,
-          metadata, display_name, user_name, user_email, project_path, project_name, git_repo_url
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      insertStmt.run(
-        record.id,
-        record.content,
-        toBlob(record.vector),
-        toBlob(record.tagsVector),
-        record.containerTag,
-        record.tags || null,
-        record.type || null,
-        record.createdAt,
-        record.updatedAt,
-        record.metadata || null,
-        record.displayName || null,
-        record.userName || null,
-        record.userEmail || null,
-        record.projectPath || null,
-        record.projectName || null,
-        record.gitRepoUrl || null
-      );
+      const record = {
+        id,
+        content: data.content,
+        vector,
+        tagsVector,
+        containerTag: data.containerTag,
+        tags: tags.length > 0 ? tags.join(",") : undefined,
+        type: data.type,
+        createdAt: now,
+        updatedAt: now,
+        displayName: data.displayName,
+        userName: data.userName,
+        userEmail: data.userEmail,
+        projectPath: data.projectPath,
+        projectName: data.projectName,
+        gitRepoUrl: data.gitRepoUrl,
+        metadata: JSON.stringify({ source: "api" }),
+      };
+      const db = await tursoConnectionManager.getConnection(shard.dbPath);
+      await tursoVectorSearch.insertVector(db, record);
+      await tursoShardManager.incrementVectorCount(shard.id);
+      return { success: true as const, data: { id } };
     });
-    insertMemory();
-
-    // Vector index update (outside transaction — vector backend is async)
-    try {
-      const backend = await (vectorSearch as any).getBackend();
-      await backend.insert({ id: record.id, vector: record.vector, shard, kind: "content" });
-      if (record.tagsVector) {
-        await backend.insert({ id: record.id, vector: record.tagsVector, shard, kind: "tags" });
-      }
-    } catch (error) {
-      // Rollback SQLite insert on vector backend failure
-      db.prepare(`DELETE FROM memories WHERE id = ?`).run(record.id);
-      throw error;
-    }
-
-    shardManager.incrementVectorCount(shard.id);
-    return { success: true, data: { id } };
   } catch (error) {
     log("handleAddMemory: error", { error: String(error) });
     return { success: false, error: String(error) };
@@ -410,18 +375,18 @@ export async function handleDeleteMemory(
 ): Promise<ApiResponse<{ deletedPrompt: boolean }>> {
   try {
     if (!id) return { success: false, error: "id is required" };
-    const projectShards = shardManager.getAllShards("project", "");
-    for (const shard of projectShards) {
-      const db = connectionManager.getConnection(shard.dbPath);
-      const memory = vectorSearch.getMemoryById(db, id);
+    const shards = await getAllMemoryShards();
+    for (const shard of shards) {
+      const db = await tursoConnectionManager.getConnection(shard.dbPath);
+      const memory = await tursoVectorSearch.getMemoryById(db, id);
       if (memory) {
         if (cascade) {
           const metadata = safeJSONParse(memory.metadata);
           const linkedPromptId = metadata?.promptId;
-          if (linkedPromptId) userPromptManager.deletePrompt(linkedPromptId);
+          if (linkedPromptId) await userPromptManager.deletePrompt(linkedPromptId);
         }
-        await vectorSearch.deleteVector(db, id, shard);
-        shardManager.decrementVectorCount(shard.id);
+        await tursoVectorSearch.deleteVector(db, id);
+        await tursoShardManager.decrementVectorCount(shard.id);
         return {
           success: true,
           data: { deletedPrompt: cascade && !!safeJSONParse(memory.metadata)?.promptId },
@@ -462,12 +427,12 @@ export async function handleUpdateMemory(
     await embeddingService.warmup();
 
     // Find the existing memory first (read-only — no data modified yet)
-    const projectShards = shardManager.getAllShards("project", "");
+    const shards = await getAllMemoryShards();
     let foundShard = null,
       existingMemory = null;
-    for (const shard of projectShards) {
-      const db = connectionManager.getConnection(shard.dbPath);
-      const memory = vectorSearch.getMemoryById(db, id);
+    for (const shard of shards) {
+      const db = await tursoConnectionManager.getConnection(shard.dbPath);
+      const memory = await tursoVectorSearch.getMemoryById(db, id);
       if (memory) {
         foundShard = shard;
         existingMemory = memory;
@@ -477,61 +442,47 @@ export async function handleUpdateMemory(
     if (!foundShard || !existingMemory) return { success: false, error: "Memory not found" };
 
     // STEP 1: Generate new embeddings FIRST (safe — no data deleted yet)
-    const newContent = data.content || existingMemory.content;
+    const newContent = data.content || String(existingMemory.content);
+    const existingTags = existingMemory.tags ? String(existingMemory.tags) : "";
     const tags =
-      data.tags ||
-      (existingMemory.tags ? existingMemory.tags.split(",").map((t: string) => t.trim()) : []);
+      data.tags || (existingTags ? existingTags.split(",").map((t: string) => t.trim()) : []);
     const vector = await embeddingService.embedWithTimeout(newContent);
     let tagsVector: Float32Array | undefined = undefined;
     if (tags.length > 0) {
-      tagsVector = await embeddingService.embedWithTimeout(tags.join(", "));
+      tagsVector = await embeddingService.embedWithTimeout(formatTagsForEmbedding(tags));
     }
 
-    const db = connectionManager.getConnection(foundShard.dbPath);
+    const db = await tursoConnectionManager.getConnection(foundShard.dbPath);
 
-    // STEP 2: Wrap SQLite delete + insert in a transaction
-    const updateTransaction = db.transaction(() => {
-      // Delete old record
-      db.prepare(`DELETE FROM memories WHERE id = ?`).run(id);
-
-      // Insert updated record
-      const insertStmt = db.prepare(`
+    await db.transaction("write", async (tx) => {
+      await tx.execute({ sql: `DELETE FROM memories WHERE id = ?`, args: [id] });
+      await tx.execute({
+        sql: `
         INSERT INTO memories (
           id, content, vector, tags_vector, container_tag, tags, type, created_at, updated_at,
           metadata, display_name, user_name, user_email, project_path, project_name, git_repo_url
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      insertStmt.run(
-        id,
-        newContent,
-        toBlob(vector),
-        toBlob(tagsVector),
-        existingMemory.container_tag,
-        tags.length > 0 ? tags.join(",") : null,
-        data.type || existingMemory.type,
-        existingMemory.created_at,
-        Date.now(),
-        existingMemory.metadata,
-        existingMemory.display_name,
-        existingMemory.user_name,
-        existingMemory.user_email,
-        existingMemory.project_path,
-        existingMemory.project_name,
-        existingMemory.git_repo_url
-      );
+        ) VALUES (?, ?, vector32(?), ${tagsVector ? "vector32(?)" : "NULL"}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+        args: [
+          id,
+          newContent,
+          JSON.stringify(Array.from(vector)),
+          ...(tagsVector ? [JSON.stringify(Array.from(tagsVector))] : []),
+          String(existingMemory.container_tag),
+          tags.length > 0 ? tags.join(",") : null,
+          data.type || (existingMemory.type ? String(existingMemory.type) : null),
+          Number(existingMemory.created_at),
+          Date.now(),
+          existingMemory.metadata ? String(existingMemory.metadata) : null,
+          existingMemory.display_name ? String(existingMemory.display_name) : null,
+          existingMemory.user_name ? String(existingMemory.user_name) : null,
+          existingMemory.user_email ? String(existingMemory.user_email) : null,
+          existingMemory.project_path ? String(existingMemory.project_path) : null,
+          existingMemory.project_name ? String(existingMemory.project_name) : null,
+          existingMemory.git_repo_url ? String(existingMemory.git_repo_url) : null,
+        ],
+      });
     });
-
-    // Execute the SQLite transaction atomically
-    updateTransaction();
-
-    // STEP 3: Update vector index (outside transaction — vector backend is async/in-memory)
-    const backend = await (vectorSearch as any).getBackend();
-    await backend.delete({ id, shard: foundShard, kind: "content" });
-    await backend.delete({ id, shard: foundShard, kind: "tags" });
-    await backend.insert({ id, vector, shard: foundShard, kind: "content" });
-    if (tagsVector) {
-      await backend.insert({ id, vector: tagsVector, shard: foundShard, kind: "tags" });
-    }
 
     return { success: true };
   } catch (error) {
@@ -583,39 +534,50 @@ export async function handleSearch(
 ): Promise<ApiResponse<PaginatedResponse<SearchResultItem>>> {
   try {
     if (!query) return { success: false, error: "query is required" };
+    await ensureTursoReady();
     await embeddingService.warmup();
     const queryVector = await embeddingService.embedWithTimeout(query);
     let memoryResults: any[] = [];
     let promptResults: any[] = [];
     if (tag) {
       const { scope, hash } = extractScopeFromTag(tag);
-      const shards = shardManager.getAllShards(scope, hash);
+      const shards = await tursoShardManager.getAllShards(scope, hash);
       for (const shard of shards) {
         try {
-          const results = await vectorSearch.searchInShard(shard, queryVector, tag, pageSize * 2);
+          const results = await tursoVectorSearch.searchInShard(
+            shard,
+            queryVector,
+            tag,
+            pageSize * 2
+          );
           memoryResults.push(...results);
         } catch (error) {
           log("Shard search error", { shardId: shard.id, error: String(error) });
         }
       }
-      const projectPath = getProjectPathFromTag(tag);
-      promptResults = userPromptManager.searchPrompts(query, projectPath, pageSize * 2);
+      const projectPath = await getProjectPathFromTag(tag);
+      promptResults = await userPromptManager.searchPrompts(query, projectPath, pageSize * 2);
     } else {
-      const projectShards = shardManager.getAllShards("project", "");
+      const allShards = await getAllMemoryShards();
       const uniqueTags = new Set<string>();
-      for (const shard of projectShards) {
-        const db = connectionManager.getConnection(shard.dbPath);
-        const tags = vectorSearch.getDistinctTags(db);
+      for (const shard of allShards) {
+        const db = await tursoConnectionManager.getConnection(shard.dbPath);
+        const tags = await tursoVectorSearch.getDistinctTags(db);
         for (const t of tags) {
-          if (t.container_tag) uniqueTags.add(t.container_tag);
+          if (t.container_tag) uniqueTags.add(String(t.container_tag));
         }
       }
       for (const containerTag of uniqueTags) {
-        const { scope, hash } = extractScopeFromTag(containerTag);
-        const shards = shardManager.getAllShards(scope, hash);
+        const parsed = tryExtractScopeFromContainerTag(containerTag);
+        if (!parsed) {
+          log("Skipping invalid container_tag during global search", { containerTag });
+          continue;
+        }
+        const { scope, hash } = parsed;
+        const shards = await tursoShardManager.getAllShards(scope, hash);
         for (const shard of shards) {
           try {
-            const results = await vectorSearch.searchInShard(
+            const results = await tursoVectorSearch.searchInShard(
               shard,
               queryVector,
               containerTag,
@@ -627,7 +589,7 @@ export async function handleSearch(
           }
         }
       }
-      promptResults = userPromptManager.searchPrompts(query, undefined, pageSize * 2);
+      promptResults = await userPromptManager.searchPrompts(query, undefined, pageSize * 2);
     }
 
     const formattedPrompts: FormattedPrompt[] = promptResults.map((p) => ({
@@ -647,7 +609,7 @@ export async function handleSearch(
       content: r.memory,
       memoryType: r.metadata?.type,
       tags: r.tags,
-      createdAt: safeToISOString(r.metadata?.createdAt),
+      createdAt: safeToISOString(r.createdAt ?? r.metadata?.createdAt),
       updatedAt: r.metadata?.updatedAt ? safeToISOString(r.metadata.updatedAt) : undefined,
       similarity: r.similarity,
       metadata: r.metadata,
@@ -684,7 +646,7 @@ export async function handleSearch(
     }
 
     if (missingPromptIds.size > 0) {
-      const extraPrompts = userPromptManager.getPromptsByIds(Array.from(missingPromptIds));
+      const extraPrompts = await userPromptManager.getPromptsByIds(Array.from(missingPromptIds));
       for (const p of extraPrompts) {
         paginatedResults.push({
           type: "prompt",
@@ -701,29 +663,33 @@ export async function handleSearch(
     }
 
     if (missingMemoryIds.size > 0) {
-      const projectShards = shardManager.getAllShards("project", "");
-      for (const shard of projectShards) {
-        const db = connectionManager.getConnection(shard.dbPath);
+      const shards = await getAllMemoryShards();
+      for (const shard of shards) {
+        const db = await tursoConnectionManager.getConnection(shard.dbPath);
         for (const mid of missingMemoryIds) {
-          const m = vectorSearch.getMemoryById(db, mid);
+          const m = await tursoVectorSearch.getMemoryById(db, mid);
           if (m && !paginatedResults.some((existing) => existing.id === m.id)) {
             paginatedResults.push({
               type: "memory",
-              id: m.id,
-              content: m.content,
-              memoryType: m.type,
-              tags: m.tags ? m.tags.split(",").map((t: string) => t.trim()) : [],
+              id: String(m.id),
+              content: String(m.content),
+              memoryType: m.type ? String(m.type) : undefined,
+              tags: m.tags
+                ? String(m.tags)
+                    .split(",")
+                    .map((t: string) => t.trim())
+                : [],
               createdAt: safeToISOString(m.created_at),
               updatedAt: m.updated_at ? safeToISOString(m.updated_at) : undefined,
               similarity: 0,
               metadata: safeJSONParse(m.metadata),
-              displayName: m.display_name,
-              userName: m.user_name,
-              userEmail: m.user_email,
-              projectPath: m.project_path,
-              projectName: m.project_name,
-              gitRepoUrl: m.git_repo_url,
-              isPinned: m.is_pinned === 1,
+              displayName: m.display_name ? String(m.display_name) : undefined,
+              userName: m.user_name ? String(m.user_name) : undefined,
+              userEmail: m.user_email ? String(m.user_email) : undefined,
+              projectPath: m.project_path ? String(m.project_path) : undefined,
+              projectName: m.project_name ? String(m.project_name) : undefined,
+              gitRepoUrl: m.git_repo_url ? String(m.git_repo_url) : undefined,
+              isPinned: Number(m.is_pinned) === 1,
               linkedPromptId: safeJSONParse(m.metadata)?.promptId,
               isContext: true,
             });
@@ -747,19 +713,21 @@ export async function handleStats(): Promise<
   }>
 > {
   try {
-    // Stats only counts SQLite rows; no embedding needed.
+    // Stats only counts Turso/libSQL rows; no embedding needed.
     // See handleListTags comment - keep embedding init out of read paths.
-    const projectShards = shardManager.getAllShards("project", "");
+    const shards = await getAllMemoryShards();
     let userCount = 0,
       projectCount = 0;
     const typeCount: Record<string, number> = {};
-    for (const shard of projectShards) {
-      const db = connectionManager.getConnection(shard.dbPath);
-      const memories = vectorSearch.getAllMemories(db);
+    for (const shard of shards) {
+      const db = await tursoConnectionManager.getConnection(shard.dbPath);
+      const memories = await tursoVectorSearch.getAllMemories(db);
       for (const r of memories) {
-        if (r.container_tag?.includes("_user_")) userCount++;
-        else if (r.container_tag?.includes("_project_")) projectCount++;
-        if (r.type) typeCount[r.type] = (typeCount[r.type] || 0) + 1;
+        const containerTag = String(r.container_tag ?? "");
+        const type = r.type ? String(r.type) : "";
+        if (containerTag.includes("_user_")) userCount++;
+        else if (containerTag.includes("_project_")) projectCount++;
+        if (type) typeCount[type] = (typeCount[type] || 0) + 1;
       }
     }
     return {
@@ -779,12 +747,12 @@ export async function handleStats(): Promise<
 export async function handlePinMemory(id: string): Promise<ApiResponse<void>> {
   try {
     if (!id) return { success: false, error: "id is required" };
-    const projectShards = shardManager.getAllShards("project", "");
-    for (const shard of projectShards) {
-      const db = connectionManager.getConnection(shard.dbPath);
-      const memory = vectorSearch.getMemoryById(db, id);
+    const shards = await getAllMemoryShards();
+    for (const shard of shards) {
+      const db = await tursoConnectionManager.getConnection(shard.dbPath);
+      const memory = await tursoVectorSearch.getMemoryById(db, id);
       if (memory) {
-        vectorSearch.pinMemory(db, id);
+        await tursoVectorSearch.pinMemory(db, id);
         return { success: true };
       }
     }
@@ -798,12 +766,12 @@ export async function handlePinMemory(id: string): Promise<ApiResponse<void>> {
 export async function handleUnpinMemory(id: string): Promise<ApiResponse<void>> {
   try {
     if (!id) return { success: false, error: "id is required" };
-    const projectShards = shardManager.getAllShards("project", "");
-    for (const shard of projectShards) {
-      const db = connectionManager.getConnection(shard.dbPath);
-      const memory = vectorSearch.getMemoryById(db, id);
+    const shards = await getAllMemoryShards();
+    for (const shard of shards) {
+      const db = await tursoConnectionManager.getConnection(shard.dbPath);
+      const memory = await tursoVectorSearch.getMemoryById(db, id);
       if (memory) {
-        vectorSearch.unpinMemory(db, id);
+        await tursoVectorSearch.unpinMemory(db, id);
         return { success: true };
       }
     }
@@ -884,14 +852,14 @@ export async function handleDeletePrompt(
 ): Promise<ApiResponse<{ deletedMemory: boolean }>> {
   try {
     if (!id) return { success: false, error: "id is required" };
-    const prompt = userPromptManager.getPromptById(id);
+    const prompt = await userPromptManager.getPromptById(id);
     if (!prompt) return { success: false, error: "Prompt not found" };
     let deletedMemory = false;
     if (cascade && prompt.linkedMemoryId) {
       const result = await handleDeleteMemory(prompt.linkedMemoryId, false);
       if (result.success) deletedMemory = true;
     }
-    userPromptManager.deletePrompt(id);
+    await userPromptManager.deletePrompt(id);
     return { success: true, data: { deletedMemory } };
   } catch (error) {
     log("handleDeletePrompt: error", { error: String(error) });
@@ -926,7 +894,7 @@ export async function handleGetUserProfile(userId?: string): Promise<ApiResponse
       const tags = getTags(process.cwd());
       targetUserId = tags.user.userEmail || "unknown";
     }
-    const profile = userProfileManager.getActiveProfile(targetUserId);
+    const profile = await userProfileManager.getActiveProfile(targetUserId);
     if (!profile)
       return {
         success: true,
@@ -969,7 +937,7 @@ export async function handleGetProfileChangelog(
   try {
     if (!profileId) return { success: false, error: "profileId is required" };
     const { userProfileManager } = await import("./user-profile/user-profile-manager.js");
-    const changelogs = userProfileManager.getProfileChangelogs(profileId, limit);
+    const changelogs = await userProfileManager.getProfileChangelogs(profileId, limit);
     const formattedChangelogs = changelogs.map((c) => ({
       id: c.id,
       profileId: c.profileId,
@@ -989,7 +957,7 @@ export async function handleGetProfileSnapshot(changelogId: string): Promise<Api
   try {
     if (!changelogId) return { success: false, error: "changelogId is required" };
     const { userProfileManager } = await import("./user-profile/user-profile-manager.js");
-    const changelog = userProfileManager.getChangelogById(changelogId);
+    const changelog = await userProfileManager.getChangelogById(changelogId);
     if (!changelog) return { success: false, error: "Changelog not found" };
     const profileData = JSON.parse(changelog.profileDataSnapshot);
     return {
@@ -1016,17 +984,17 @@ export async function handleRefreshProfile(userId?: string): Promise<ApiResponse
       const tags = getTags(process.cwd());
       targetUserId = tags.user.userEmail || "unknown";
     }
-    const profile = userProfileManager.getActiveProfile(targetUserId);
+    const profile = await userProfileManager.getActiveProfile(targetUserId);
     let decayApplied = false;
     if (profile) {
       const pData = JSON.parse(profile.profileData);
       const { data: decayed, hasChanges } = userProfileManager.decayInMemory(pData);
       if (hasChanges) {
-        userProfileManager.updateProfile(profile.id, decayed, 0, "Applied confidence decay");
+        await userProfileManager.updateProfile(profile.id, decayed, 0, "Applied confidence decay");
         decayApplied = true;
       }
     }
-    const unanalyzedCount = userPromptManager.countUnanalyzedForUserLearning();
+    const unanalyzedCount = await userPromptManager.countUnanalyzedForUserLearning();
     return {
       success: true,
       data: {
@@ -1072,7 +1040,7 @@ export async function handleAICleanup(
       targetUserId = tags.user.userEmail || "unknown";
     }
 
-    const profile = userProfileManager.getActiveProfile(targetUserId);
+    const profile = await userProfileManager.getActiveProfile(targetUserId);
     if (!profile) {
       return { success: false, error: "No profile found to clean up" };
     }
@@ -1132,7 +1100,7 @@ export async function handleApplyCleanup(userId?: string, body?: any): Promise<A
       return { success: false, error: "Cleanup session expired. Run AI cleanup again." };
     }
 
-    const profile = userProfileManager.getActiveProfile(targetUserId);
+    const profile = await userProfileManager.getActiveProfile(targetUserId);
     if (!profile) {
       return { success: false, error: "Profile not found" };
     }
@@ -1200,7 +1168,7 @@ export async function handleApplyCleanup(userId?: string, body?: any): Promise<A
         }
       }
 
-      const success = userProfileManager.updateProfile(
+      const success = await userProfileManager.updateProfile(
         profile.id,
         result,
         0,
@@ -1215,7 +1183,7 @@ export async function handleApplyCleanup(userId?: string, body?: any): Promise<A
       };
     }
 
-    const success = userProfileManager.updateProfile(
+    const success = await userProfileManager.updateProfile(
       profile.id,
       cleanedData,
       0,
@@ -1284,7 +1252,7 @@ export async function handleUpdateProfileItem(body?: any): Promise<ApiResponse<a
     const userId = tags.user.userEmail || "unknown";
     if (!userId) return { success: false, error: "Unable to resolve user identity" };
 
-    const profile = userProfileManager.getActiveProfile(userId);
+    const profile = await userProfileManager.getActiveProfile(userId);
     if (!profile) return { success: false, error: "No profile found" };
 
     const { type, index, action, category, description, steps } = body || {};
@@ -1329,7 +1297,12 @@ export async function handleUpdateProfileItem(body?: any): Promise<ApiResponse<a
         ? `Deleted ${type.slice(0, -1)} at index ${index}`
         : `Edited ${type.slice(0, -1)} at index ${index}`;
 
-    const success = userProfileManager.updateProfile(profile.id, profileData, 0, changeSummary);
+    const success = await userProfileManager.updateProfile(
+      profile.id,
+      profileData,
+      0,
+      changeSummary
+    );
     if (!success)
       return { success: false, error: "Profile was modified by another session. Please retry." };
 
@@ -1347,14 +1320,15 @@ export async function handleDetectTagMigration(): Promise<
   ApiResponse<{ needsMigration: boolean; count: number }>
 > {
   try {
-    const projectShards = shardManager.getAllShards("project", "");
+    await ensureTursoReady();
+    const projectShards = await tursoShardManager.getAllShards("project", "");
     let untaggedCount = 0;
     for (const shard of projectShards) {
-      const db = connectionManager.getConnection(shard.dbPath);
-      const rows = db
-        .prepare("SELECT COUNT(*) as count FROM memories WHERE tags IS NULL OR tags = ''")
-        .get() as any;
-      untaggedCount += rows.count;
+      const db = await tursoConnectionManager.getConnection(shard.dbPath);
+      const row = await db.get(
+        "SELECT COUNT(*) as count FROM memories WHERE tags IS NULL OR tags = ''"
+      );
+      untaggedCount += Number(row?.count ?? 0);
     }
     return { success: true, data: { needsMigration: untaggedCount > 0, count: untaggedCount } };
   } catch (error) {
@@ -1388,6 +1362,7 @@ export async function handleRunTagMigrationBatch(
   batchSize: number = 5
 ): Promise<ApiResponse<{ processed: number; total: number; hasMore: boolean }>> {
   try {
+    await ensureTursoReady();
     const { AIProviderFactory } = await import("./ai/ai-provider-factory.js");
     const { buildMemoryProviderConfig } = await import("./ai/provider-config.js");
     const providerConfig = buildMemoryProviderConfig(CONFIG, {
@@ -1395,14 +1370,14 @@ export async function handleRunTagMigrationBatch(
       iterationTimeout: 30000,
     });
     const provider = AIProviderFactory.createProvider(CONFIG.memoryProvider, providerConfig);
-    const projectShards = shardManager.getAllShards("project", "");
+    const projectShards = await tursoShardManager.getAllShards("project", "");
 
     let batchProcessed = 0;
     const allMemories: { memory: any; shard: any }[] = [];
 
     for (const shard of projectShards) {
-      const db = connectionManager.getConnection(shard.dbPath);
-      const memories = db.prepare("SELECT * FROM memories").all() as any[];
+      const db = await tursoConnectionManager.getConnection(shard.dbPath);
+      const memories = await db.all("SELECT * FROM memories");
       for (const m of memories) {
         allMemories.push({ memory: m, shard });
       }
@@ -1421,7 +1396,7 @@ export async function handleRunTagMigrationBatch(
       const item = allMemories[i];
       if (!item) continue;
       const { memory: m, shard } = item;
-      const db = connectionManager.getConnection(shard.dbPath);
+      const db = await tursoConnectionManager.getConnection(shard.dbPath);
 
       try {
         let currentTags = m.tags
@@ -1452,25 +1427,18 @@ export async function handleRunTagMigrationBatch(
           );
           if (result.success && result.data?.tags) {
             currentTags = result.data.tags;
-            db.prepare("UPDATE memories SET tags = ? WHERE id = ?").run(
+            await db.run("UPDATE memories SET tags = ? WHERE id = ?", [
               currentTags.join(","),
-              m.id
-            );
+              m.id,
+            ]);
           }
         }
 
         const vector = await embeddingService.embedWithTimeout(m.content);
         const tagsVector = currentTags.length
-          ? await embeddingService.embedWithTimeout(currentTags.join(", "))
+          ? await embeddingService.embedWithTimeout(formatTagsForEmbedding(currentTags))
           : undefined;
-        const vectorBuffer = new Uint8Array(vector.buffer);
-        db.prepare("UPDATE memories SET vector = ?, updated_at = ? WHERE id = ?").run(
-          vectorBuffer,
-          Date.now(),
-          m.id
-        );
-
-        await vectorSearch.updateVector(db, m.id, vector, shard, tagsVector);
+        await tursoVectorSearch.updateVector(db, m.id, vector, tagsVector);
 
         migrationProgress.processed++;
         batchProcessed++;

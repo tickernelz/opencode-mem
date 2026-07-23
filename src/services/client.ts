@@ -1,11 +1,14 @@
 import { embeddingService } from "./embedding.js";
-import { shardManager } from "./sqlite/shard-manager.js";
-import { vectorSearch } from "./sqlite/vector-search.js";
-import { connectionManager } from "./sqlite/connection-manager.js";
+import { tursoShardManager } from "./turso/shard-manager.js";
+import { tursoVectorSearch } from "./turso/vector-search.js";
+import { tursoConnectionManager } from "./turso/connection-manager.js";
+import { ensureTursoReady } from "./turso/ready.js";
+import { formatTagsForEmbedding } from "./turso/vector-utils.js";
+import { extractScopeFromContainerTag, resolveMemoryScope } from "./memory-scope.js";
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
 import type { MemoryType } from "../types/index.js";
-import type { MemoryRecord } from "./sqlite/types.js";
+import type { MemoryRecord } from "./turso/types.js";
 
 export type MemoryScope = "project" | "all-projects";
 
@@ -37,31 +40,11 @@ function safeJSONParse(jsonString: any): any {
   }
 }
 
-function toBlob(vector?: Float32Array): Uint8Array | null {
-  return vector ? new Uint8Array(vector.buffer) : null;
-}
-
-function extractScopeFromContainerTag(containerTag: string): {
-  scope: "user" | "project";
-  hash: string;
-} {
-  const parts = containerTag.split("_");
-  if (parts.length >= 3) {
-    const scope = parts[1] as "user" | "project";
-    const hash = parts.slice(2).join("_");
-    return { scope, hash };
-  }
-  return { scope: "user", hash: containerTag };
-}
-
 function resolveScopeValue(
   scope: MemoryScope,
   containerTag: string
 ): { scope: "user" | "project"; hash: string } {
-  if (scope === "all-projects") {
-    return { scope: "project", hash: "" };
-  }
-  return extractScopeFromContainerTag(containerTag);
+  return resolveMemoryScope(scope, containerTag);
 }
 
 export class LocalMemoryClient {
@@ -76,10 +59,11 @@ export class LocalMemoryClient {
 
     this.initPromise = (async () => {
       try {
+        await ensureTursoReady();
         this.isInitialized = true;
       } catch (error) {
         this.initPromise = null;
-        log("SQLite initialization failed", { error: String(error) });
+        log("Turso initialization failed", { error: String(error) });
         throw error;
       }
     })();
@@ -108,8 +92,15 @@ export class LocalMemoryClient {
     };
   }
 
-  close(): void {
-    connectionManager.closeAll();
+  reset(): void {
+    this.isInitialized = false;
+    this.initPromise = null;
+  }
+
+  async close(): Promise<void> {
+    const { closeTursoAndInvalidateCaches } = await import("./turso/lifecycle.js");
+    await closeTursoAndInvalidateCaches();
+    this.reset();
   }
 
   async searchMemories(query: string, containerTag: string, scope: MemoryScope = "project") {
@@ -118,13 +109,13 @@ export class LocalMemoryClient {
 
       const queryVector = await embeddingService.embedWithTimeout(query);
       const resolved = resolveScopeValue(scope, containerTag);
-      const shards = shardManager.getAllShards(resolved.scope, resolved.hash);
+      const shards = await tursoShardManager.getAllShards(resolved.scope, resolved.hash);
 
       if (shards.length === 0) {
         return { success: true as const, results: [], total: 0, timing: 0 };
       }
 
-      const results = await vectorSearch.searchAcrossShards(
+      const { results, warnings } = await tursoVectorSearch.searchAcrossShards(
         shards,
         queryVector,
         scope === "all-projects" ? "" : containerTag,
@@ -133,7 +124,13 @@ export class LocalMemoryClient {
         query
       );
 
-      return { success: true as const, results, total: results.length, timing: 0 };
+      return {
+        success: true as const,
+        results,
+        total: results.length,
+        timing: 0,
+        ...(warnings.length > 0 ? { warnings } : {}),
+      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log("searchMemories: error", { error: errorMessage });
@@ -169,100 +166,58 @@ export class LocalMemoryClient {
       let tagsVector: Float32Array | undefined = undefined;
 
       if (tags.length > 0) {
-        // Wrap tags in a natural-language template before embedding. Bare comma
-        // lists like "react, auth, bug-fix" sit outside the multilingual-e5
-        // training distribution, so the resulting tagsVector drifts toward
-        // unrelated chatter and weakens the 0.4-weight tag boost in
-        // VectorSearch#searchInShard. The "Topics: ..." prefix is a sentence
-        // form e5 was trained on and yields a more discriminative vector.
-        tagsVector = await embeddingService.embedWithTimeout(`Topics: ${tags.join(", ")}`);
+        tagsVector = await embeddingService.embedWithTimeout(formatTagsForEmbedding(tags));
       }
 
       const { scope, hash } = extractScopeFromContainerTag(containerTag);
-      const shard = shardManager.getWriteShard(scope, hash);
 
-      const id = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-      const now = Date.now();
+      return tursoShardManager.withScopeWriteLock(scope, hash, async () => {
+        const shard = await tursoShardManager.getWriteShard(scope, hash);
 
-      const {
-        displayName,
-        userName,
-        userEmail,
-        projectPath,
-        projectName,
-        gitRepoUrl,
-        type,
-        tags: _tags,
-        ...dynamicMetadata
-      } = metadata || {};
+        const id = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+        const now = Date.now();
 
-      const record: MemoryRecord = {
-        id,
-        content,
-        vector,
-        tagsVector,
-        containerTag,
-        tags: tags.length > 0 ? tags.join(",") : undefined,
-        type,
-        createdAt: now,
-        updatedAt: now,
-        displayName,
-        userName,
-        userEmail,
-        projectPath,
-        projectName,
-        gitRepoUrl,
-        metadata:
-          Object.keys(dynamicMetadata).length > 0 ? JSON.stringify(dynamicMetadata) : undefined,
-      };
+        const {
+          displayName,
+          userName,
+          userEmail,
+          projectPath,
+          projectName,
+          gitRepoUrl,
+          type,
+          tags: _tags,
+          ...dynamicMetadata
+        } = metadata || {};
 
-      const db = connectionManager.getConnection(shard.dbPath);
+        const record: MemoryRecord = {
+          id,
+          content,
+          vector,
+          tagsVector,
+          containerTag,
+          tags: tags.length > 0 ? tags.join(",") : undefined,
+          type,
+          createdAt: now,
+          updatedAt: now,
+          displayName,
+          userName,
+          userEmail,
+          projectPath,
+          projectName,
+          gitRepoUrl,
+          metadata:
+            Object.keys(dynamicMetadata).length > 0 ? JSON.stringify(dynamicMetadata) : undefined,
+        };
 
-      // Use transaction for atomic SQLite insert
-      const insertMemory = db.transaction(() => {
-        const insertStmt = db.prepare(`
-          INSERT INTO memories (
-            id, content, vector, tags_vector, container_tag, tags, type, created_at, updated_at,
-            metadata, display_name, user_name, user_email, project_path, project_name, git_repo_url
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-        insertStmt.run(
-          record.id,
-          record.content,
-          toBlob(record.vector),
-          toBlob(record.tagsVector),
-          record.containerTag,
-          record.tags || null,
-          record.type || null,
-          record.createdAt,
-          record.updatedAt,
-          record.metadata || null,
-          record.displayName || null,
-          record.userName || null,
-          record.userEmail || null,
-          record.projectPath || null,
-          record.projectName || null,
-          record.gitRepoUrl || null
-        );
+        const db = await tursoConnectionManager.getConnection(shard.dbPath);
+        await tursoVectorSearch.insertVector(db, record);
+        await tursoShardManager.incrementVectorCount(shard.id);
+
+        return {
+          success: true as const,
+          id,
+        };
       });
-      insertMemory();
-
-      // Vector index update (outside transaction — vector backend is async/in-memory)
-      try {
-        const backend = await (vectorSearch as any).getBackend();
-        await backend.insert({ id: record.id, vector: record.vector, shard, kind: "content" });
-        if (record.tagsVector) {
-          await backend.insert({ id: record.id, vector: record.tagsVector, shard, kind: "tags" });
-        }
-      } catch (error) {
-        // Rollback SQLite insert on vector backend failure
-        db.prepare(`DELETE FROM memories WHERE id = ?`).run(record.id);
-        throw error;
-      }
-
-      shardManager.incrementVectorCount(shard.id);
-
-      return { success: true as const, id };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log("addMemory: error", { error: errorMessage });
@@ -274,17 +229,17 @@ export class LocalMemoryClient {
     try {
       await this.initialize();
 
-      const userShards = shardManager.getAllShards("user", "");
-      const projectShards = shardManager.getAllShards("project", "");
+      const userShards = await tursoShardManager.getAllShards("user", "");
+      const projectShards = await tursoShardManager.getAllShards("project", "");
       const allShards = [...userShards, ...projectShards];
 
       for (const shard of allShards) {
-        const db = connectionManager.getConnection(shard.dbPath);
-        const memory = vectorSearch.getMemoryById(db, memoryId);
+        const db = await tursoConnectionManager.getConnection(shard.dbPath);
+        const memory = await tursoVectorSearch.getMemoryById(db, memoryId);
 
         if (memory) {
-          await vectorSearch.deleteVector(db, memoryId, shard);
-          shardManager.decrementVectorCount(shard.id);
+          await tursoVectorSearch.deleteVector(db, memoryId);
+          await tursoShardManager.decrementVectorCount(shard.id);
           return { success: true };
         }
       }
@@ -302,7 +257,7 @@ export class LocalMemoryClient {
       await this.initialize();
 
       const resolved = resolveScopeValue(scope, containerTag);
-      const shards = shardManager.getAllShards(resolved.scope, resolved.hash);
+      const shards = await tursoShardManager.getAllShards(resolved.scope, resolved.hash);
 
       if (shards.length === 0) {
         return {
@@ -315,8 +270,8 @@ export class LocalMemoryClient {
       const allMemories: any[] = [];
 
       for (const shard of shards) {
-        const db = connectionManager.getConnection(shard.dbPath);
-        const memories = vectorSearch.listMemories(
+        const db = await tursoConnectionManager.getConnection(shard.dbPath);
+        const memories = await tursoVectorSearch.listMemories(
           db,
           scope === "all-projects" ? "" : containerTag,
           limit
@@ -361,7 +316,7 @@ export class LocalMemoryClient {
       await this.initialize();
 
       const { scope, hash } = extractScopeFromContainerTag(containerTag);
-      const shards = shardManager.getAllShards(scope, hash);
+      const shards = await tursoShardManager.getAllShards(scope, hash);
 
       if (shards.length === 0) {
         return { success: true as const, results: [], total: 0, timing: 0 };
@@ -370,12 +325,12 @@ export class LocalMemoryClient {
       const allMemories: any[] = [];
 
       for (const shard of shards) {
-        const db = connectionManager.getConnection(shard.dbPath);
-        const memories = vectorSearch.getMemoriesBySessionID(db, sessionID);
+        const db = await tursoConnectionManager.getConnection(shard.dbPath);
+        const memories = await tursoVectorSearch.getMemoriesBySessionID(db, sessionID);
         allMemories.push(...memories);
       }
 
-      allMemories.sort((a, b) => b.created_at - a.created_at);
+      allMemories.sort((a, b) => Number(b.created_at) - Number(a.created_at));
 
       const results = allMemories.slice(0, limit).map((row: any) => ({
         id: row.id,

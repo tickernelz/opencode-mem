@@ -241,8 +241,7 @@ async function generateViaSdkClient<T>(
 
 function readSdkData<T>(response: unknown, label: string): T {
   const result = response as
-    | { data?: T; error?: unknown; request?: Request; response?: Response }
-    | undefined;
+    { data?: T; error?: unknown; request?: Request; response?: Response } | undefined;
   if (result?.error !== undefined) {
     const status = result.response ? ` (${responseStatus(result.response)})` : "";
     const responseUrl = result.response?.url || result.request?.url;

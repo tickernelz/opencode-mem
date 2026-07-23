@@ -1,7 +1,7 @@
 {
   "name": "opencode-mem",
   "version": "2.20.1",
-  "description": "OpenCode plugin that gives coding agents persistent memory using local vector database",
+  "description": "OpenCode plugin that gives coding agents persistent memory using local Turso/libSQL vector search",
   "type": "module",
   "main": "dist/plugin.js",
   "types": "dist/index.d.ts",
@@ -22,6 +22,7 @@
   "scripts": {
     "build": "rm -rf dist && bunx tsc && bun scripts/copy-web-assets.mjs",
     "dev": "tsc --watch",
+    "test": "bun test",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,js,css,html}\"",
     "format:check": "prettier --check \"src/**/*.{ts,js,css,html}\"",
@@ -47,24 +48,24 @@
     "access": "public"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "^1.3.0",
-    "@opencode-ai/sdk": "^1.3.0",
+    "@huggingface/transformers": "^4.2.0",
+    "@libsql/client": "^0.17.4",
+    "@opencode-ai/plugin": "^1.18.4",
+    "@opencode-ai/sdk": "^1.18.4",
     "franc-min": "^6.2.0",
     "iso-639-3": "^3.0.1",
-    "zod": "^4.3.6",
-    "@huggingface/transformers": "^4.2.0",
-    "usearch": "2.26.0"
+    "zod": "^4.4.3"
   },
   "//": "Remove onnxruntime-node override after https://github.com/microsoft/onnxruntime/issues/27961 is resolved",
   "overrides": {
     "onnxruntime-node": "1.22.0"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.8",
+    "@types/bun": "^1.3.14",
     "husky": "^9.1.7",
-    "lint-staged": "^16.2.7",
-    "prettier": "^3.4.2",
-    "typescript": "^5.7.3"
+    "lint-staged": "^17.1.1",
+    "prettier": "^3.9.6",
+    "typescript": "7.0.2"
   },
   "opencode": {
     "type": "plugin",

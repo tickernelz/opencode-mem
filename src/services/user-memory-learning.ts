@@ -24,7 +24,7 @@ export async function performUserProfileLearning(
   }
   isLearningRunning = true;
   try {
-    const count = userPromptManager.countUnanalyzedForUserLearning();
+    const count = await userPromptManager.countUnanalyzedForUserLearning();
     const threshold = CONFIG.userProfileAnalysisInterval;
 
     log("user-profile-learning: check", { count, threshold });
@@ -33,7 +33,7 @@ export async function performUserProfileLearning(
       return;
     }
 
-    const prompts = userPromptManager.getPromptsForUserLearning(threshold);
+    const prompts = await userPromptManager.getPromptsForUserLearning(threshold);
 
     if (prompts.length === 0) {
       return;
@@ -42,7 +42,7 @@ export async function performUserProfileLearning(
     const tags = getTags(directory);
     const userId = tags.user.userEmail || "unknown";
 
-    let existingProfile = userProfileManager.getActiveProfile(userId);
+    let existingProfile = await userProfileManager.getActiveProfile(userId);
     const analysisStartTime = Date.now();
 
     let validationPrompt: string | undefined;
@@ -130,7 +130,7 @@ Rules:
     log("user-profile-learning: analyze done", { hasResult: !!analysisResult });
 
     if (!analysisResult) {
-      userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
+      await userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
       if (prompts.length >= 10 && existingProfile) {
         buildLearningPaths(prompts, existingProfile.id).catch(() => {});
       }
@@ -147,7 +147,7 @@ Rules:
 
       while (!success && retries <= MAX_RETRIES) {
         if (retries > 0) {
-          existingProfile = userProfileManager.getActiveProfile(userId);
+          existingProfile = await userProfileManager.getActiveProfile(userId);
           if (!existingProfile) break;
           const retryProfileData: UserProfileData = JSON.parse(existingProfile.profileData);
           const { data: decayedRetry } = userProfileManager.decayInMemory(retryProfileData);
@@ -179,7 +179,7 @@ Rules:
           changeSummary = changeSummary + "; " + validationSummary;
         }
 
-        success = userProfileManager.updateProfile(
+        success = await userProfileManager.updateProfile(
           existingProfile.id,
           updatedProfileData,
           prompts.length,
@@ -203,9 +203,9 @@ Rules:
         return;
       }
 
-      userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
+      await userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
     } else {
-      userProfileManager.createProfile(
+      await userProfileManager.createProfile(
         userId,
         tags.user.displayName || "Unknown",
         tags.user.userName || "unknown",
@@ -213,7 +213,7 @@ Rules:
         llmResult,
         prompts.length
       );
-      userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
+      await userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
     }
 
     if (CONFIG.showUserProfileToasts) {
@@ -781,12 +781,12 @@ If no clear chains, return { "paths": [] }.`;
     topics: result.paths.map((p) => p.topic).join(", "),
   });
 
-  const profile = userProfileManager.getProfileById(profileId);
+  const profile = await userProfileManager.getProfileById(profileId);
   if (!profile) return;
 
   const data: UserProfileData = JSON.parse(profile.profileData);
   data.learning_paths = result.paths;
-  userProfileManager.updateProfile(
+  await userProfileManager.updateProfile(
     profileId,
     data,
     0,

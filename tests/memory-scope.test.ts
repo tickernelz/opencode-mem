@@ -5,13 +5,13 @@ import { join } from "node:path";
 
 const tempDirs: string[] = [];
 const clientUrl = new URL("../src/services/client.js", import.meta.url).href;
-const connectionManagerUrl = new URL(
-  "../src/services/sqlite/connection-manager.js",
-  import.meta.url
-).href;
+const connectionManagerUrl = new URL("../src/services/turso/connection-manager.js", import.meta.url)
+  .href;
 const embeddingUrl = new URL("../src/services/embedding.js", import.meta.url).href;
-const shardManagerUrl = new URL("../src/services/sqlite/shard-manager.js", import.meta.url).href;
-const vectorSearchUrl = new URL("../src/services/sqlite/vector-search.js", import.meta.url).href;
+const shardManagerUrl = new URL("../src/services/turso/shard-manager.js", import.meta.url).href;
+const vectorSearchUrl = new URL("../src/services/turso/vector-search.js", import.meta.url).href;
+const legacyMigratorUrl = new URL("../src/services/turso/legacy-migrator.js", import.meta.url).href;
+const readyUrl = new URL("../src/services/turso/ready.js", import.meta.url).href;
 
 function runScenario(scriptBody: string) {
   const dir = mkdtempSync(join(tmpdir(), "opencode-mem-memory-scope-"));
@@ -40,7 +40,7 @@ function makeDb(path) {
     ? [{ id: "a", content: "A", created_at: 2, container_tag: "tag-a" }]
     : path.includes("shard-b")
       ? [{ id: "b", content: "B", created_at: 1, container_tag: "tag-b" }]
-      : [{ id: "c", content: "C", created_at: 3, container_tag: "current" }];
+      : [{ id: "c", content: "C", created_at: 3, container_tag: "opencode_project_a1b2c3d4e5f67890" }];
 
   return {
     prepare(sql) {
@@ -74,14 +74,14 @@ function makeDb(path) {
 }
 
 mock.module(${JSON.stringify(connectionManagerUrl)}, () => ({
-  connectionManager: {
-    getConnection(path) {
+  tursoConnectionManager: {
+    async getConnection(path) {
       if (!dbByPath.has(path)) {
         dbByPath.set(path, makeDb(path));
       }
       return dbByPath.get(path);
     },
-    closeAll() {},
+    async closeAll() {},
   },
 }));
 
@@ -93,25 +93,35 @@ mock.module(${JSON.stringify(embeddingUrl)}, () => ({
   },
 }));
 
+mock.module(${JSON.stringify(legacyMigratorUrl)}, () => ({
+  runLegacyTursoMigration: async () => {},
+}));
+
+mock.module(${JSON.stringify(readyUrl)}, () => ({
+  ensureTursoReady: async () => {},
+}));
+
 mock.module(${JSON.stringify(shardManagerUrl)}, () => ({
-  shardManager: {
-    getAllShards(scope, hash) {
+  tursoShardManager: {
+    async getAllShards(scope, hash) {
       return scope === "project" && hash === ""
         ? [makeShard("shard-a"), makeShard("shard-b")]
         : [makeShard("shard-current")];
     },
-    getWriteShard() {
+    async getWriteShard() {
       return makeShard("shard-write");
     },
-    incrementVectorCount() {},
+    async incrementVectorCount() {},
   },
 }));
 
 mock.module(${JSON.stringify(vectorSearchUrl)}, () => ({
-  vectorSearch: {
-    searchAcrossShards: async (shards) =>
-      shards.map((s) => ({ id: s.id, memory: s.id, similarity: 1 })),
-    listMemories: (db, containerTag) => db.listMemories(containerTag),
+  tursoVectorSearch: {
+    searchAcrossShards: async (shards) => ({
+      results: shards.map((s) => ({ id: s.id, memory: s.id, similarity: 1 })),
+      warnings: [],
+    }),
+    listMemories: async (db, containerTag) => db.listMemories(containerTag),
     insertVector: async () => {},
   },
 }));
@@ -150,7 +160,7 @@ afterEach(() => {
 describe("memory scope", () => {
   it("defaults to project scope", () => {
     const result = runScenario(`
-const res = await memoryClient.listMemories("current", 10);
+const res = await memoryClient.listMemories("opencode_project_a1b2c3d4e5f67890", 10);
 console.log(JSON.stringify(res));
 `);
 

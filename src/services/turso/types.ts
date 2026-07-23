@@ -32,6 +32,7 @@ export interface SearchResult {
   id: string;
   memory: string;
   similarity: number;
+  createdAt?: number;
   tags?: string[];
   metadata?: Record<string, unknown>;
   displayName?: string;
