@@ -320,6 +320,8 @@ Supported providers: any provider listed by `opencode providers list` (e.g. `ant
 
 If `opencodeProvider` and `opencodeModel` are set, they take precedence over the manual `memoryProvider` settings below.
 
+**Model variant (optional):** set `"opencodeVariant"` to pass a model variant through to opencode's model object, e.g. `"opencodeVariant": "thinking-off"` for `deepseek-v4-flash` on a custom provider alias whose auth fails without the variant (401 `ProviderModelNotFoundError`). The value is forwarded verbatim as `model.variant` on every opencode structured-output request; leave it unset to keep the current behavior.
+
 **Follow the session model:** set `"opencodeModel": "inherit"` to use a concrete OpenCode model at call time instead of a pinned id. For **auto-capture**, each prompt is recorded via the `chat.params` hook and the capture request reuses that prompt's provider/model. For **profile learning** and other structured-output paths (which are not tied to a single user message), `inherit` falls back to the most recent model in OpenCode's `model.json` recent list (preferring the configured `opencodeProvider`). Sending the literal model id `inherit` is never valid and previously caused `ProviderModelNotFoundError: Model not found: <provider>/inherit` on those paths. `opencodeProvider` is still required as the normal config gate.
 
 **Fallback:** Manual API configuration (if not using opencodeProvider):

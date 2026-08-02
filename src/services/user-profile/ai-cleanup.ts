@@ -333,6 +333,7 @@ async function callViaOpencodeWithClient(
         model: {
           providerID: CONFIG.opencodeProvider || "bs-aigw",
           modelID: CONFIG.opencodeModel || "deepseek-v4-flash",
+          ...(CONFIG.opencodeVariant ? { variant: CONFIG.opencodeVariant } : {}),
         },
         system: systemPrompt,
         parts: [{ type: "text", text: prompt }],
