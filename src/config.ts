@@ -12,6 +12,12 @@ const CONFIG_FILES = [
   join(CONFIG_DIR, "opencode-mem.json"),
 ];
 
+type MemoryProviderType =
+  "atlas-cloud" | "openai-chat" | "openai-responses" | "anthropic" | "minimax";
+
+const ATLAS_CLOUD_API_URL = "https://api.atlascloud.ai/v1";
+const ATLAS_CLOUD_MODEL = "deepseek-ai/deepseek-v4-pro";
+
 if (!existsSync(CONFIG_DIR)) {
   mkdirSync(CONFIG_DIR, { recursive: true });
 }
@@ -43,7 +49,7 @@ interface OpenCodeMemConfig {
   autoCaptureIterationTimeout?: number;
   autoCaptureMaxRetries?: number;
   autoCaptureLanguage?: string;
-  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic" | "minimax";
+  memoryProvider?: MemoryProviderType;
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
@@ -124,7 +130,7 @@ const DEFAULTS: Required<
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
-  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic" | "minimax";
+  memoryProvider?: MemoryProviderType;
   memoryTemperature?: number | false;
   memoryExtraParams?: Record<string, unknown>;
   opencodeProvider?: string;
@@ -343,7 +349,7 @@ const CONFIG_TEMPLATE = `{
   
   "autoCaptureEnabled": true,
   
-  // Provider type: "openai-chat" | "openai-responses" | "anthropic" | "minimax"
+  // Provider type: "atlas-cloud" | "openai-chat" | "openai-responses" | "anthropic" | "minimax"
   // Note: "openai-chat" is a generic OpenAI API-compatible mode.
   // Any service that follows the OpenAI Chat Completions API can use it via custom "memoryApiUrl".
   "memoryProvider": "openai-chat",
@@ -362,6 +368,14 @@ const CONFIG_TEMPLATE = `{
   // Any OpenAI-compatible endpoint can use the "openai-chat" provider pattern below.
   // Common examples: DeepSeek, Qwen (via Alibaba Cloud ModelStudio),
   // Zhipu GLM (BigModel platform), and Kimi (Moonshot AI platform).
+
+  // Atlas Cloud preset (OpenAI-compatible Chat Completions):
+  //   Set ATLASCLOUD_API_KEY in the environment, then use:
+  //   "memoryProvider": "atlas-cloud"
+  //   // Optional overrides:
+  //   // "memoryModel": "deepseek-ai/deepseek-v4-pro"
+  //   // "memoryApiUrl": "https://api.atlascloud.ai/v1"
+  //   // "memoryApiKey": "env://ATLASCLOUD_API_KEY"
 
   // OpenAI Chat Completion (default, backward compatible):
   //   "memoryProvider": "openai-chat"
@@ -569,7 +583,13 @@ function getEmbeddingDimensions(model: string): number {
 }
 
 function buildConfig(fileConfig: OpenCodeMemConfig) {
-  const memoryApiKey = resolveSecretValue(fileConfig.memoryApiKey);
+  const memoryProvider = fileConfig.memoryProvider ?? "openai-chat";
+  const isAtlasCloud = memoryProvider === "atlas-cloud";
+  const memoryModel = fileConfig.memoryModel ?? (isAtlasCloud ? ATLAS_CLOUD_MODEL : undefined);
+  const memoryApiUrl = fileConfig.memoryApiUrl ?? (isAtlasCloud ? ATLAS_CLOUD_API_URL : undefined);
+  const memoryApiKey =
+    resolveSecretValue(fileConfig.memoryApiKey) ??
+    (isAtlasCloud ? process.env.ATLASCLOUD_API_KEY : undefined);
   const embeddingDimensions =
     fileConfig.embeddingDimensions ??
     getEmbeddingDimensions(fileConfig.embeddingModel ?? DEFAULTS.embeddingModel);
@@ -606,10 +626,9 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
       fileConfig.autoCaptureIterationTimeout ?? DEFAULTS.autoCaptureIterationTimeout,
     autoCaptureMaxRetries: fileConfig.autoCaptureMaxRetries ?? DEFAULTS.autoCaptureMaxRetries,
     autoCaptureLanguage: fileConfig.autoCaptureLanguage,
-    memoryProvider: (fileConfig.memoryProvider ?? "openai-chat") as
-      "openai-chat" | "openai-responses" | "anthropic" | "minimax",
-    memoryModel: fileConfig.memoryModel,
-    memoryApiUrl: fileConfig.memoryApiUrl,
+    memoryProvider,
+    memoryModel,
+    memoryApiUrl,
     memoryApiKey,
     memoryTemperature: fileConfig.memoryTemperature,
     memoryExtraParams: fileConfig.memoryExtraParams,
@@ -618,8 +637,8 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     autoCaptureProviderStatus: getAutoCaptureProviderStatus({
       opencodeProvider: fileConfig.opencodeProvider,
       opencodeModel: fileConfig.opencodeModel,
-      memoryModel: fileConfig.memoryModel,
-      memoryApiUrl: fileConfig.memoryApiUrl,
+      memoryModel,
+      memoryApiUrl,
       memoryApiKey,
     }),
     aiSessionRetentionDays: fileConfig.aiSessionRetentionDays ?? DEFAULTS.aiSessionRetentionDays,
