@@ -1023,8 +1023,16 @@ function formatMemoriesForCompaction(memories: any[]): string {
   let output = `## Restored Session Memory\n\n`;
 
   memories.forEach((m, i) => {
+    // Auto-capture stores the tags footer inside the memory body itself
+    // ("…\n\nTags: …"). Strip it when a canonical tags line follows, so the
+    // tags are not duplicated in the restored context (#131).
+    const body =
+      m.tags && m.tags.length > 0
+        ? (m.memory ?? "").replace(/\n*Tags: [^\n]*\s*$/, "")
+        : (m.memory ?? "");
+
     output += `### Memory ${i + 1}\n`;
-    output += `${m.memory}\n\n`;
+    output += `${body}\n\n`;
     if (m.tags && m.tags.length > 0) {
       output += `Tags: ${m.tags.join(", ")}\n\n`;
     }
