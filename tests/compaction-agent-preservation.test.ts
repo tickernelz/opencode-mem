@@ -200,6 +200,37 @@ describe("session.compacted agent preservation (#236)", () => {
     expect(result.parsed?.promptCalls[0]?.body?.noReply).toBe(true);
   });
 
+  it("does not duplicate the Tags line when the stored memory already embeds one (regression from #131)", () => {
+    const result = runCompactionScenario({
+      sessionAgent: "my-orchestrator",
+      memories: [
+        {
+          memory: "We chose libSQL over sqlite3.\n\nTags: architecture, decision",
+          tags: ["architecture", "decision"],
+        },
+      ],
+      messages: [{ info: { role: "user", agent: "my-orchestrator" } }],
+    });
+
+    expect(result.exitCode).toBe(0);
+    const text = result.parsed?.promptCalls[0]?.body?.parts?.[0]?.text ?? "";
+    const tagsLines = text.match(/^Tags: /gm) ?? [];
+    expect(tagsLines).toHaveLength(1);
+  });
+
+  it("still appends a single Tags line when the memory body has no embedded footer", () => {
+    const result = runCompactionScenario({
+      sessionAgent: "my-orchestrator",
+      memories: [{ memory: "Plain memory body without footer.", tags: ["decision"] }],
+      messages: [{ info: { role: "user", agent: "my-orchestrator" } }],
+    });
+
+    expect(result.exitCode).toBe(0);
+    const text = result.parsed?.promptCalls[0]?.body?.parts?.[0]?.text ?? "";
+    const tagsLines = text.match(/^Tags: /gm) ?? [];
+    expect(tagsLines).toHaveLength(1);
+  });
+
   it("does not call session.prompt when there are no memories", () => {
     const result = runCompactionScenario({
       sessionAgent: "my-orchestrator",
