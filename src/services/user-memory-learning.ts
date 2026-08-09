@@ -665,6 +665,7 @@ Use the update_user_profile tool to save the ${existingProfile ? "updated" : "ne
           client: v2Client,
           providerID: CONFIG.opencodeProvider,
           modelID: CONFIG.opencodeModel,
+          variant: CONFIG.opencodeVariant,
           systemPrompt,
           userPrompt: context,
           schema,
@@ -788,6 +789,7 @@ If no clear chains, return { "paths": [] }.`;
             client: v2Client,
             providerID: CONFIG.opencodeProvider,
             modelID: CONFIG.opencodeModel,
+            variant: CONFIG.opencodeVariant,
             systemPrompt,
             userPrompt,
             schema: z.object({

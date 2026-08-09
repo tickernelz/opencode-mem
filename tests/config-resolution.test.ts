@@ -68,4 +68,23 @@ describe("project-scoped config resolution", () => {
     expect(CONFIG.autoCaptureEnabled).toBe(true); // default value
     expect(CONFIG.opencodeProvider).toBeUndefined();
   });
+
+  it("parses opencodeVariant next to opencodeProvider/opencodeModel", () => {
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+    readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
+      const path = normalizePath(p);
+      if (path.includes(".opencode/opencode-mem")) {
+        return JSON.stringify({
+          opencodeProvider: "opencode-go",
+          opencodeModel: "deepseek-v4-flash",
+          opencodeVariant: "thinking-off",
+        }) as any;
+      }
+      return JSON.stringify({}) as any;
+    });
+    initConfig("/my/project");
+    expect(CONFIG.opencodeProvider).toBe("opencode-go");
+    expect(CONFIG.opencodeModel).toBe("deepseek-v4-flash");
+    expect(CONFIG.opencodeVariant).toBe("thinking-off");
+  });
 });

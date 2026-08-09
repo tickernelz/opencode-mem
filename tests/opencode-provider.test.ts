@@ -180,6 +180,87 @@ describe("generateStructuredOutput", () => {
     expect(isInternalStructuredSession("ses_test_1")).toBe(false);
   });
 
+  it("passes the variant through in the model object when provided", async () => {
+    mock = installFetchMock((call) => {
+      if (call.method === "POST" && call.url.endsWith("/session")) {
+        return { body: { id: "ses_test_2" } };
+      }
+      if (call.method === "POST" && call.url.includes("/session/ses_test_2/message")) {
+        return {
+          body: {
+            info: { structured_output: { topic: "auth", count: 1 } },
+            parts: [],
+          },
+        };
+      }
+      if (call.method === "DELETE") {
+        return { body: true };
+      }
+      throw new Error(`unexpected fetch: ${call.method} ${call.url}`);
+    });
+
+    const client = createV2Client("http://127.0.0.1:9999");
+    const result = await generateStructuredOutput({
+      client,
+      providerID: "opencode-go",
+      modelID: "deepseek-v4-flash",
+      variant: "thinking-off",
+      systemPrompt: "system",
+      userPrompt: "user",
+      schema,
+    });
+
+    expect(result).toEqual({ topic: "auth", count: 1 });
+
+    const promptCall = mock.calls.find((c) => c.url.includes("/session/ses_test_2/message"));
+    expect(promptCall).toBeDefined();
+    const promptBody = promptCall!.body as Record<string, unknown>;
+    expect(promptBody.model).toEqual({
+      providerID: "opencode-go",
+      modelID: "deepseek-v4-flash",
+      variant: "thinking-off",
+    });
+  });
+
+  it("omits variant from the model object when not provided", async () => {
+    mock = installFetchMock((call) => {
+      if (call.method === "POST" && call.url.endsWith("/session")) {
+        return { body: { id: "ses_test_3" } };
+      }
+      if (call.method === "POST" && call.url.includes("/session/ses_test_3/message")) {
+        return {
+          body: {
+            info: { structured_output: { topic: "auth", count: 2 } },
+            parts: [],
+          },
+        };
+      }
+      if (call.method === "DELETE") {
+        return { body: true };
+      }
+      throw new Error(`unexpected fetch: ${call.method} ${call.url}`);
+    });
+
+    const client = createV2Client("http://127.0.0.1:9999");
+    await generateStructuredOutput({
+      client,
+      providerID: "anthropic",
+      modelID: "claude-haiku-4-5",
+      systemPrompt: "system",
+      userPrompt: "user",
+      schema,
+    });
+
+    const promptCall = mock.calls.find((c) => c.url.includes("/session/ses_test_3/message"));
+    expect(promptCall).toBeDefined();
+    const promptBody = promptCall!.body as Record<string, unknown>;
+    expect(promptBody.model).toEqual({
+      providerID: "anthropic",
+      modelID: "claude-haiku-4-5",
+    });
+    expect(promptBody.model).not.toHaveProperty("variant");
+  });
+
   it("rejects with full info.error details when opencode reports an assistant error", async () => {
     mock = installFetchMock((call) => {
       if (call.method === "POST" && call.url.endsWith("/session")) {

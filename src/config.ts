@@ -52,6 +52,8 @@ interface OpenCodeMemConfig {
   memoryExtraParams?: Record<string, unknown>;
   opencodeProvider?: string;
   opencodeModel?: string;
+  /** Optional model variant (e.g. "thinking-off") passed through to opencode. */
+  opencodeVariant?: string;
   aiSessionRetentionDays?: number;
   webServerEnabled?: boolean;
   webServerPort?: number;
@@ -114,6 +116,7 @@ const DEFAULTS: Required<
     | "memoryExtraParams"
     | "opencodeProvider"
     | "opencodeModel"
+    | "opencodeVariant"
     | "autoCaptureLanguage"
     | "userEmailOverride"
     | "userNameOverride"
@@ -132,6 +135,7 @@ const DEFAULTS: Required<
   memoryExtraParams?: Record<string, unknown>;
   opencodeProvider?: string;
   opencodeModel?: string;
+  opencodeVariant?: string;
   autoCaptureLanguage?: string;
   userEmailOverride?: string;
   userNameOverride?: string;
@@ -334,6 +338,10 @@ const CONFIG_TEMPLATE = `{
    //   Anthropic (OAuth/API key): "opencodeProvider": "anthropic",      "opencodeModel": "claude-haiku-4-5-20251001"
    //   OpenAI (API key):          "opencodeProvider": "openai",          "opencodeModel": "gpt-4o-mini"
    //   GitHub Copilot:            "opencodeProvider": "github-copilot",  "opencodeModel": "gpt-4o-mini"
+   //
+   // Optional model variant (passed through to opencode's model object, e.g.
+   // "thinking-off" for deepseek-v4-flash when thinking is not needed):
+   //   "opencodeVariant": "thinking-off"
    //
    // "opencodeProvider": "anthropic",
    // "opencodeModel": "claude-haiku-4-5-20251001",
@@ -649,6 +657,7 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     memoryExtraParams: fileConfig.memoryExtraParams,
     opencodeProvider: fileConfig.opencodeProvider,
     opencodeModel: fileConfig.opencodeModel,
+    opencodeVariant: fileConfig.opencodeVariant,
     autoCaptureProviderStatus: getAutoCaptureProviderStatus({
       opencodeProvider: fileConfig.opencodeProvider,
       opencodeModel: fileConfig.opencodeModel,
