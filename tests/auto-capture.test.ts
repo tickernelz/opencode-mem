@@ -219,6 +219,122 @@ console.log(
   };
 }
 
+function runProviderFailureScenario() {
+  const dir = mkdtempSync(join(tmpdir(), "opencode-mem-auto-capture-error-"));
+  tempDirs.push(dir);
+  const scriptPath = join(dir, "scenario.mjs");
+
+  const script = `
+import { mock } from "bun:test";
+
+const toasts = [];
+let failedAttempts = 0;
+let released = false;
+
+mock.module(${JSON.stringify(configUrl)}, () => ({
+  CONFIG: {
+    autoCaptureMaxRetries: 1,
+    autoCaptureProviderStatus: { ready: true, mode: "opencode", issues: [] },
+    autoCaptureLanguage: "en",
+    opencodeProvider: "opencode-go",
+    opencodeModel: "deepseek-v4-flash",
+    showAutoCaptureToasts: false,
+    showErrorToasts: true,
+  },
+}));
+
+mock.module(${JSON.stringify(clientUrl)}, () => ({
+  memoryClient: {
+    listMemories: async () => ({ success: true, memories: [] }),
+    addMemory: async () => ({ success: true, id: "unexpected" }),
+    close() {},
+  },
+}));
+
+mock.module(${JSON.stringify(tagsUrl)}, () => ({
+  getTags: () => ({
+    project: {
+      tag: "opencode_project_test",
+      displayName: "Test Project",
+      projectPath: "/workspace",
+    },
+  }),
+}));
+
+mock.module(${JSON.stringify(promptManagerUrl)}, () => ({
+  userPromptManager: {
+    getUncapturedPromptsForSession: async () => [{
+      id: "prompt-error",
+      sessionId: "session-error",
+      messageId: "msg-error",
+      projectPath: "/workspace",
+      content: "Implement the requested change",
+      createdAt: 1,
+      captured: false,
+      capture_attempts: 0,
+    }],
+    claimPrompt: async () => true,
+    recordFailedAttempt: async () => { failedAttempts += 1; },
+    releaseClaim: async () => { released = true; return true; },
+  },
+}));
+
+mock.module(${JSON.stringify(loggerUrl)}, () => ({ log: () => {} }));
+mock.module(${JSON.stringify(languageUrl)}, () => ({
+  detectLanguage: () => "en",
+  getLanguageName: () => "English",
+}));
+mock.module(${JSON.stringify(opencodeProviderLoaderUrl)}, () => ({
+  loadOpencodeProvider: async () => ({
+    isProviderConnected: () => true,
+    getV2Client: () => ({}),
+    generateStructuredOutput: async () => {
+      throw new Error(
+        "opencode-mem: opencode reported APIError: Thinking mode does not support this tool_choice"
+      );
+    },
+  }),
+}));
+
+const { performAutoCapture } = await import(${JSON.stringify(autoCaptureUrl)});
+await performAutoCapture(
+  {
+    client: {
+      session: {
+        messages: async () => ({
+          data: [
+            { info: { id: "msg-error", role: "user" }, parts: [{ type: "text", text: "Implement the requested change" }] },
+            { info: { id: "assistant-error", role: "assistant" }, parts: [{ type: "text", text: "Implemented it" }] },
+          ],
+        }),
+      },
+      tui: { showToast: async (toast) => { toasts.push(toast); return {}; } },
+    },
+  },
+  "session-error",
+  "/workspace"
+);
+
+console.log(JSON.stringify({ toasts, failedAttempts, released }));
+`;
+
+  writeFileSync(scriptPath, script);
+
+  const result = Bun.spawnSync({
+    cmd: [process.execPath, scriptPath],
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const stdout = Buffer.from(result.stdout).toString("utf8").trim();
+  const stderr = Buffer.from(result.stderr).toString("utf8").trim();
+
+  return {
+    exitCode: result.exitCode,
+    stderr,
+    parsed: stdout ? JSON.parse(stdout) : null,
+  };
+}
+
 describe("auto-capture idle processing", () => {
   it("captures all uncaptured prompts in a session in chronological response windows", () => {
     const result = runScenario();
@@ -230,5 +346,18 @@ describe("auto-capture idle processing", () => {
     expect(result.parsed?.summaryPrompts[0]).toContain("First response");
     expect(result.parsed?.summaryPrompts[0]).not.toContain("Second response");
     expect(result.parsed?.summaryPrompts[1]).toContain("Second response");
+  });
+
+  it("preserves the opencode provider error when no manual fallback is configured", () => {
+    const result = runProviderFailureScenario();
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.parsed?.failedAttempts).toBe(1);
+    expect(result.parsed?.released).toBe(true);
+    expect(result.parsed?.toasts).toHaveLength(1);
+    const message = result.parsed?.toasts[0]?.body?.message ?? "";
+    expect(message).toContain("Thinking mode does not support");
+    expect(message).not.toContain("External API not configured");
   });
 });

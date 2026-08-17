@@ -484,6 +484,8 @@ async function generateSummary(
   userPrompt: string,
   prompt?: { id?: string; providerId: string | null; modelId: string | null }
 ): Promise<{ summary: string; type: string; tags: string[] } | null> {
+  let opencodeProviderError: unknown;
+
   // Opencode provider path (when opencodeProvider + opencodeModel configured)
   if (CONFIG.opencodeProvider && CONFIG.opencodeModel) {
     try {
@@ -572,6 +574,7 @@ CAPTURE if: code changed, bug fixed, feature added, decision made`;
         tags: (result.tags || []).map((t: string) => t.toLowerCase().trim()),
       };
     } catch (e) {
+      opencodeProviderError = e;
       log("auto-capture: opencode provider failed, falling back to external API", {
         error: String(e),
       });
@@ -580,6 +583,9 @@ CAPTURE if: code changed, bug fixed, feature added, decision made`;
 
   // Existing manual config path
   if (!CONFIG.memoryModel || !CONFIG.memoryApiUrl) {
+    if (opencodeProviderError) {
+      throw opencodeProviderError;
+    }
     throw new Error("External API not configured for auto-capture");
   }
 
