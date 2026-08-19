@@ -39,7 +39,10 @@ export async function collectReleasedSqliteHandles(): Promise<void> {
  * Retries Windows file mutations while stable libsql releases native handles.
  * Non-lock errors and non-Windows platforms fail immediately.
  */
-export async function withSqliteFileLockRetry<T>(operation: () => T | Promise<T>): Promise<T> {
+export async function withSqliteFileLockRetry<T>(
+  operation: () => T | Promise<T>,
+  maxAttempts: number = FILE_LOCK_RETRY_DELAYS_MS.length
+): Promise<T> {
   for (let attempt = 0; ; attempt += 1) {
     try {
       return await operation();
@@ -50,7 +53,8 @@ export async function withSqliteFileLockRetry<T>(operation: () => T | Promise<T>
         process.platform !== "win32" ||
         !code ||
         !RETRYABLE_FILE_LOCK_CODES.has(code) ||
-        retryDelay === undefined
+        retryDelay === undefined ||
+        attempt >= maxAttempts
       ) {
         throw error;
       }

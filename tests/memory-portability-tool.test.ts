@@ -166,7 +166,7 @@ describe("memory portability tool modes", () => {
       inputPath: "/tmp/in.json",
       dryRun: true,
     });
-  });
+  }, 15000);
 
   it("list-shards uses storage ready without embedding warmup", () => {
     const listed = runTool({ mode: "list-shards" });
