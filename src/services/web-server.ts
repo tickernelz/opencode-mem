@@ -55,6 +55,8 @@ interface PortableServerHandle {
 
 const isBun = typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
 
+const MIN_FAILED_TAKEOVERS = 3;
+
 function serveFetch(opts: {
   port: number;
   hostname: string;
@@ -166,7 +168,7 @@ export function nextFallbackPort(
   currentPort: number,
   failedTakeovers: number,
   maxFallbackPort: number,
-  minFailedTakeovers: number = 3
+  minFailedTakeovers: number = MIN_FAILED_TAKEOVERS
 ): number {
   if (failedTakeovers < minFailedTakeovers || currentPort >= maxFallbackPort) {
     return currentPort;
@@ -189,6 +191,8 @@ export class WebServer {
   private startPromise: Promise<void> | null = null;
   private healthCheckInterval: NodeJS.Timeout | null = null;
   private onTakeoverCallback: (() => Promise<void>) | null = null;
+  private onPortsExhaustedCallback: (() => void) | null = null;
+  private portsExhaustedNotified = false;
   private takeoverFailures: number = 0;
   private readonly maxFallbackPort: number;
 
@@ -199,6 +203,10 @@ export class WebServer {
 
   setOnTakeoverCallback(callback: () => Promise<void>): void {
     this.onTakeoverCallback = callback;
+  }
+
+  setOnPortsExhaustedCallback(callback: () => void): void {
+    this.onPortsExhaustedCallback = callback;
   }
 
   async start(): Promise<void> {
@@ -276,6 +284,9 @@ export class WebServer {
     await new Promise((resolve) => setTimeout(resolve, jitterMs));
 
     if (await this.checkServerAvailable()) {
+      // The original owner recovered. Reset the failure counter so a stale
+      // count can't advance the port on the next, unrelated failure.
+      this.takeoverFailures = 0;
       this.startHealthCheckLoop();
       return;
     }
@@ -297,6 +308,15 @@ export class WebServer {
         newPort: nextPort,
       });
       this.config.port = nextPort;
+    } else if (
+      this.config.port >= this.maxFallbackPort &&
+      this.takeoverFailures >= MIN_FAILED_TAKEOVERS
+    ) {
+      // Every candidate port is held by a non-responsive process. Stop the
+      // health loop instead of retrying every five seconds forever.
+      this.stopHealthCheckLoop();
+      this.notifyPortsExhausted();
+      return;
     }
 
     try {
@@ -309,6 +329,7 @@ export class WebServer {
     }
 
     if (this.isOwner) {
+      this.takeoverFailures = 0;
       log("Web server takeover successful", { port: this.config.port });
 
       if (this.onTakeoverCallback) {
@@ -318,6 +339,20 @@ export class WebServer {
           log("Takeover callback error", { error: String(error) });
         }
       }
+    }
+  }
+
+  private notifyPortsExhausted(): void {
+    if (this.portsExhaustedNotified) return;
+    this.portsExhaustedNotified = true;
+    log("Web server unavailable: every candidate port is held by a non-responsive process", {
+      port: this.config.port,
+      maxFallbackPort: this.maxFallbackPort,
+    });
+    try {
+      this.onPortsExhaustedCallback?.();
+    } catch (error) {
+      log("Ports exhausted callback error", { error: String(error) });
     }
   }
 
@@ -356,7 +391,15 @@ export class WebServer {
         headers,
         signal: AbortSignal.timeout(2000),
       });
-      return response.ok;
+      if (!response.ok) return false;
+      // Fallback spans 10 neighbor ports; any 2xx from an unrelated local
+      // service must not be mistaken for an opencode-mem owner. Require the
+      // response to carry our API envelope.
+      const body = (await response.json()) as { success?: boolean; status?: string };
+      if (endpoint === "/api/health") {
+        return body.success === true && body.status === "ok";
+      }
+      return body.success === true;
     } catch {
       return false;
     }
