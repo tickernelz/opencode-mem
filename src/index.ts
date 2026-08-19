@@ -326,9 +326,9 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
               .showToast({
                 body: {
                   title: "Memory Explorer",
-                  message: "Took over web server ownership",
+                  message: `Web UI started at ${webServer?.getUrl() ?? url}`,
                   variant: "success",
-                  duration: 3000,
+                  duration: 5000,
                 },
               })
               .catch(() => {});
