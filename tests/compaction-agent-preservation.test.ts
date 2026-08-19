@@ -200,6 +200,19 @@ describe("session.compacted agent preservation (#236)", () => {
     expect(result.parsed?.promptCalls[0]?.body?.noReply).toBe(true);
   });
 
+  it("marks the injected part as synthetic so it is not echoed into the transcript (follow-up to #239)", () => {
+    const result = runCompactionScenario({
+      sessionAgent: "my-orchestrator",
+      memories: [{ memory: "remember this", tags: ["t1"] }],
+      messages: [{ info: { role: "user", agent: "my-orchestrator" } }],
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.parsed?.promptCalls).toHaveLength(1);
+    expect(result.parsed?.promptCalls[0]?.body?.parts?.[0]?.synthetic).toBe(true);
+  });
+
   it("does not call session.prompt when there are no memories", () => {
     const result = runCompactionScenario({
       sessionAgent: "my-orchestrator",

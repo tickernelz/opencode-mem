@@ -973,7 +973,14 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           await ctx.client.session.prompt({
             path: { id: sessionID },
             body: {
-              parts: [{ id: `prt-compaction-${Date.now()}`, type: "text", text: memoryContext }],
+              parts: [
+                {
+                  id: `prt-compaction-${Date.now()}`,
+                  type: "text",
+                  text: memoryContext,
+                  synthetic: true,
+                },
+              ],
               noReply: true,
               agent,
             },

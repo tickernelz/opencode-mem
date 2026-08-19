@@ -248,9 +248,16 @@ export async function handleListMemories(
     }
 
     const sortedTimeline: any[] = [];
-    const pairs = Array.from(linkedPairs.values())
+    const pairValues = Array.from(linkedPairs.values());
+    const pairs = pairValues
       .filter((p) => p.memory && p.prompt)
       .sort((a, b) => b.memory.createdAt - a.memory.createdAt);
+    // A memory or prompt whose counterpart is missing (linked prompt deleted,
+    // or prompt capture off) must still show up in the timeline, unlinked.
+    for (const pair of pairValues) {
+      if (pair.memory && !pair.prompt) standalone.push(pair.memory);
+      else if (pair.prompt && !pair.memory) standalone.push(pair.prompt);
+    }
     for (const pair of pairs) {
       sortedTimeline.push(pair.memory);
       sortedTimeline.push(pair.prompt);

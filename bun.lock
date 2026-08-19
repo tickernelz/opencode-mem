@@ -130,9 +130,9 @@
 
     "@neon-rs/load": ["@neon-rs/load@0.0.4", "", {}, "sha512-kTPhdZyTQxB+2wpiRcFWrDcejc4JI6tkPuS7UZCG4l6Zvc5kU/gGQ/ozvHTh1XR5tS+UlfAfGuPajjzQjCiHCw=="],
 
-    "@opencode-ai/plugin": ["@opencode-ai/plugin@1.18.15", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@opencode-ai/sdk": "1.18.15", "effect": "4.0.0-beta.83", "zod": "4.1.8" }, "peerDependencies": { "@opentui/core": ">=0.4.5", "@opentui/keymap": ">=0.4.5", "@opentui/solid": ">=0.4.5" }, "optionalPeers": ["@opentui/core", "@opentui/keymap", "@opentui/solid"] }, "sha512-AY10RtFbzLkf951dbLkSGJdBeddeS6ojbjvqCpWnINedqlj2cK/GF91xWjWnlHpqQZ4GABLPCuoSJx8mGmKvCw=="],
+    "@opencode-ai/plugin": ["@opencode-ai/plugin@1.18.18", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@opencode-ai/sdk": "1.18.18", "effect": "4.0.0-beta.83", "zod": "4.1.8" }, "peerDependencies": { "@opentui/core": ">=0.4.5", "@opentui/keymap": ">=0.4.5", "@opentui/solid": ">=0.4.5" }, "optionalPeers": ["@opentui/core", "@opentui/keymap", "@opentui/solid"] }, "sha512-vqQeqJtn9c+J+tIQDzYk88xip/NVNN1hym1ATmckxo6zINHAoXoul4Sw/jgnvL00rLsfAvhja28qax4h3g/5Jg=="],
 
-    "@opencode-ai/sdk": ["@opencode-ai/sdk@1.18.15", "", { "dependencies": { "cross-spawn": "7.0.6" } }, "sha512-8sfo9nGiVwesAZW9Wqkvynyn7w4wYaHx1O9qOHpYL65+Bs2XUpHP3kBbZe58gjQydFgk6I74kUF7sqCiPu2arQ=="],
+    "@opencode-ai/sdk": ["@opencode-ai/sdk@1.18.18", "", { "dependencies": { "cross-spawn": "7.0.6" } }, "sha512-zJlwXskIR47V1dkPJqeKBgq7nejG1uU8lJaGIGqbX3MWRCT8vKn0fEotbxuPCKnTdmWsDyNGNg9q1qIliDSMDA=="],
 
     "@protobufjs/aspromise": ["@protobufjs/aspromise@1.1.2", "", {}, "sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ=="],
 
@@ -224,7 +224,7 @@
 
     "guid-typescript": ["guid-typescript@1.0.9", "", {}, "sha512-Y8T4vYhEfwJOTbouREvG+3XDsjr8E3kIr7uf+JZ0BYloFsttiHU0WfvANVsR7TxNUJa/WpCnw/Ino/p+DeBhBQ=="],
 
-    "hono": ["hono@4.12.32", "", {}, "sha512-XcuyW9qE2kJn07PkecMOBd5Vq/hMy7mmGw+idz1yblbg9N17ijJODrvPkn7/dwL3Kulj8LcRJ69DLOWf91dRUg=="],
+    "hono": ["hono@4.13.2", "", {}, "sha512-JydRilDRkYBQMt9qR9U92mXxmbGqsqSn/IKOrh4e7/gEbn+0zSr8igTu0obwJoNGN4sez28DIql7FBHWydoJpA=="],
 
     "husky": ["husky@9.1.7", "", { "bin": { "husky": "bin.js" } }, "sha512-5gs5ytaNjBrh5Ow3zrvdUUY+0VxIuWVL4i9irt6friV+BqdCfmV11CQTWMiBYWHbXhco+J1kHfTOUkePhCDvMA=="],
 
