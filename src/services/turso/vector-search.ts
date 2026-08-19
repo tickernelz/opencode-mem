@@ -236,13 +236,13 @@ export class TursoVectorSearch {
           ? `
           SELECT m.id AS id, vector_distance_cos(m.${columnName}, vector32(?)) AS dist
           FROM vector_top_k('${indexName}', vector32(?), ?) AS v
-          JOIN memories m ON m.rowid = v.id
+          CROSS JOIN memories m ON m.rowid = v.id
           WHERE m.${columnName} IS NOT NULL
         `
           : `
           SELECT m.id AS id, vector_distance_cos(m.${columnName}, vector32(?)) AS dist
           FROM vector_top_k('${indexName}', vector32(?), ?) AS v
-          JOIN memories m ON m.rowid = v.id
+          CROSS JOIN memories m ON m.rowid = v.id
           WHERE m.${columnName} IS NOT NULL AND m.container_tag = ?
         `,
         containerTag === "" ? [queryJson, queryJson, k] : [queryJson, queryJson, k, containerTag]
