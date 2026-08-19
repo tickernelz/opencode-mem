@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { cleanupTursoTestDirectory } from "./turso-test-utils.js";
+import { vectorToJson } from "../src/services/turso/vector-utils.js";
 
 describe("turso vector search", () => {
   let baseDir: string;
@@ -67,5 +68,50 @@ describe("turso vector search", () => {
       "turso"
     );
     expect(limitedResults).toHaveLength(1);
+  });
+
+  async function assertTopKBeforeJoin(containerTag: string) {
+    baseDir = mkdtempSync(join(tmpdir(), "turso-vector-plan-"));
+
+    const { CONFIG } = await import("../src/config.js");
+    CONFIG.storagePath = baseDir;
+
+    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+
+    const dims = CONFIG.embeddingDimensions;
+    const vector = new Float32Array(dims);
+    vector[0] = 1;
+
+    const scopeHash = "a1b2c3d4e5f67890";
+
+    const shard = await tursoShardManager.createShard("project", scopeHash, 0);
+    const db = await tursoConnectionManager.getConnection(shard.dbPath);
+
+    const queryJson = vectorToJson(vector);
+
+    const rows = await db.all(
+      `EXPLAIN QUERY PLAN
+        SELECT m.id AS id, vector_distance_cos(m.vector, vector32(?)) AS dist
+        FROM vector_top_k('memories_vec_idx', vector32(?), ?) AS v
+        CROSS JOIN memories m ON m.rowid = v.id
+        WHERE m.vector IS NOT NULL${containerTag === "" ? "" : " AND m.container_tag = ?"}`,
+      containerTag === "" ? [queryJson, queryJson, 5] : [queryJson, queryJson, 5, containerTag]
+    );
+    const plan = rows.map((row) => String(row.detail)).join("\n");
+    const scanIndex = plan.indexOf("SCAN v VIRTUAL TABLE");
+    const searchIndex = plan.indexOf("SEARCH m USING INTEGER PRIMARY KEY");
+
+    expect(scanIndex).toBeGreaterThanOrEqual(0);
+    expect(searchIndex).toBeGreaterThan(scanIndex);
+  }
+
+  it("drives vector_top_k before the memories join when filtering by container_tag", async () => {
+    const scopeHash = "a1b2c3d4e5f67890";
+    await assertTopKBeforeJoin(`opencode_project_${scopeHash}`);
+  });
+
+  it("drives vector_top_k before the memories join without a container tag", async () => {
+    await assertTopKBeforeJoin("");
   });
 });

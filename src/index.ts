@@ -335,6 +335,21 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           }
         });
 
+        webServer.setOnPortsExhaustedCallback(() => {
+          if (ctx.client?.tui) {
+            ctx.client.tui
+              .showToast({
+                body: {
+                  title: "Memory Explorer",
+                  message: `Web UI unavailable: ports ${CONFIG.webServerPort}-${CONFIG.webServerPort + 10} are held by non-responsive processes`,
+                  variant: "error",
+                  duration: 5000,
+                },
+              })
+              .catch(() => {});
+          }
+        });
+
         if (webServer.isServerOwner()) {
           if (ctx.client?.tui) {
             ctx.client.tui
