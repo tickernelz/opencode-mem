@@ -70,7 +70,7 @@ describe("turso vector search", () => {
     expect(limitedResults).toHaveLength(1);
   });
 
-  it("drives vector_top_k before the memories join (no per-row ANN loop)", async () => {
+  async function assertTopKBeforeJoin(containerTag: string) {
     baseDir = mkdtempSync(join(tmpdir(), "turso-vector-plan-"));
 
     const { CONFIG } = await import("../src/config.js");
@@ -84,7 +84,6 @@ describe("turso vector search", () => {
     vector[0] = 1;
 
     const scopeHash = "a1b2c3d4e5f67890";
-    const containerTag = `opencode_project_${scopeHash}`;
 
     const shard = await tursoShardManager.createShard("project", scopeHash, 0);
     const db = await tursoConnectionManager.getConnection(shard.dbPath);
@@ -96,8 +95,8 @@ describe("turso vector search", () => {
         SELECT m.id AS id, vector_distance_cos(m.vector, vector32(?)) AS dist
         FROM vector_top_k('memories_vec_idx', vector32(?), ?) AS v
         CROSS JOIN memories m ON m.rowid = v.id
-        WHERE m.vector IS NOT NULL AND m.container_tag = ?`,
-      [queryJson, queryJson, 5, containerTag]
+        WHERE m.vector IS NOT NULL${containerTag === "" ? "" : " AND m.container_tag = ?"}`,
+      containerTag === "" ? [queryJson, queryJson, 5] : [queryJson, queryJson, 5, containerTag]
     );
     const plan = rows.map((row) => String(row.detail)).join("\n");
     const scanIndex = plan.indexOf("SCAN v VIRTUAL TABLE");
@@ -105,5 +104,14 @@ describe("turso vector search", () => {
 
     expect(scanIndex).toBeGreaterThanOrEqual(0);
     expect(searchIndex).toBeGreaterThan(scanIndex);
+  }
+
+  it("drives vector_top_k before the memories join when filtering by container_tag", async () => {
+    const scopeHash = "a1b2c3d4e5f67890";
+    await assertTopKBeforeJoin(`opencode_project_${scopeHash}`);
+  });
+
+  it("drives vector_top_k before the memories join without a container tag", async () => {
+    await assertTopKBeforeJoin("");
   });
 });
