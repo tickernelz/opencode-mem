@@ -156,6 +156,24 @@ function serveFetch(opts: {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+/**
+ * Port fallback policy for the takeover loop. A port that fails to bind AND
+ * answers no HTTP is treated as orphaned Windows kernel residue; after
+ * `minFailedTakeovers` consecutive failed takeovers the web server moves to
+ * `currentPort + 1`, bounded by `maxFallbackPort`.
+ */
+export function nextFallbackPort(
+  currentPort: number,
+  failedTakeovers: number,
+  maxFallbackPort: number,
+  minFailedTakeovers: number = 3
+): number {
+  if (failedTakeovers < minFailedTakeovers || currentPort >= maxFallbackPort) {
+    return currentPort;
+  }
+  return currentPort + 1;
+}
+
 interface WebServerConfig {
   port: number;
   host: string;
@@ -171,9 +189,12 @@ export class WebServer {
   private startPromise: Promise<void> | null = null;
   private healthCheckInterval: NodeJS.Timeout | null = null;
   private onTakeoverCallback: (() => Promise<void>) | null = null;
+  private takeoverFailures: number = 0;
+  private readonly maxFallbackPort: number;
 
   constructor(config: WebServerConfig) {
     this.config = config;
+    this.maxFallbackPort = config.port + 10;
   }
 
   setOnTakeoverCallback(callback: () => Promise<void>): void {
@@ -259,24 +280,44 @@ export class WebServer {
       return;
     }
 
+    // Windows can leave an orphaned LISTEN socket in the TCP table after a
+    // crash: the port refuses to bind (EADDRINUSE) yet nothing answers HTTP,
+    // so repeated takeovers fail forever. After a few consecutive failures,
+    // fall back to a free neighbor port instead of looping.
+    this.takeoverFailures += 1;
+    const nextPort = nextFallbackPort(
+      this.config.port,
+      this.takeoverFailures,
+      this.maxFallbackPort
+    );
+    if (nextPort !== this.config.port) {
+      this.takeoverFailures = 0;
+      log("Web server port held by a non-responsive process; falling back to next port", {
+        previousPort: this.config.port,
+        newPort: nextPort,
+      });
+      this.config.port = nextPort;
+    }
+
     try {
       // Reset startPromise so _start() can run again
       this.startPromise = null;
       await this._start();
-
-      if (this.isOwner) {
-        log("Web server takeover successful", { port: this.config.port });
-
-        if (this.onTakeoverCallback) {
-          try {
-            await this.onTakeoverCallback();
-          } catch (error) {
-            log("Takeover callback error", { error: String(error) });
-          }
-        }
-      }
     } catch (error) {
       this.startHealthCheckLoop();
+      return;
+    }
+
+    if (this.isOwner) {
+      log("Web server takeover successful", { port: this.config.port });
+
+      if (this.onTakeoverCallback) {
+        try {
+          await this.onTakeoverCallback();
+        } catch (error) {
+          log("Takeover callback error", { error: String(error) });
+        }
+      }
     }
   }
 
