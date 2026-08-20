@@ -12,6 +12,12 @@ import { join, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { cleanupTursoTestDirectory } from "./turso-test-utils.js";
 
+// Shard path migration does real file swaps of live SQLite files; on a loaded
+// Windows box the file-lock release can legitimately exceed the 5s default.
+const MIGRATION_TEST_TIMEOUT = 15000;
+const migrationTest = (name: string, fn: () => void | Promise<void>) =>
+  it(name, fn, MIGRATION_TEST_TIMEOUT);
+
 describe("shard path migration", () => {
   let baseDir: string;
   let oldProjectDir: string;
@@ -90,7 +96,7 @@ describe("shard path migration", () => {
     return { tag, hash };
   }
 
-  it("migrates orphaned shards and remaps container tags", async () => {
+  migrationTest("migrates orphaned shards and remaps container tags", async () => {
     const getProjectTagInfo = await createProjects();
     const { hash: oldHash } = await seedShard(oldProjectDir, [
       { id: "mem_one", content: "decision one" },
@@ -162,7 +168,7 @@ describe("shard path migration", () => {
     expect((await userPromptManager.getPromptById(promptId))?.projectPath).toBe(target.projectPath);
   });
 
-  it("aborts unchanged when the target project already has memories", async () => {
+  migrationTest("aborts unchanged when the target project already has memories", async () => {
     const getProjectTagInfo = await createProjects();
     const { hash: oldHash } = await seedShard(oldProjectDir, [
       { id: "mem_old", content: "old memory" },
@@ -199,7 +205,7 @@ describe("shard path migration", () => {
     expect(String(newRows[0]?.id)).toBe("mem_new");
   });
 
-  it("archives an empty target shard and completes migration", async () => {
+  migrationTest("archives an empty target shard and completes migration", async () => {
     await createProjects();
     const { getProjectTagInfo } = await import("../src/services/tags.js");
     await seedShard(oldProjectDir, [{ id: "mem_old", content: "old memory" }]);
@@ -230,7 +236,7 @@ describe("shard path migration", () => {
     expect(String(rows[0]?.container_tag)).toBe(target.tag);
   });
 
-  it("supports dry-run without mutating shards", async () => {
+  migrationTest("supports dry-run without mutating shards", async () => {
     await createProjects();
     const { hash: oldHash } = await seedShard(oldProjectDir, [
       { id: "mem_old", content: "old memory" },
@@ -255,7 +261,7 @@ describe("shard path migration", () => {
     expect(existsSync(oldShards[0]!.dbPath)).toBe(true);
   });
 
-  it("refuses to migrate a still-linked source unless explicitly allowed", async () => {
+  migrationTest("refuses to migrate a still-linked source unless explicitly allowed", async () => {
     await createProjects();
     const { hash: oldHash } = await seedShard(oldProjectDir, [
       { id: "mem_linked", content: "linked memory" },
@@ -280,65 +286,69 @@ describe("shard path migration", () => {
     expect(allowed.success).toBe(true);
   });
 
-  it("restores exact source files and registry metadata after a partial swap failure", async () => {
-    await createProjects();
-    const { tag: oldTag, hash: oldHash } = await seedShard(oldProjectDir, [
-      { id: "mem_one", content: "decision one" },
-      { id: "mem_two", content: "decision two", shardIndex: 1 },
-    ]);
-    rmSync(oldProjectDir, { recursive: true, force: true });
+  migrationTest(
+    "restores exact source files and registry metadata after a partial swap failure",
+    async () => {
+      await createProjects();
+      const { tag: oldTag, hash: oldHash } = await seedShard(oldProjectDir, [
+        { id: "mem_one", content: "decision one" },
+        { id: "mem_two", content: "decision two", shardIndex: 1 },
+      ]);
+      rmSync(oldProjectDir, { recursive: true, force: true });
 
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const manager = tursoShardManager as any;
-    const originalReassign = manager.reassignShardScope.bind(manager);
-    let forwardCalls = 0;
-    manager.reassignShardScope = async (...args: unknown[]) => {
-      if (args[1] !== oldHash) {
-        forwardCalls += 1;
-        if (forwardCalls === 2) {
-          throw new Error("synthetic registry failure");
+      const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+      const manager = tursoShardManager as any;
+      const originalReassign = manager.reassignShardScope.bind(manager);
+      let forwardCalls = 0;
+      manager.reassignShardScope = async (...args: unknown[]) => {
+        if (args[1] !== oldHash) {
+          forwardCalls += 1;
+          if (forwardCalls === 2) {
+            throw new Error("synthetic registry failure");
+          }
+        }
+        return originalReassign(...args);
+      };
+
+      try {
+        const { shardPathMigrationService } =
+          await import("../src/services/shard-path-migration-service.js");
+        const result = await shardPathMigrationService.migrate({
+          currentDirectory: newProjectDir,
+          fromHash: oldHash,
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("synthetic registry failure");
+      } finally {
+        manager.reassignShardScope = originalReassign;
+      }
+
+      const oldShards = await tursoShardManager.getAllShards("project", oldHash);
+      expect(oldShards).toHaveLength(2);
+      const { getProjectTagInfo } = await import("../src/services/tags.js");
+      const newHash = getProjectTagInfo(newProjectDir).tag.split("_").pop()!;
+      expect(await tursoShardManager.getAllShards("project", newHash)).toHaveLength(0);
+
+      const { tursoConnectionManager } =
+        await import("../src/services/turso/connection-manager.js");
+      const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+      for (const shard of oldShards) {
+        expect(existsSync(shard.dbPath)).toBe(true);
+        const rows = await tursoVectorSearch.getAllMemories(
+          await tursoConnectionManager.getConnection(shard.dbPath)
+        );
+        for (const row of rows) {
+          expect(String(row.container_tag)).toBe(oldTag.tag);
+          expect(String(row.project_path)).toBe(oldProjectDir);
+          expect(Number(row.updated_at)).toBe(100);
         }
       }
-      return originalReassign(...args);
-    };
-
-    try {
-      const { shardPathMigrationService } =
-        await import("../src/services/shard-path-migration-service.js");
-      const result = await shardPathMigrationService.migrate({
-        currentDirectory: newProjectDir,
-        fromHash: oldHash,
-      });
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("synthetic registry failure");
-    } finally {
-      manager.reassignShardScope = originalReassign;
+      const { CONFIG } = await import("../src/config.js");
+      expect(existsSync(join(CONFIG.storagePath, ".path-migrate-swap.json"))).toBe(false);
     }
+  );
 
-    const oldShards = await tursoShardManager.getAllShards("project", oldHash);
-    expect(oldShards).toHaveLength(2);
-    const { getProjectTagInfo } = await import("../src/services/tags.js");
-    const newHash = getProjectTagInfo(newProjectDir).tag.split("_").pop()!;
-    expect(await tursoShardManager.getAllShards("project", newHash)).toHaveLength(0);
-
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
-    for (const shard of oldShards) {
-      expect(existsSync(shard.dbPath)).toBe(true);
-      const rows = await tursoVectorSearch.getAllMemories(
-        await tursoConnectionManager.getConnection(shard.dbPath)
-      );
-      for (const row of rows) {
-        expect(String(row.container_tag)).toBe(oldTag.tag);
-        expect(String(row.project_path)).toBe(oldProjectDir);
-        expect(Number(row.updated_at)).toBe(100);
-      }
-    }
-    const { CONFIG } = await import("../src/config.js");
-    expect(existsSync(join(CONFIG.storagePath, ".path-migrate-swap.json"))).toBe(false);
-  });
-
-  it("migrates a valid disk-only shard discovered after startup", async () => {
+  migrationTest("migrates a valid disk-only shard discovered after startup", async () => {
     await createProjects();
     const { hash: oldHash } = await seedShard(oldProjectDir, [
       { id: "mem_disk_only", content: "disk-only memory" },
@@ -373,7 +383,7 @@ describe("shard path migration", () => {
     expect(result.migratedMemories).toBe(1);
   });
 
-  it("recovers an interrupted swap during the storage ready gate", async () => {
+  migrationTest("recovers an interrupted swap during the storage ready gate", async () => {
     const getProjectTagInfo = await createProjects();
     const { hash: oldHash } = await seedShard(oldProjectDir, [
       { id: "mem_crash", content: "recover me" },
@@ -427,25 +437,28 @@ describe("shard path migration", () => {
     expect(await tursoShardManager.getAllShards("project", newHash)).toHaveLength(0);
   });
 
-  it("updates stored Windows prompt paths using separator-independent matching", async () => {
-    await createProjects();
-    const { userPromptManager } =
-      await import("../src/services/user-prompt/user-prompt-manager.js");
-    const promptId = await userPromptManager.savePrompt(
-      "windows-session",
-      "windows-message",
-      "C:\\workspace\\old-project",
-      "Windows path prompt"
-    );
+  migrationTest(
+    "updates stored Windows prompt paths using separator-independent matching",
+    async () => {
+      await createProjects();
+      const { userPromptManager } =
+        await import("../src/services/user-prompt/user-prompt-manager.js");
+      const promptId = await userPromptManager.savePrompt(
+        "windows-session",
+        "windows-message",
+        "C:\\workspace\\old-project",
+        "Windows path prompt"
+      );
 
-    const updated = await userPromptManager.updateProjectPath(
-      "C:/workspace/old-project",
-      "C:\\workspace\\new-project"
-    );
+      const updated = await userPromptManager.updateProjectPath(
+        "C:/workspace/old-project",
+        "C:\\workspace\\new-project"
+      );
 
-    expect(updated).toBe(1);
-    expect((await userPromptManager.getPromptById(promptId))?.projectPath).toBe(
-      "C:\\workspace\\new-project"
-    );
-  });
+      expect(updated).toBe(1);
+      expect((await userPromptManager.getPromptById(promptId))?.projectPath).toBe(
+        "C:\\workspace\\new-project"
+      );
+    }
+  );
 });
