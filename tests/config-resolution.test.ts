@@ -68,4 +68,34 @@ describe("project-scoped config resolution", () => {
     expect(CONFIG.autoCaptureEnabled).toBe(true); // default value
     expect(CONFIG.opencodeProvider).toBeUndefined();
   });
+
+  it("resolves Atlas Cloud defaults and environment API key", () => {
+    const originalApiKey = process.env.ATLASCLOUD_API_KEY;
+    process.env.ATLASCLOUD_API_KEY = "atlas-test-key";
+
+    try {
+      existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+      readSpy = spyOn(fs, "readFileSync").mockReturnValue(
+        JSON.stringify({ memoryProvider: "atlas-cloud" })
+      );
+
+      initConfig("/my/project");
+
+      expect(CONFIG.memoryProvider).toBe("atlas-cloud");
+      expect(CONFIG.memoryModel).toBe("deepseek-ai/deepseek-v4-pro");
+      expect(CONFIG.memoryApiUrl).toBe("https://api.atlascloud.ai/v1");
+      expect(CONFIG.memoryApiKey).toBe("atlas-test-key");
+      expect(CONFIG.autoCaptureProviderStatus).toEqual({
+        ready: true,
+        mode: "manual",
+        issues: [],
+      });
+    } finally {
+      if (originalApiKey === undefined) {
+        delete process.env.ATLASCLOUD_API_KEY;
+      } else {
+        process.env.ATLASCLOUD_API_KEY = originalApiKey;
+      }
+    }
+  });
 });
