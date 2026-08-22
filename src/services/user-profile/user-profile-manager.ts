@@ -70,19 +70,23 @@ function normalizeDescription(text: string): string {
 }
 
 const USER_PROFILES_DB_NAME = "user-profiles.db";
+const COLD_BUFFER_DEFAULT_KEY = "__unattributed__";
 
 export class UserProfileManager {
   private db: TursoDb | null = null;
   private dbPath: string;
   private initPromise: Promise<void> | null = null;
-  private coldBuffer: { preferences: any[]; patterns: any[]; workflows: any[] };
+  // Cold-start buffers are keyed by profileId so items observed for one user never
+  // drain into another user's merge (cross-user contamination). The unattributed bucket
+  // (COLD_BUFFER_DEFAULT_KEY) only holds items from merges that ran without a profileId.
+  private coldBuffers: Map<string, { preferences: any[]; patterns: any[]; workflows: any[] }>;
   private coldBufferPath: string;
   private dedupCheckedCache: Set<string> = new Set();
 
   constructor() {
     this.dbPath = join(CONFIG.storagePath || "", USER_PROFILES_DB_NAME);
     this.coldBufferPath = join(CONFIG.storagePath || "", "cold-buffer.json");
-    this.coldBuffer = this.loadColdBuffer();
+    this.coldBuffers = this.loadColdBuffers();
   }
 
   reset(): void {
@@ -128,35 +132,75 @@ export class UserProfileManager {
     return this.db;
   }
 
-  private loadColdBuffer(): { preferences: any[]; patterns: any[]; workflows: any[] } {
+  private emptyColdBuffer(): { preferences: any[]; patterns: any[]; workflows: any[] } {
+    return { preferences: [], patterns: [], workflows: [] };
+  }
+
+  private getColdBuffer(profileId?: string): {
+    preferences: any[];
+    patterns: any[];
+    workflows: any[];
+  } {
+    const key = profileId || COLD_BUFFER_DEFAULT_KEY;
+    let buf = this.coldBuffers.get(key);
+    if (!buf) {
+      buf = this.emptyColdBuffer();
+      this.coldBuffers.set(key, buf);
+    }
+    return buf;
+  }
+
+  private loadColdBuffers(): Map<
+    string,
+    { preferences: any[]; patterns: any[]; workflows: any[] }
+  > {
+    const map = new Map<string, { preferences: any[]; patterns: any[]; workflows: any[] }>();
     try {
       if (existsSync(this.coldBufferPath)) {
         const raw = readFileSync(this.coldBufferPath, "utf-8");
         const data = JSON.parse(raw);
-        if (data.preferences?.length || data.patterns?.length || data.workflows?.length) {
-          log("profile cold buffer: loaded from disk", {
-            prefs: data.preferences?.length || 0,
-            pats: data.patterns?.length || 0,
-            wfs: data.workflows?.length || 0,
-          });
+        // Legacy flat format ({ preferences, patterns, workflows }) is cross-user
+        // contaminated and cannot be attributed to a profile, so it is dropped rather
+        // than replayed. New format is keyed by profileId.
+        const isLegacyFlat =
+          data &&
+          typeof data === "object" &&
+          !Array.isArray(data) &&
+          ("preferences" in data || "patterns" in data || "workflows" in data);
+        if (data && typeof data === "object" && !Array.isArray(data) && !isLegacyFlat) {
+          let loaded = 0;
+          for (const [pid, v] of Object.entries<any>(data)) {
+            map.set(pid, {
+              preferences: Array.isArray(v?.preferences) ? v.preferences : [],
+              patterns: Array.isArray(v?.patterns) ? v.patterns : [],
+              workflows: Array.isArray(v?.workflows) ? v.workflows : [],
+            });
+            loaded++;
+          }
+          if (loaded > 0) {
+            log("profile cold buffer: loaded from disk", { profiles: loaded });
+          }
+        } else if (isLegacyFlat) {
+          log("profile cold buffer: dropping legacy unattributed buffer");
         }
-        return {
-          preferences: Array.isArray(data.preferences) ? data.preferences : [],
-          patterns: Array.isArray(data.patterns) ? data.patterns : [],
-          workflows: Array.isArray(data.workflows) ? data.workflows : [],
-        };
       }
     } catch {
-      // 文件损坏或不存在，返回空缓冲
+      // Corrupt or missing file — start with an empty buffer set.
     }
-    return { preferences: [], patterns: [], workflows: [] };
+    return map;
   }
 
-  private saveColdBuffer(): void {
+  private saveColdBuffers(): void {
     try {
-      writeFileSync(this.coldBufferPath, JSON.stringify(this.coldBuffer), "utf-8");
+      const obj: Record<string, { preferences: any[]; patterns: any[]; workflows: any[] }> = {};
+      for (const [pid, v] of this.coldBuffers.entries()) {
+        if (v.preferences.length || v.patterns.length || v.workflows.length) {
+          obj[pid] = v;
+        }
+      }
+      writeFileSync(this.coldBufferPath, JSON.stringify(obj), "utf-8");
     } catch {
-      // 磁盘满或无权限时静默失败
+      // Silently ignore disk-full / permission errors.
     }
   }
 
@@ -237,6 +281,7 @@ export class UserProfileManager {
       preferences: safeArray(profileData.preferences),
       patterns: safeArray(profileData.patterns),
       workflows: safeArray(profileData.workflows),
+      ...(profileData.learning_paths ? { learning_paths: profileData.learning_paths } : {}),
     };
 
     await db.run(
@@ -279,6 +324,7 @@ export class UserProfileManager {
       preferences: safeArray(profileData.preferences),
       patterns: safeArray(profileData.patterns),
       workflows: safeArray(profileData.workflows),
+      ...(profileData.learning_paths ? { learning_paths: profileData.learning_paths } : {}),
     };
 
     const versionRow = await db.get(`SELECT version FROM user_profiles WHERE id = ?`, [profileId]);
@@ -445,6 +491,9 @@ export class UserProfileManager {
   async deleteProfile(profileId: string): Promise<void> {
     const db = await this.ready();
     await db.run(`DELETE FROM user_profiles WHERE id = ?`, [profileId]);
+    if (this.coldBuffers.delete(profileId)) {
+      this.saveColdBuffers();
+    }
   }
 
   async getProfileById(profileId: string): Promise<UserProfile | null> {
@@ -594,12 +643,16 @@ export class UserProfileManager {
 
     let matchCount = 0;
     let newCount = 0;
-    if (useEmbedding && (this.coldBuffer as any)[itemType + "s"].length > 0) {
-      const buffered = [...(this.coldBuffer as any)[itemType + "s"]];
-      (this.coldBuffer as any)[itemType + "s"] = [];
-      this.saveColdBuffer();
+    // Scope the cold buffer to this profile so we only drain items observed for the
+    // same user (see COLD_BUFFER_DEFAULT_KEY for the unattributed case).
+    const coldBuffer = this.getColdBuffer(profileId);
+    if (useEmbedding && (coldBuffer as any)[itemType + "s"].length > 0) {
+      const buffered = [...(coldBuffer as any)[itemType + "s"]];
+      (coldBuffer as any)[itemType + "s"] = [];
+      this.saveColdBuffers();
       log("profile cold start: draining buffer", {
         type: itemType,
+        profileId: profileId || COLD_BUFFER_DEFAULT_KEY,
         bufferSize: buffered.length,
       });
       incoming = [...buffered, ...incoming];
@@ -1053,15 +1106,16 @@ export class UserProfileManager {
           (Array.isArray((newItem as any).evidence) &&
             (newItem as any).evidence.includes("manual-write"));
         if (!isExplicit) {
-          (this.coldBuffer as any)[itemType + "s"].push(newItem);
-          if ((this.coldBuffer as any)[itemType + "s"].length > 50) {
-            (this.coldBuffer as any)[itemType + "s"].shift();
+          (coldBuffer as any)[itemType + "s"].push(newItem);
+          if ((coldBuffer as any)[itemType + "s"].length > 50) {
+            (coldBuffer as any)[itemType + "s"].shift();
           }
-          this.saveColdBuffer();
+          this.saveColdBuffers();
           log("profile cold start: buffered", {
             type: itemType,
+            profileId: profileId || COLD_BUFFER_DEFAULT_KEY,
             cat: newItem.category,
-            bufferSize: (this.coldBuffer as any)[itemType + "s"].length,
+            bufferSize: (coldBuffer as any)[itemType + "s"].length,
           });
           continue;
         }

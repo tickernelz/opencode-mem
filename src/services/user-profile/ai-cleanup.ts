@@ -131,6 +131,29 @@ interface AIMapping {
   removed: string[];
 }
 
+// The model controls this JSON; it may omit fields or return wrong types. Coerce to a
+// well-formed AIMapping so rebuildProfileUsing/generateDiff never call .map/.filter/.includes
+// on undefined. A missing or malformed mapping degrades to a no-op cleanup (all originals are
+// preserved as "unmentioned") rather than aborting or corrupting the profile.
+function normalizeAIMapping(raw: any): AIMapping {
+  if (!raw || typeof raw !== "object") {
+    log("AI cleanup: response missing valid mapping; treating as no-op", {
+      mappingType: typeof raw,
+    });
+    return { kept: [], merged: [], removed: [] };
+  }
+  const isStr = (x: any): x is string => typeof x === "string";
+  const kept = Array.isArray(raw.kept) ? raw.kept.filter(isStr) : [];
+  const merged = Array.isArray(raw.merged)
+    ? raw.merged
+        .filter((g: any): g is any[] => Array.isArray(g))
+        .map((g: any[]) => g.filter(isStr))
+        .filter((g: string[]) => g.length > 0)
+    : [];
+  const removed = Array.isArray(raw.removed) ? raw.removed.filter(isStr) : [];
+  return { kept, merged, removed };
+}
+
 function addIdsToProfile(profile: UserProfileData): IndexedProfile {
   const items = {
     preferences: profile.preferences.map((p, i) => ({ ...p, id: `pref_${i}` })),
@@ -251,7 +274,7 @@ async function callViaExternalAPI(
   const parsed = JSON.parse(content);
   return {
     profile: parsed as IndexedProfile,
-    mapping: parsed.mapping as AIMapping,
+    mapping: normalizeAIMapping(parsed.mapping),
   };
 }
 
@@ -357,7 +380,7 @@ async function callViaOpencodeWithClient(
     const parsed = JSON.parse(jsonMatch[0]);
     return {
       profile: parsed as IndexedProfile,
-      mapping: parsed.mapping as AIMapping,
+      mapping: normalizeAIMapping(parsed.mapping),
     };
   } finally {
     try {
@@ -440,6 +463,11 @@ export function rebuildProfileUsing(
     }
 
     if (mergedGroups.some((g) => g[0] === id)) {
+      // The merge accumulation below dereferences originalItem unconditionally. If the
+      // model returned a keeper id that only exists in its cleaned output (a hallucinated
+      // id absent from originalById), skip the group instead of throwing and aborting the
+      // entire cleanup run.
+      if (!originalItem) continue;
       const group = mergedGroups.find((g) => g[0] === id)!;
       let bestFreq = (originalItem as any).frequency || 0;
       let bestCentroid = (originalItem as any).centroid;

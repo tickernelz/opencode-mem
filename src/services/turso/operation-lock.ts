@@ -30,7 +30,12 @@ function readLiveLock(path: string): LockState | null {
   } catch {
     // Corrupt locks are stale and removed below.
   }
-  unlinkSync(path);
+  try {
+    unlinkSync(path);
+  } catch {
+    // Already removed (race) or held open (Windows) — either way the lock is
+    // gone or unowned; do not let cleanup failure block writes.
+  }
   return null;
 }
 

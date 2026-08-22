@@ -180,6 +180,13 @@ export class TursoShardManager {
     const storedPath = join(`${scope}s`, basename(fullPath)).replace(/\\/g, "/");
     const now = Date.now();
 
+    // Initialize the shard file BEFORE inserting the registry row. If init throws
+    // (disk full, permissions), the registry stays free of an orphan row that points
+    // at an uninitialized file — such a row would later fail isShardValid on every
+    // getWriteShard and brick all writes to this scope. initShardDb is idempotent.
+    const shardDb = await tursoConnectionManager.getConnection(fullPath);
+    await this.initShardDb(shardDb);
+
     let result;
     try {
       result = await metadataDb.execute(
@@ -204,9 +211,6 @@ export class TursoShardManager {
       }
       throw error;
     }
-
-    const shardDb = await tursoConnectionManager.getConnection(fullPath);
-    await this.initShardDb(shardDb);
 
     return {
       id: Number(result.lastInsertRowid),
@@ -487,9 +491,14 @@ export class TursoShardManager {
   async getShardByPath(dbPath: string): Promise<ShardInfo | null> {
     const metadataDb = await this.ensureInitialized();
     const fileName = basename(dbPath);
-    const row = await metadataDb.get(`SELECT * FROM shards WHERE db_path LIKE '%' || ?`, [
-      fileName,
-    ]);
+    // Stored db_path is always `<scope>s/<basename>` (see createShard/registerExistingShard),
+    // so anchor on the "/" separator. Escape LIKE metacharacters in the filename — otherwise
+    // the "_" in shard names like `user_<hash>_0.db` would match any character.
+    const escaped = fileName.replace(/[\\%_]/g, "\\$&");
+    const row = await metadataDb.get(
+      `SELECT * FROM shards WHERE db_path LIKE '%/' || ? ESCAPE '\\'`,
+      [escaped]
+    );
     if (!row) return null;
     return this.rowToShardInfo(row);
   }

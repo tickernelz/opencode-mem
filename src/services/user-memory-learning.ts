@@ -215,7 +215,7 @@ Rules:
           updatedProfileData
         );
 
-        const validationSummary = applyValidations(
+        const validationSummary = await applyValidations(
           updatedProfileData,
           llmResult,
           existingProfile.id,
@@ -248,7 +248,7 @@ Rules:
           profileId: existingProfile?.id,
           userId,
         });
-        userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
+        await userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
         return;
       }
 
@@ -281,6 +281,11 @@ Rules:
         })
         .catch(() => {});
     }
+  } catch (error) {
+    // Guard against corrupt stored profileData (JSON.parse throws) and any other
+    // fault: this runs fire-and-forget from the idle timer, so an uncaught rejection
+    // would surface as an unhandled promise rejection. Log and exit cleanly.
+    log("user-profile-learning: aborted", { error: String(error) });
   } finally {
     isLearningRunning = false;
   }
@@ -549,12 +554,12 @@ export function createUserProfileToolSchema(existingProfile: boolean) {
 
 type AnalysisResult = { raw: UserProfileData; merged: UserProfileData | null };
 
-function applyValidations(
+async function applyValidations(
   profileData: UserProfileData,
   llmResult: UserProfileData,
   profileId: string,
   prefKeys?: string[]
-): string | null {
+): Promise<string | null> {
   const validations = (llmResult as any).validations as
     | Array<{
         index: number;
@@ -611,7 +616,12 @@ function applyValidations(
       const evidence = (item as any).evidence;
       if (Array.isArray(evidence) && evidence.length >= 3) {
         const itemType = profileData.preferences.includes(item) ? "preference" : "pattern";
-        userProfileManager.evolveAndUpdate(item, itemType, profileId).catch(() => {});
+        // Await so the in-place description/centroid mutation completes before the
+        // caller serializes updatedProfileData — otherwise the evolved description is
+        // included or lost nondeterministically. Failures stay non-fatal.
+        try {
+          await userProfileManager.evolveAndUpdate(item, itemType, profileId);
+        } catch {}
       }
     } else {
       results.push(`no_evidence [${v.index}] ${v.reason}`);

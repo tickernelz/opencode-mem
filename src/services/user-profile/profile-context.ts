@@ -50,7 +50,14 @@ export async function getUserProfileContext(userId: string): Promise<string | nu
     return null;
   }
 
-  const profileData: UserProfileData = JSON.parse(profile.profileData);
+  let profileData: UserProfileData;
+  try {
+    profileData = JSON.parse(profile.profileData);
+  } catch (e) {
+    // A single corrupt row must not break context injection for everyone.
+    log("profile context: failed to parse stored profileData", { error: String(e) });
+    return null;
+  }
   const parts: string[] = [];
 
   const injectPrefs = CONFIG.userProfileInjectPreferences ?? 5;
