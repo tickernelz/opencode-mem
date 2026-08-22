@@ -25,11 +25,17 @@ describe("memory scope helper", () => {
     });
   });
 
-  it("resolves all-projects scope to empty project hash", () => {
-    expect(resolveMemoryScope("all-projects", `opencode_project_${PROJECT_HASH}`)).toEqual({
-      scope: "project",
-      hash: "",
-    });
+  it("resolves all-projects scope to both user and project scopes", () => {
+    expect(resolveMemoryScope("all-projects", `opencode_project_${PROJECT_HASH}`)).toEqual([
+      { scope: "user", hash: "" },
+      { scope: "project", hash: "" },
+    ]);
+  });
+
+  it("resolves project scope to the container tag scope", () => {
+    expect(resolveMemoryScope("project", `opencode_project_${PROJECT_HASH}`)).toEqual([
+      { scope: "project", hash: PROJECT_HASH },
+    ]);
   });
 
   it("validates scope hash format", () => {
