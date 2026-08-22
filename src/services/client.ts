@@ -4,7 +4,11 @@ import { tursoVectorSearch } from "./turso/vector-search.js";
 import { tursoConnectionManager } from "./turso/connection-manager.js";
 import { ensureTursoReady } from "./turso/ready.js";
 import { formatTagsForEmbedding } from "./turso/vector-utils.js";
-import { extractScopeFromContainerTag, resolveMemoryScope } from "./memory-scope.js";
+import {
+  extractScopeFromContainerTag,
+  resolveMemoryScope,
+  type MemoryScopeRef,
+} from "./memory-scope.js";
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
 import type { MemoryType } from "../types/index.js";
@@ -40,10 +44,7 @@ function safeJSONParse(jsonString: any): any {
   }
 }
 
-function resolveScopeValue(
-  scope: MemoryScope,
-  containerTag: string
-): { scope: "user" | "project"; hash: string } {
+function resolveScopeValue(scope: MemoryScope, containerTag: string): MemoryScopeRef[] {
   return resolveMemoryScope(scope, containerTag);
 }
 
@@ -115,7 +116,9 @@ export class LocalMemoryClient {
 
       const queryVector = await embeddingService.embedWithTimeout(query, { task: "query" });
       const resolved = resolveScopeValue(scope, containerTag);
-      const shards = await tursoShardManager.getAllShards(resolved.scope, resolved.hash);
+      const shards = (
+        await Promise.all(resolved.map((ref) => tursoShardManager.getAllShards(ref.scope, ref.hash)))
+      ).flat();
 
       if (shards.length === 0) {
         return { success: true as const, results: [], total: 0, timing: 0 };
@@ -265,7 +268,9 @@ export class LocalMemoryClient {
       await this.initialize();
 
       const resolved = resolveScopeValue(scope, containerTag);
-      const shards = await tursoShardManager.getAllShards(resolved.scope, resolved.hash);
+      const shards = (
+        await Promise.all(resolved.map((ref) => tursoShardManager.getAllShards(ref.scope, ref.hash)))
+      ).flat();
 
       if (shards.length === 0) {
         return {
