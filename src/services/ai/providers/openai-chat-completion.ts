@@ -5,7 +5,7 @@ import {
   applySafeExtraParams,
 } from "./base-provider.js";
 import type { AISessionManager } from "../session/ai-session-manager.js";
-import type { AIMessage } from "../session/session-types.js";
+import type { AIMessage, AIProviderType } from "../session/session-types.js";
 import type { ChatCompletionTool } from "../tools/tool-schema.js";
 import { log } from "../../logger.js";
 import { UserProfileValidator } from "../validators/user-profile-validator.js";
@@ -110,6 +110,24 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
     return true;
   }
 
+  /** Provider tag used for AI session storage and diagnostics. */
+  protected sessionProviderTag(): AIProviderType {
+    return "openai-chat";
+  }
+
+  /**
+   * Resolve the OpenAI-compatible API base URL.
+   * Trailing slashes are stripped so `${base}/chat/completions` is well-formed.
+   */
+  protected resolveEndpoint(): string {
+    return (this.config.apiUrl || "").trim().replace(/\/+$/, "");
+  }
+
+  /** Resolve the model ID sent in the request body. */
+  protected resolveModel(): string {
+    return this.config.model;
+  }
+
   private async addToolResponse(
     sessionId: string,
     messages: APIMessage[],
@@ -177,11 +195,11 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
     toolSchema: ChatCompletionTool,
     sessionId: string
   ): Promise<ToolCallResult> {
-    let session = await this.aiSessionManager.getSession(sessionId, "openai-chat");
+    let session = await this.aiSessionManager.getSession(sessionId, this.sessionProviderTag());
 
     if (!session) {
       session = await this.aiSessionManager.createSession({
-        provider: "openai-chat",
+        provider: this.sessionProviderTag(),
         sessionId,
       });
     }
@@ -243,7 +261,7 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
 
       try {
         const requestBody: RequestBody = {
-          model: this.config.model,
+          model: this.resolveModel(),
           messages,
           tools: [toolSchema],
           tool_choice: "auto",
@@ -265,7 +283,7 @@ export class OpenAIChatCompletionProvider extends BaseAIProvider {
           headers.Authorization = `Bearer ${this.config.apiKey}`;
         }
 
-        const response = await fetch(`${this.config.apiUrl}/chat/completions`, {
+        const response = await fetch(`${this.resolveEndpoint()}/chat/completions`, {
           method: "POST",
           headers,
           body: JSON.stringify(requestBody),

@@ -44,7 +44,7 @@ interface OpenCodeMemConfig {
   autoCaptureMaxRetries?: number;
   autoCaptureMaxContextBytes?: number;
   autoCaptureLanguage?: string;
-  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic" | "minimax";
+  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "orcarouter";
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
@@ -127,7 +127,7 @@ const DEFAULTS: Required<
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
-  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic" | "minimax";
+  memoryProvider?: "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "orcarouter";
   memoryTemperature?: number | false;
   memoryExtraParams?: Record<string, unknown>;
   opencodeProvider?: string;
@@ -349,7 +349,7 @@ const CONFIG_TEMPLATE = `{
   
   "autoCaptureEnabled": true,
   
-  // Provider type: "openai-chat" | "openai-responses" | "anthropic" | "minimax"
+  // Provider type: "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "orcarouter"
   // Note: "openai-chat" is a generic OpenAI API-compatible mode.
   // Any service that follows the OpenAI Chat Completions API can use it via custom "memoryApiUrl".
   "memoryProvider": "openai-chat",
@@ -401,6 +401,15 @@ const CONFIG_TEMPLATE = `{
   //   // China endpoint: "memoryApiUrl": "https://api.minimaxi.com"
   //   // Optional adaptive thinking for MiniMax-M3:
   //   "memoryExtraParams": { "thinking": { "type": "adaptive" } }
+
+  // OrcaRouter (OpenAI-compatible gateway, namespaced model IDs, with session support):
+  //   "memoryProvider": "orcarouter"
+  //   "memoryApiKey": "<OrcaRouter API key>"
+  //   // memoryApiUrl and memoryModel are optional — they default to
+  //   // https://api.orcarouter.ai/v1 and "orcarouter/auto" (a routing alias).
+  //   // OrcaRouter rejects bare model names, so if you set memoryModel, use a
+  //   // namespaced ID such as "openai/gpt-5.5" or "deepseek/deepseek-v4-flash".
+  //   "memoryModel": "openai/gpt-5.5"
 
   // Groq (OpenAI-compatible, use openai-chat provider):
   //   "memoryProvider": "openai-chat"
@@ -641,7 +650,7 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     autoCaptureMaxContextBytes,
     autoCaptureLanguage: fileConfig.autoCaptureLanguage,
     memoryProvider: (fileConfig.memoryProvider ?? "openai-chat") as
-      "openai-chat" | "openai-responses" | "anthropic" | "minimax",
+      "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "orcarouter",
     memoryModel: fileConfig.memoryModel,
     memoryApiUrl: fileConfig.memoryApiUrl,
     memoryApiKey,
@@ -747,6 +756,7 @@ type RuntimeConfig = ReturnType<typeof buildConfig>;
 interface AutoCaptureProviderRuntimeConfig {
   opencodeProvider?: string;
   opencodeModel?: string;
+  memoryProvider?: string;
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
@@ -778,6 +788,17 @@ export function getAutoCaptureProviderStatus(
   const hasMemoryApiUrl = hasValue(config.memoryApiUrl);
   const hasMemoryApiKey = hasValue(config.memoryApiKey);
   const hasPlaceholderMemoryApiKey = isPlaceholderApiKey(config.memoryApiKey);
+
+  // The orcarouter provider presets its endpoint and default model, so only
+  // an API key is required for the manual fallback path.
+  if (config.memoryProvider === "orcarouter") {
+    if (!hasMemoryApiKey) issues.push("memoryApiKey is not configured");
+    if (hasPlaceholderMemoryApiKey) issues.push("memoryApiKey contains a placeholder value");
+    if (hasMemoryApiKey && !hasPlaceholderMemoryApiKey) {
+      return { ready: true, mode: "manual", issues: [] };
+    }
+    return { ready: false, issues };
+  }
 
   if (!hasMemoryModel) issues.push("memoryModel is not configured");
   if (!hasMemoryApiUrl) issues.push("memoryApiUrl is not configured");
