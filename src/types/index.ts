@@ -18,4 +18,4 @@ export interface MemoryMetadata {
 }
 
 export type AIProviderType =
-  "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "google-gemini";
+  "atlas-cloud" | "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "google-gemini";
