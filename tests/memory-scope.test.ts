@@ -104,9 +104,13 @@ mock.module(${JSON.stringify(readyUrl)}, () => ({
 mock.module(${JSON.stringify(shardManagerUrl)}, () => ({
   tursoShardManager: {
     async getAllShards(scope, hash) {
-      return scope === "project" && hash === ""
-        ? [makeShard("shard-a"), makeShard("shard-b")]
-        : [makeShard("shard-current")];
+      if (scope === "project" && hash === "") {
+        return [makeShard("shard-a"), makeShard("shard-b")];
+      }
+      if (scope === "user" && hash === "") {
+        return [makeShard("shard-current")];
+      }
+      return [makeShard("shard-current")];
     },
     async getWriteShard() {
       return makeShard("shard-write");
@@ -177,7 +181,7 @@ console.log(JSON.stringify(res));
 
     expect(result.exitCode).toBe(0);
     expect(result.parsed.success).toBe(true);
-    expect(result.parsed.results.length).toBe(2);
+    expect(result.parsed.results.length).toBe(3);
   });
 
   it("lets tool params override config", () => {
@@ -188,7 +192,7 @@ console.log(JSON.stringify(res));
 
     expect(result.exitCode).toBe(0);
     expect(result.parsed.success).toBe(true);
-    expect(result.parsed.memories.length).toBe(2);
+    expect(result.parsed.memories.length).toBe(3);
   });
 
   it("queries across shards for all-projects", () => {
@@ -198,6 +202,6 @@ console.log(JSON.stringify({ ids: res.results.map((r) => r.id) }));
 `);
 
     expect(result.exitCode).toBe(0);
-    expect(result.parsed.ids).toEqual(["shard-a", "shard-b"]);
+    expect(result.parsed.ids).toEqual(["shard-current", "shard-a", "shard-b"]);
   });
 });
