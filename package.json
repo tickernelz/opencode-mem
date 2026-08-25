@@ -1,6 +1,6 @@
 {
   "name": "opencode-mem",
-  "version": "2.24.4",
+  "version": "2.25.0",
   "description": "OpenCode plugin that gives coding agents persistent memory using local Turso/libSQL vector search",
   "type": "module",
   "main": "dist/plugin.js",
