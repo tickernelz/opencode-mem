@@ -1041,14 +1041,55 @@ function formatSearchResults(query: string, results: any, limit?: number): strin
   });
 }
 
+const EMBEDDED_TAGS_FOOTER_RE = /\n*Tags: ([^\n]*)\s*$/;
+
+function normalizeTagsKey(tags: string[]): string {
+  return tags
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0)
+    .sort()
+    .join("\0");
+}
+
+function stripMatchingEmbeddedTagsFooter(memory: string, tags: string[]): string {
+  const match = memory.match(EMBEDDED_TAGS_FOOTER_RE);
+  if (!match) {
+    return memory;
+  }
+
+  const footerValue = match[1];
+  if (footerValue === undefined) {
+    return memory;
+  }
+
+  const embeddedTags = footerValue
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0);
+
+  if (normalizeTagsKey(embeddedTags) !== normalizeTagsKey(tags)) {
+    return memory;
+  }
+
+  return memory.replace(EMBEDDED_TAGS_FOOTER_RE, "");
+}
+
 function formatMemoriesForCompaction(memories: any[]): string {
   let output = `## Restored Session Memory\n\n`;
 
   memories.forEach((m, i) => {
+    const tags = Array.isArray(m.tags) ? m.tags : [];
+    // Auto-capture stores the same tags as a trailing "Tags: …" footer in the
+    // body (#131). Strip that footer only when it matches the structured tags
+    // so a later canonical line does not duplicate them. Unrelated user-authored
+    // "Tags:" lines (manual / API / import) stay in the body.
+    const body =
+      tags.length > 0 ? stripMatchingEmbeddedTagsFooter(m.memory ?? "", tags) : (m.memory ?? "");
+
     output += `### Memory ${i + 1}\n`;
-    output += `${m.memory}\n\n`;
-    if (m.tags && m.tags.length > 0) {
-      output += `Tags: ${m.tags.join(", ")}\n\n`;
+    output += `${body}\n\n`;
+    if (tags.length > 0) {
+      output += `Tags: ${tags.join(", ")}\n\n`;
     }
   });
 
