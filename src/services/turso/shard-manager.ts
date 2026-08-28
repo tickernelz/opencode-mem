@@ -328,13 +328,23 @@ export class TursoShardManager {
       {
         sql: `
           CREATE INDEX IF NOT EXISTS memories_vec_idx
-          ON memories (libsql_vector_idx(vector, 'metric=cosine'))
+          ON memories (libsql_vector_idx(
+            vector,
+            'metric=cosine',
+            'compress_neighbors=float8',
+            'max_neighbors=20'
+          ))
         `,
       },
       {
         sql: `
           CREATE INDEX IF NOT EXISTS memories_tags_vec_idx
-          ON memories (libsql_vector_idx(tags_vector, 'metric=cosine'))
+          ON memories (libsql_vector_idx(
+            tags_vector,
+            'metric=cosine',
+            'compress_neighbors=float8',
+            'max_neighbors=20'
+          ))
           WHERE tags_vector IS NOT NULL
         `,
       },

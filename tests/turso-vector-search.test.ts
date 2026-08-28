@@ -33,6 +33,18 @@ describe("turso vector search", () => {
     const shard = await tursoShardManager.createShard("project", scopeHash, 0);
     const db = await tursoConnectionManager.getConnection(shard.dbPath);
 
+    const indexDefinitions = await db.all<{ name: string; sql: string }>(`
+      SELECT name, sql
+      FROM sqlite_schema
+      WHERE type = 'index' AND name IN ('memories_vec_idx', 'memories_tags_vec_idx')
+    `);
+    expect(indexDefinitions).toHaveLength(2);
+    for (const index of indexDefinitions) {
+      expect(index.sql).toContain("'metric=cosine'");
+      expect(index.sql).toContain("'compress_neighbors=float8'");
+      expect(index.sql).toContain("'max_neighbors=20'");
+    }
+
     await tursoVectorSearch.insertVector(db, {
       id: "mem_test_1",
       content: "Turso native vector search",
@@ -43,6 +55,25 @@ describe("turso vector search", () => {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
+
+    const contentIndexHit = await db.get<{ id: string }>(
+      `
+        SELECT m.id AS id
+        FROM vector_top_k('memories_vec_idx', vector32(?), 1) AS v
+        CROSS JOIN memories m ON m.rowid = v.id
+      `,
+      [JSON.stringify(Array.from(vector))]
+    );
+    const tagsIndexHit = await db.get<{ id: string }>(
+      `
+        SELECT m.id AS id
+        FROM vector_top_k('memories_tags_vec_idx', vector32(?), 1) AS v
+        CROSS JOIN memories m ON m.rowid = v.id
+      `,
+      [JSON.stringify(Array.from(tagsVector))]
+    );
+    expect(contentIndexHit?.id).toBe("mem_test_1");
+    expect(tagsIndexHit?.id).toBe("mem_test_1");
 
     await tursoVectorSearch.insertVector(db, {
       id: "mem_test_no_tags",
