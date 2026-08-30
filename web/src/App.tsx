@@ -16,6 +16,7 @@ import { Label } from "$lib/components/ui/label";
 import { Toaster } from "$lib/components/ui/sonner";
 import { Textarea } from "$lib/components/ui/textarea";
 import { cycleLanguage, getLanguage, useI18n } from "$lib/i18n";
+import { getDisplayedMemoryCount } from "$lib/memory-count";
 import { initRouter, navigate, ROUTES, useAppView } from "$lib/router";
 
 const MEMORY_TYPES = [
@@ -142,7 +143,15 @@ export default function App() {
               </h1>
               {currentView === "project" ? (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>{t("text-total", { count: explorer.statsTotal })}</span>
+                  <span>
+                    {t("text-total", {
+                      count: getDisplayedMemoryCount(
+                        explorer.isSearching,
+                        explorer.totalItems,
+                        explorer.statsTotal
+                      ),
+                    })}
+                  </span>
                   {explorer.refreshing ? <Loader className="size-3.5 animate-spin" /> : null}
                 </div>
               ) : null}
