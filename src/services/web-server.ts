@@ -8,6 +8,7 @@ import { corsPreflightResponse, disallowedCorsResponse, isAllowedBrowserOrigin }
 import { assertWebServerNetworkAuth, authorizeApiRequest } from "./web-api-auth.js";
 import { getOrCreateAuthToken, isAuthorizedApiRequest } from "./auth-token.js";
 import { WebAuth } from "./web-auth.js";
+import { NODE_HTTP_IDLE_TIMEOUT_MS } from "./request-timeouts.js";
 import {
   handleListTags,
   handleListMemories,
@@ -57,6 +58,35 @@ const isBun = typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
 
 const MIN_FAILED_TAKEOVERS = 3;
 
+type NodeEventSource = {
+  on(event: string, listener: (...args: any[]) => void): unknown;
+};
+
+export function attachNodeDisconnectHandlers(
+  req: NodeEventSource & {
+    aborted: boolean;
+    complete: boolean;
+    socket: NodeEventSource;
+  },
+  res: NodeEventSource & { writableEnded: boolean },
+  onDisconnect: () => void
+): void {
+  let disconnected = false;
+  const disconnectOnce = () => {
+    if (disconnected || res.writableEnded) return;
+    disconnected = true;
+    onDisconnect();
+  };
+
+  req.on("aborted", disconnectOnce);
+  req.on("close", () => {
+    if (req.aborted || !req.complete) disconnectOnce();
+  });
+  req.socket.on("error", disconnectOnce);
+  req.socket.on("close", disconnectOnce);
+  res.on("close", disconnectOnce);
+}
+
 function serveFetch(opts: {
   port: number;
   hostname: string;
@@ -79,15 +109,15 @@ function serveFetch(opts: {
   // helpers that ship with Node 18+.
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     let destroyed = false;
+    const abortController = new AbortController();
     const cleanup = () => {
       if (destroyed) return;
       destroyed = true;
+      abortController.abort();
       if (!res.writableEnded) res.destroy();
       if (!req.socket.destroyed) req.socket.destroy();
     };
-    req.on("close", cleanup);
-    req.socket.on("error", cleanup);
-    req.socket.on("close", cleanup);
+    attachNodeDisconnectHandlers(req, res, cleanup);
 
     try {
       const url = `http://${opts.hostname}:${opts.port}${req.url ?? "/"}`;
@@ -97,6 +127,7 @@ function serveFetch(opts: {
         method,
         headers: req.headers as Record<string, string>,
         body: hasBody ? (Readable.toWeb(req) as unknown as ReadableStream) : undefined,
+        signal: abortController.signal,
         ...(hasBody ? ({ duplex: "half" } as Record<string, unknown>) : {}),
       });
 
@@ -140,7 +171,8 @@ function serveFetch(opts: {
   // rebind after a crashed predecessor left orphaned sockets behind.
   server.listen({ port: opts.port, host: opts.hostname, reuseAddr: true, exclusive: false });
   server.unref();
-  server.timeout = 30000;
+  // Keep the outer transport alive longer than the longest profile-cleanup deadline.
+  server.timeout = NODE_HTTP_IDLE_TIMEOUT_MS;
   server.keepAliveTimeout = 10000;
   server.headersTimeout = 11000;
 

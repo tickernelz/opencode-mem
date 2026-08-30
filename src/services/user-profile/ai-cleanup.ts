@@ -2,6 +2,10 @@ import type { UserProfileData } from "./types.js";
 import { CONFIG } from "../../config.js";
 import { log } from "../logger.js";
 import { loadOpencodeProvider } from "../ai/opencode-provider-loader.js";
+import {
+  EXTERNAL_PROFILE_CLEANUP_TIMEOUT_MS,
+  OPENCODE_PROFILE_CLEANUP_TIMEOUT_MS,
+} from "../request-timeouts.js";
 
 export interface AICleanupResult {
   cleaned: UserProfileData;
@@ -253,7 +257,7 @@ async function callViaExternalAPI(
       temperature: 0.3,
       response_format: { type: "json_object" },
     }),
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(EXTERNAL_PROFILE_CLEANUP_TIMEOUT_MS),
   });
 
   log("AI cleanup: external API http done", { httpMs: Date.now() - t0, status: response.status });
@@ -277,9 +281,6 @@ async function callViaExternalAPI(
     mapping: normalizeAIMapping(parsed.mapping),
   };
 }
-
-/** Prompt timeout for profile cleanup sessions (large profiles can exceed 2 minutes). */
-const OPENCODE_CLEANUP_TIMEOUT_MS = 300000;
 
 type PromptPart = { type?: string; text?: string };
 type PromptInfo = {
@@ -349,7 +350,7 @@ async function callViaOpencodeWithClient(
   log("AI cleanup: session created", { sessionID, createMs: Date.now() - t0 });
 
   try {
-    const TIMEOUT_MS = OPENCODE_CLEANUP_TIMEOUT_MS;
+    const TIMEOUT_MS = OPENCODE_PROFILE_CLEANUP_TIMEOUT_MS;
     const promptResult = await raceWithTimeout(
       v2Client.session.prompt({
         sessionID,
