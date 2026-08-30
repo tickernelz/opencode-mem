@@ -6,6 +6,7 @@ import {
   EXTERNAL_PROFILE_CLEANUP_TIMEOUT_MS,
   OPENCODE_PROFILE_CLEANUP_TIMEOUT_MS,
 } from "../request-timeouts.js";
+import { applySafeExtraParams } from "../ai/providers/base-provider.js";
 
 export interface AICleanupResult {
   cleaned: UserProfileData;
@@ -242,21 +243,30 @@ async function callViaExternalAPI(
   const systemPrompt =
     "You are a user profile cleanup assistant. Merge duplicate entries and return only JSON.";
 
+  const requestBody: Record<string, unknown> = {};
+  if (CONFIG.memoryExtraParams) {
+    applySafeExtraParams(requestBody, CONFIG.memoryExtraParams);
+  }
+
+  // Cleanup relies on these fields for deterministic JSON output. Assign them after optional
+  // provider parameters so callers cannot replace cleanup semantics through extra params.
+  Object.assign(requestBody, {
+    model: CONFIG.memoryModel,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: prompt },
+    ],
+    temperature: 0.3,
+    response_format: { type: "json_object" },
+  });
+
   const response = await fetch(`${CONFIG.memoryApiUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${CONFIG.memoryApiKey}`,
     },
-    body: JSON.stringify({
-      model: CONFIG.memoryModel,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.3,
-      response_format: { type: "json_object" },
-    }),
+    body: JSON.stringify(requestBody),
     signal: AbortSignal.timeout(EXTERNAL_PROFILE_CLEANUP_TIMEOUT_MS),
   });
 
