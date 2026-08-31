@@ -111,6 +111,7 @@ mock.module(${JSON.stringify(configUrl)}, () => ({
     memoryExtraParams: {
       enable_thinking: false,
       top_p: 0.7,
+      stream: true,
       model: "must-not-override",
       messages: [{ role: "user", content: "must-not-override" }],
       temperature: 0.9,
@@ -261,6 +262,7 @@ describe("AI cleanup opencode provider path (#177)", () => {
       enable_thinking: false,
       top_p: 0.7,
     });
+    expect(result.parsed?.externalRequestBody?.stream).toBeUndefined();
     expect(result.parsed?.externalRequestBody?.messages).toHaveLength(2);
   });
 });

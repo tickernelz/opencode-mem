@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildMemoryProviderConfig } from "../src/services/ai/provider-config.js";
+import { applySafeExtraParams } from "../src/services/ai/providers/base-provider.js";
 import { OpenAIChatCompletionProvider } from "../src/services/ai/providers/openai-chat-completion.js";
 import { OpenAIResponsesProvider } from "../src/services/ai/providers/openai-responses.js";
 import type { ChatCompletionTool } from "../src/services/ai/tools/tool-schema.js";
@@ -291,5 +292,47 @@ describe("AI provider config", () => {
 
     expect(capturedBody).toBeDefined();
     expect(capturedBody?.temperature).toBeUndefined();
+  });
+
+  describe("applySafeExtraParams", () => {
+    it("copies allowable extra parameters to request body", () => {
+      const body: Record<string, unknown> = { model: "gpt-5-nano" };
+      applySafeExtraParams(body, {
+        top_p: 0.8,
+        enable_thinking: false,
+        custom_header: "val",
+      });
+
+      expect(body).toEqual({
+        model: "gpt-5-nano",
+        top_p: 0.8,
+        enable_thinking: false,
+        custom_header: "val",
+      });
+    });
+
+    it("blocks protected keys from overriding core request structure", () => {
+      const body: Record<string, unknown> = {
+        model: "gpt-5-nano",
+        messages: [{ role: "system", content: "hi" }],
+      };
+      applySafeExtraParams(body, {
+        model: "override-model",
+        messages: [{ role: "user", content: "override" }],
+        tools: ["fake-tool"],
+        tool_choice: "none",
+        temperature: 0.9,
+        input: "override-input",
+        instructions: "override-instructions",
+        conversation: "override-convo",
+        stream: true,
+      });
+
+      expect(body).toEqual({
+        model: "gpt-5-nano",
+        messages: [{ role: "system", content: "hi" }],
+      });
+      expect(body.stream).toBeUndefined();
+    });
   });
 });

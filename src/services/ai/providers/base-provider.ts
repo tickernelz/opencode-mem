@@ -25,6 +25,7 @@ const PROTECTED_KEYS = new Set([
   "input",
   "instructions",
   "conversation",
+  "stream",
 ]);
 
 export function applySafeExtraParams(
