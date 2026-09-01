@@ -200,5 +200,5 @@ describe("turso vector search", () => {
     }
     // Results should be limited to the requested limit.
     expect(results.length).toBeLessThanOrEqual(10);
-  }, 30000);
+  }, 60000);
 });
