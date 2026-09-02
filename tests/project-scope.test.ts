@@ -1,9 +1,23 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
-import { basename, join } from "node:path";
+import {
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+  mkdirSync,
+} from "node:fs";
+import { basename, join, normalize } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
-import { findMarkerProjectRoot, getGitCommonDir, getProjectTagInfo } from "../src/services/tags.js";
+import {
+  findMarkerProjectRoot,
+  getGitCommonDir,
+  getGitTopLevel,
+  getProjectTagInfo,
+  getTags,
+} from "../src/services/tags.js";
 
 const createdDirs: string[] = [];
 
@@ -41,6 +55,78 @@ afterEach(() => {
 });
 
 describe("project scope identity", () => {
+  it.skipIf(process.platform !== "win32")(
+    "ignores repository-local Git command shims on Windows",
+    () => {
+      for (const extension of ["bat", "cmd"]) {
+        const repoDir = mkdtempSync(join(tmpdir(), `opencode-mem-git-shim-${extension}-`));
+        createdDirs.push(repoDir);
+        run("git init", repoDir);
+
+        const sentinel = join(repoDir, "shim-executed.txt");
+        writeFileSync(
+          join(repoDir, `git.${extension}`),
+          `@echo off\r\n>"${sentinel}" echo executed\r\nexit /b 1\r\n`,
+          "utf-8"
+        );
+
+        expect(getGitCommonDir(repoDir)).not.toBeNull();
+        expect(existsSync(sentinel)).toBe(false);
+      }
+    }
+  );
+
+  it.skipIf(process.platform !== "win32")(
+    "rejects Git executables elsewhere inside a nested repository",
+    () => {
+      const repoDir = mkdtempSync(join(tmpdir(), "opencode-mem-git-exe-"));
+      createdDirs.push(repoDir);
+      run("git init", repoDir);
+      run("git config user.email nested@example.com", repoDir);
+      const nestedDir = join(repoDir, "src", "nested");
+      const fakeBin = join(repoDir, "tools");
+      mkdirSync(nestedDir, { recursive: true });
+      mkdirSync(fakeBin, { recursive: true });
+
+      copyFileSync(
+        join(process.env.SystemRoot!, "System32", "where.exe"),
+        join(fakeBin, "git.exe")
+      );
+      const oldPath = process.env.PATH;
+      try {
+        process.env.PATH = `${fakeBin};${oldPath ?? ""}`;
+        expect(getGitCommonDir(nestedDir)).toBe(getGitCommonDir(repoDir));
+        expect(getTags(repoDir).user.userEmail).toBe("nested@example.com");
+      } finally {
+        process.env.PATH = oldPath;
+      }
+    }
+  );
+
+  it.skipIf(process.platform !== "win32")(
+    "preserves trusted Git command wrappers outside the repository",
+    () => {
+      const repoDir = mkdtempSync(join(tmpdir(), "opencode-mem-git-wrapper-repo-"));
+      const wrapperDir = mkdtempSync(join(tmpdir(), "opencode-mem-git-wrapper-bin-"));
+      createdDirs.push(repoDir, wrapperDir);
+      run("git init", repoDir);
+      const realGit = execSync("where.exe git.exe", { encoding: "utf-8" })
+        .trim()
+        .split(/\r?\n/)[0]!;
+      writeFileSync(join(wrapperDir, "git.cmd"), `@"${realGit}" %*\r\n`, "utf-8");
+
+      const oldPath = process.env.PATH;
+      try {
+        process.env.PATH = wrapperDir;
+        expect(normalize(realpathSync.native(getGitTopLevel(repoDir)!))).toBe(
+          normalize(realpathSync.native(repoDir))
+        );
+      } finally {
+        process.env.PATH = oldPath;
+      }
+    }
+  );
+
   it("uses one project tag across worktrees in the same repo", () => {
     const { repoDir, worktreeDir } = createRepoWithWorktree();
 

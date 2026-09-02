@@ -1,8 +1,17 @@
 import { createHash } from "node:crypto";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { CONFIG } from "../config.js";
-import { normalize, resolve, isAbsolute, basename, dirname, join } from "node:path";
-import { realpathSync, existsSync } from "node:fs";
+import {
+  normalize,
+  resolve,
+  isAbsolute,
+  basename,
+  dirname,
+  join,
+  delimiter,
+  relative,
+} from "node:path";
+import { accessSync, constants, realpathSync, existsSync } from "node:fs";
 
 function sha256(input: string): string {
   return createHash("sha256").update(input).digest("hex").slice(0, 16);
@@ -24,6 +33,110 @@ function sha256(input: string): string {
  * the shared web server.
  */
 const PROJECT_MARKER = ".opencode-mem-project";
+
+function canonicalPath(path: string): string {
+  try {
+    return process.platform === "win32"
+      ? normalize(realpathSync.native(path))
+      : normalize(realpathSync(path));
+  } catch {
+    return normalize(resolve(path));
+  }
+}
+
+function isPathInside(root: string, candidate: string): boolean {
+  const rel = relative(root, candidate);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function findUntrustedProjectRoot(directory: string): string {
+  let current = canonicalPath(directory);
+  while (true) {
+    if (existsSync(join(current, ".git")) || existsSync(join(current, PROJECT_MARKER))) {
+      return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) return canonicalPath(directory);
+    current = parent;
+  }
+}
+
+interface GitCommand {
+  executable: string;
+  shell: false | string;
+}
+
+function resolveTrustedWindowsShell(untrustedRoot: string): string | null {
+  const candidates = [
+    process.env.ComSpec,
+    process.env.SystemRoot ? join(process.env.SystemRoot, "System32", "cmd.exe") : undefined,
+  ];
+
+  for (const path of candidates) {
+    if (!path || !isAbsolute(path)) continue;
+    try {
+      accessSync(path, constants.X_OK);
+      const candidate = canonicalPath(path);
+      if (!isPathInside(untrustedRoot, candidate)) return candidate;
+    } catch {
+      // Try the next trusted system-shell location.
+    }
+  }
+  return null;
+}
+
+/**
+ * Resolve Git only from absolute PATH entries outside the repository being
+ * inspected. In particular, never let Windows resolve a repository-local
+ * git.exe/git.cmd/git.bat from the child process working directory.
+ */
+function resolveTrustedGitCommand(directory: string): GitCommand | null {
+  const untrustedRoot = findUntrustedProjectRoot(directory);
+  const executableNames =
+    process.platform === "win32" ? ["git.exe", "git.cmd", "git.bat"] : ["git"];
+
+  for (const rawEntry of (process.env.PATH ?? "").split(delimiter)) {
+    const entry = rawEntry.trim().replace(/^"(.*)"$/, "$1");
+    if (!entry || !isAbsolute(entry)) continue;
+
+    for (const executableName of executableNames) {
+      const candidatePath = join(entry, executableName);
+      try {
+        accessSync(candidatePath, constants.X_OK);
+        const executable = canonicalPath(candidatePath);
+        if (isPathInside(untrustedRoot, executable)) continue;
+
+        if (executableName === "git.exe" || process.platform !== "win32") {
+          return { executable, shell: false };
+        }
+
+        const shell = resolveTrustedWindowsShell(untrustedRoot);
+        if (shell) return { executable, shell };
+      } catch {
+        // Continue searching PATH. Missing Git uses the existing null fallbacks.
+      }
+    }
+  }
+
+  return null;
+}
+
+function runGit(args: string[], directory: string = process.cwd()): string | null {
+  const gitCommand = resolveTrustedGitCommand(directory);
+  if (!gitCommand) return null;
+
+  try {
+    const output = execFileSync(gitCommand.executable, args, {
+      encoding: "utf-8",
+      cwd: directory,
+      stdio: ["ignore", "pipe", "ignore"],
+      shell: gitCommand.shell,
+    }).trim();
+    return output || null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Walk up from `directory` (inclusive) to the filesystem root looking for the
@@ -55,54 +168,22 @@ export interface TagInfo {
   gitRepoUrl?: string;
 }
 
-export function getGitEmail(): string | null {
-  try {
-    const email = execSync("git config user.email", {
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    return email || null;
-  } catch {
-    return null;
-  }
+export function getGitEmail(directory: string = process.cwd()): string | null {
+  return runGit(["config", "user.email"], directory);
 }
 
-export function getGitName(): string | null {
-  try {
-    const name = execSync("git config user.name", {
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    return name || null;
-  } catch {
-    return null;
-  }
+export function getGitName(directory: string = process.cwd()): string | null {
+  return runGit(["config", "user.name"], directory);
 }
 
 export function getGitRepoUrl(directory: string): string | null {
-  try {
-    const url = execSync("git config --get remote.origin.url", {
-      encoding: "utf-8",
-      cwd: directory,
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    return url || null;
-  } catch {
-    return null;
-  }
+  return runGit(["config", "--get", "remote.origin.url"], directory);
 }
 
 export function getGitCommonDir(directory: string): string | null {
   try {
-    const commonDir = execSync("git rev-parse --git-common-dir", {
-      encoding: "utf-8",
-      cwd: directory,
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-
-    if (!commonDir) {
-      return null;
-    }
+    const commonDir = runGit(["rev-parse", "--git-common-dir"], directory);
+    if (!commonDir) return null;
 
     const resolved = isAbsolute(commonDir)
       ? normalize(commonDir)
@@ -121,16 +202,7 @@ export function getGitCommonDir(directory: string): string | null {
 }
 
 export function getGitTopLevel(directory: string): string | null {
-  try {
-    const topLevel = execSync("git rev-parse --show-toplevel", {
-      encoding: "utf-8",
-      cwd: directory,
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    return topLevel || null;
-  } catch {
-    return null;
-  }
+  return runGit(["rev-parse", "--show-toplevel"], directory);
 }
 
 // Git-only fallbacks, kept separate so the marker-aware entry points below
@@ -178,9 +250,9 @@ export function getProjectName(directory: string): string {
   return parts[parts.length - 1] || directory;
 }
 
-export function getUserTagInfo(): TagInfo {
-  const email = CONFIG.userEmailOverride || getGitEmail();
-  const name = CONFIG.userNameOverride || getGitName();
+export function getUserTagInfo(directory: string = process.cwd()): TagInfo {
+  const email = CONFIG.userEmailOverride || getGitEmail(directory);
+  const name = CONFIG.userNameOverride || getGitName(directory);
 
   if (email) {
     return {
@@ -226,7 +298,7 @@ export function getTags(directory: string): {
   project: TagInfo;
 } {
   return {
-    user: getUserTagInfo(),
+    user: getUserTagInfo(directory),
     project: getProjectTagInfo(directory),
   };
 }
