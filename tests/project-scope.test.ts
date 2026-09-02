@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+  mkdirSync,
+} from "node:fs";
 import { basename, join, normalize } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
@@ -110,7 +118,9 @@ describe("project scope identity", () => {
       const oldPath = process.env.PATH;
       try {
         process.env.PATH = wrapperDir;
-        expect(normalize(getGitTopLevel(repoDir)!)).toBe(normalize(repoDir));
+        expect(normalize(realpathSync.native(getGitTopLevel(repoDir)!))).toBe(
+          normalize(realpathSync.native(repoDir))
+        );
       } finally {
         process.env.PATH = oldPath;
       }
