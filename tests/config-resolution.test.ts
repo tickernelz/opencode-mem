@@ -47,6 +47,48 @@ describe("project-scoped config resolution", () => {
     expect(CONFIG.opencodeModel).toBe("project-model");
   });
 
+  it("keeps automatic cleanup policy under global configuration", () => {
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+    readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
+      const path = normalizePath(p);
+      if (path.includes(".opencode/opencode-mem")) {
+        return JSON.stringify({
+          opencodeModel: "project-model",
+          autoCleanupEnabled: true,
+          autoCleanupRetentionDays: 0,
+        }) as any;
+      }
+      return JSON.stringify({
+        opencodeModel: "global-model",
+        autoCleanupEnabled: false,
+        autoCleanupRetentionDays: 90,
+      }) as any;
+    });
+
+    initConfig("/my/project");
+
+    expect(CONFIG.opencodeModel).toBe("project-model");
+    expect(CONFIG.autoCleanupEnabled).toBe(false);
+    expect(CONFIG.autoCleanupRetentionDays).toBe(90);
+  });
+
+  it("uses safe cleanup defaults when only project cleanup settings exist", () => {
+    existsSpy = spyOn(fs, "existsSync").mockImplementation((p) =>
+      normalizePath(p).includes("/my/project/.opencode/opencode-mem")
+    );
+    readSpy = spyOn(fs, "readFileSync").mockReturnValue(
+      JSON.stringify({
+        autoCleanupEnabled: true,
+        autoCleanupRetentionDays: -1,
+      })
+    );
+
+    initConfig("/my/project");
+
+    expect(CONFIG.autoCleanupEnabled).toBe(true);
+    expect(CONFIG.autoCleanupRetentionDays).toBe(30);
+  });
+
   it("shallow merge: project adds fields, global fields preserved when not overridden", () => {
     existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
     readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {

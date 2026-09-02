@@ -600,6 +600,13 @@ export function normalizeAutoCaptureMaxContextBytes(value: number): number {
   return value;
 }
 
+export function normalizeAutoCleanupRetentionDays(value: number): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`Invalid autoCleanupRetentionDays config: ${value}`);
+  }
+  return value;
+}
+
 function buildConfig(fileConfig: OpenCodeMemConfig) {
   const memoryApiKey = resolveSecretValue(fileConfig.memoryApiKey);
   const embeddingDimensions =
@@ -676,8 +683,9 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
       : undefined,
     maxVectorsPerShard: fileConfig.maxVectorsPerShard ?? DEFAULTS.maxVectorsPerShard,
     autoCleanupEnabled: fileConfig.autoCleanupEnabled ?? DEFAULTS.autoCleanupEnabled,
-    autoCleanupRetentionDays:
-      fileConfig.autoCleanupRetentionDays ?? DEFAULTS.autoCleanupRetentionDays,
+    autoCleanupRetentionDays: normalizeAutoCleanupRetentionDays(
+      fileConfig.autoCleanupRetentionDays ?? DEFAULTS.autoCleanupRetentionDays
+    ),
     deduplicationEnabled: fileConfig.deduplicationEnabled ?? DEFAULTS.deduplicationEnabled,
     deduplicationSimilarityThreshold:
       fileConfig.deduplicationSimilarityThreshold ?? DEFAULTS.deduplicationSimilarityThreshold,
@@ -823,7 +831,10 @@ export function initConfig(directory: string): void {
   ];
   const globalConfig = loadConfigFromPaths(CONFIG_FILES);
   const projectConfig = loadConfigFromPaths(projectPaths);
-  const merged: OpenCodeMemConfig = { ...globalConfig, ...projectConfig };
+  const projectOverrides = { ...projectConfig };
+  delete projectOverrides.autoCleanupEnabled;
+  delete projectOverrides.autoCleanupRetentionDays;
+  const merged: OpenCodeMemConfig = { ...globalConfig, ...projectOverrides };
   CONFIG = buildConfig(merged);
 }
 

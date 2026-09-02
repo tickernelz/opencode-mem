@@ -15,6 +15,7 @@ const {
   hasAutoCaptureProviderConfig,
   isConfigured,
   isPlaceholderApiKey,
+  normalizeAutoCleanupRetentionDays,
   normalizeAutoCaptureMaxContextBytes,
 } = await import("../src/config.js");
 
@@ -97,6 +98,15 @@ describe("config", () => {
       expect(() => normalizeAutoCaptureMaxContextBytes(-1)).toThrow();
       expect(() => normalizeAutoCaptureMaxContextBytes(1024)).toThrow();
       expect(() => normalizeAutoCaptureMaxContextBytes(16 * 1024 * 1024 + 1)).toThrow();
+    });
+
+    it("should reject unsafe automatic cleanup retention periods", () => {
+      expect(() => normalizeAutoCleanupRetentionDays(0)).toThrow();
+      expect(() => normalizeAutoCleanupRetentionDays(-1)).toThrow();
+      expect(() => normalizeAutoCleanupRetentionDays(1.5)).toThrow();
+      expect(() => normalizeAutoCleanupRetentionDays(Number.POSITIVE_INFINITY)).toThrow();
+      expect(normalizeAutoCleanupRetentionDays(1)).toBe(1);
+      expect(normalizeAutoCleanupRetentionDays(30)).toBe(30);
     });
 
     it("should expose memory scope config", () => {
