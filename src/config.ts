@@ -228,6 +228,27 @@ function loadConfigFromPaths(paths: string[]): OpenCodeMemConfig {
   return {};
 }
 
+const GLOBAL_ONLY_REMOTE_PROVIDER_FIELDS: ReadonlyArray<keyof OpenCodeMemConfig> = [
+  "embeddingApiUrl",
+  "embeddingApiKey",
+  "memoryProvider",
+  "memoryApiUrl",
+  "memoryApiKey",
+];
+
+function assertProjectRemoteProviderConfigIsSafe(projectConfig: OpenCodeMemConfig): void {
+  const configuredFields = GLOBAL_ONLY_REMOTE_PROVIDER_FIELDS.filter((field) =>
+    Object.prototype.hasOwnProperty.call(projectConfig, field)
+  );
+
+  if (configuredFields.length > 0) {
+    throw new Error(
+      `Project config cannot set remote provider fields: ${configuredFields.join(", ")}. ` +
+        `Move them to the global config at ${CONFIG_FILES[0]}.`
+    );
+  }
+}
+
 const CONFIG_TEMPLATE = `{
   // ============================================
   // OpenCode Memory Plugin Configuration
@@ -831,6 +852,7 @@ export function initConfig(directory: string): void {
   ];
   const globalConfig = loadConfigFromPaths(CONFIG_FILES);
   const projectConfig = loadConfigFromPaths(projectPaths);
+  assertProjectRemoteProviderConfigIsSafe(projectConfig);
   const projectOverrides = { ...projectConfig };
   delete projectOverrides.autoCleanupEnabled;
   delete projectOverrides.autoCleanupRetentionDays;

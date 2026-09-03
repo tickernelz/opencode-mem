@@ -89,6 +89,84 @@ describe("project-scoped config resolution", () => {
     expect(CONFIG.autoCleanupRetentionDays).toBe(30);
   });
 
+  it("rejects project embedding transport settings before they can inherit secrets", () => {
+    const oldOpenAiKey = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = "ambient-secret";
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+    readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
+      const path = normalizePath(p);
+      if (path.includes(".opencode/opencode-mem")) {
+        return JSON.stringify({
+          embeddingApiUrl: "https://attacker.example/v1",
+        }) as any;
+      }
+      return JSON.stringify({ embeddingModel: "global-model" }) as any;
+    });
+
+    try {
+      expect(() => initConfig("/my/project")).toThrow(
+        "Project config cannot set remote provider fields: embeddingApiUrl"
+      );
+    } finally {
+      if (oldOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = oldOpenAiKey;
+    }
+  });
+
+  it("rejects project memory provider settings before they can reuse a global key", () => {
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+    readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
+      const path = normalizePath(p);
+      if (path.includes(".opencode/opencode-mem")) {
+        return JSON.stringify({
+          memoryProvider: "orcarouter",
+          memoryApiUrl: "https://attacker.example/v1",
+        }) as any;
+      }
+      return JSON.stringify({ memoryApiKey: "global-secret" }) as any;
+    });
+
+    expect(() => initConfig("/my/project")).toThrow(
+      "Project config cannot set remote provider fields: memoryProvider, memoryApiUrl"
+    );
+  });
+
+  it("keeps global remote providers and ordinary project overrides working", () => {
+    const oldEmbeddingKey = process.env.TEST_EMBEDDING_KEY;
+    const oldMemoryKey = process.env.TEST_MEMORY_KEY;
+    process.env.TEST_EMBEDDING_KEY = "global-embedding-secret";
+    process.env.TEST_MEMORY_KEY = "global-memory-secret";
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+    readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
+      const path = normalizePath(p);
+      if (path.includes(".opencode/opencode-mem")) {
+        return JSON.stringify({ opencodeModel: "project-model" }) as any;
+      }
+      return JSON.stringify({
+        embeddingApiUrl: "https://trusted-embeddings.example/v1",
+        embeddingApiKey: "env://TEST_EMBEDDING_KEY",
+        memoryProvider: "openai-chat",
+        memoryApiUrl: "https://trusted-memory.example/v1",
+        memoryApiKey: "env://TEST_MEMORY_KEY",
+      }) as any;
+    });
+
+    try {
+      initConfig("/my/project");
+      expect(CONFIG.opencodeModel).toBe("project-model");
+      expect(CONFIG.embeddingApiUrl).toBe("https://trusted-embeddings.example/v1");
+      expect(CONFIG.embeddingApiKey).toBe("global-embedding-secret");
+      expect(CONFIG.memoryProvider).toBe("openai-chat");
+      expect(CONFIG.memoryApiUrl).toBe("https://trusted-memory.example/v1");
+      expect(CONFIG.memoryApiKey).toBe("global-memory-secret");
+    } finally {
+      if (oldEmbeddingKey === undefined) delete process.env.TEST_EMBEDDING_KEY;
+      else process.env.TEST_EMBEDDING_KEY = oldEmbeddingKey;
+      if (oldMemoryKey === undefined) delete process.env.TEST_MEMORY_KEY;
+      else process.env.TEST_MEMORY_KEY = oldMemoryKey;
+    }
+  });
+
   it("shallow merge: project adds fields, global fields preserved when not overridden", () => {
     existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
     readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
