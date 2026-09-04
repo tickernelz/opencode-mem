@@ -414,7 +414,7 @@ Manual `memoryProvider` modes:
 - `openai-chat`: OpenAI Chat Completions compatible API with tool/function calling. This can work with compatible proxies such as LiteLLM only when the selected upstream model and proxy preserve tool calls.
 - `openai-responses`: OpenAI Responses API with function-call output.
 - `anthropic`: Anthropic Messages API with tool use.
-- `minimax`: MiniMax Anthropic Messages-compatible endpoint. Set `memoryApiUrl` to the global endpoint (`https://api.minimax.io`) or the China endpoint (`https://api.minimaxi.com`); the `/anthropic/v1/messages` path and `x-api-key` header are applied automatically. MiniMax text models such as `MiniMax-M3` support the adaptive thinking modes used by this plugin via `memoryExtraParams`.
+- `minimax`: MiniMax Anthropic Messages-compatible endpoint. Set `memoryApiUrl` to the global endpoint (`https://api.minimax.io/anthropic`) or the China endpoint (`https://api.minimaxi.com/anthropic`); the `/v1/messages` path and `x-api-key` header are applied automatically. Current models include `MiniMax-M3` (1,000,000-token context; text, image, and video input; adaptive or disabled thinking) and `MiniMax-M2.7` (204,800-token context; text input; always-on thinking). `MiniMax-M3` supports adaptive thinking through `memoryExtraParams`.
 - `orcarouter`: OpenAI-compatible model gateway with namespaced model IDs. `memoryApiUrl` and `memoryModel` are optional — they default to `https://api.orcarouter.ai/v1` and `orcarouter/auto` (a routing alias that selects a capable model per request). If you set `memoryModel`, use a namespaced ID such as `openai/gpt-5.5` or `deepseek/deepseek-v4-flash`; OrcaRouter rejects bare model names. Example:
   ```jsonc
   "memoryProvider": "orcarouter",

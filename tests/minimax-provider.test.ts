@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { MiniMaxProvider } from "../src/services/ai/providers/minimax.js";
+import { MINIMAX_MODEL_METADATA, MiniMaxProvider } from "../src/services/ai/providers/minimax.js";
 import { AIProviderFactory } from "../src/services/ai/ai-provider-factory.js";
 import type { ChatCompletionTool } from "../src/services/ai/tools/tool-schema.js";
 
@@ -211,6 +211,33 @@ describe("MiniMaxProvider", () => {
     expect(capturedBody?.max_tokens).toBeDefined();
     expect(result.success).toBe(true);
     expect((result.data as any).memory).toBe("captured fact");
+  });
+});
+
+describe("MiniMax model metadata", () => {
+  it("describes the current models", () => {
+    expect(MINIMAX_MODEL_METADATA["MiniMax-M3"]).toEqual({
+      contextWindow: 1_000_000,
+      pricingUsdPerMillionTokens: {
+        input: 0.6,
+        output: 2.4,
+        cacheRead: 0.12,
+        cacheWrite: null,
+      },
+      inputModalities: ["text", "image", "video"],
+      thinkingModes: ["adaptive", "disabled"],
+    });
+    expect(MINIMAX_MODEL_METADATA["MiniMax-M2.7"]).toEqual({
+      contextWindow: 204_800,
+      pricingUsdPerMillionTokens: {
+        input: 0.3,
+        output: 1.2,
+        cacheRead: 0.06,
+        cacheWrite: 0.375,
+      },
+      inputModalities: ["text"],
+      thinkingModes: ["always_on"],
+    });
   });
 });
 

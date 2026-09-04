@@ -3,6 +3,44 @@ import { AISessionManager } from "../session/ai-session-manager.js";
 import { AnthropicMessagesProvider } from "./anthropic-messages.js";
 import type { AIProviderType } from "../session/session-types.js";
 
+export interface MiniMaxModelMetadata {
+  contextWindow: number;
+  pricingUsdPerMillionTokens: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number | null;
+  };
+  inputModalities: readonly string[];
+  thinkingModes: readonly string[];
+}
+
+/** Current text model capabilities and pricing. */
+export const MINIMAX_MODEL_METADATA = {
+  "MiniMax-M3": {
+    contextWindow: 1_000_000,
+    pricingUsdPerMillionTokens: {
+      input: 0.6,
+      output: 2.4,
+      cacheRead: 0.12,
+      cacheWrite: null,
+    },
+    inputModalities: ["text", "image", "video"],
+    thinkingModes: ["adaptive", "disabled"],
+  },
+  "MiniMax-M2.7": {
+    contextWindow: 204_800,
+    pricingUsdPerMillionTokens: {
+      input: 0.3,
+      output: 1.2,
+      cacheRead: 0.06,
+      cacheWrite: 0.375,
+    },
+    inputModalities: ["text"],
+    thinkingModes: ["always_on"],
+  },
+} as const satisfies Record<string, MiniMaxModelMetadata>;
+
 /**
  * MiniMax provider.
  *
