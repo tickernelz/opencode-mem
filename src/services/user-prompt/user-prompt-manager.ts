@@ -335,8 +335,10 @@ export class UserPromptManager {
     const db = await this.ready();
     const rows = projectPath
       ? await db.all(
-          `SELECT * FROM user_prompts WHERE captured = 1 AND project_path = ? ORDER BY created_at DESC`,
-          [projectPath]
+          `SELECT * FROM user_prompts
+           WHERE captured = 1 AND REPLACE(project_path, '\\', '/') = ?
+           ORDER BY created_at DESC`,
+          [projectPath.replace(/\\/g, "/")]
         )
       : await db.all(`SELECT * FROM user_prompts WHERE captured = 1 ORDER BY created_at DESC`);
     return rows.map((row) => this.rowToPrompt(row));
@@ -351,8 +353,8 @@ export class UserPromptManager {
     const params: InValue[] = [`%${query}%`];
     let sql = `SELECT * FROM user_prompts WHERE content LIKE ? AND captured = 1`;
     if (projectPath) {
-      sql += ` AND project_path = ?`;
-      params.push(projectPath);
+      sql += ` AND REPLACE(project_path, '\\', '/') = ?`;
+      params.push(projectPath.replace(/\\/g, "/"));
     }
     sql += ` ORDER BY created_at DESC LIMIT ?`;
     params.push(limit);
@@ -366,6 +368,20 @@ export class UserPromptManager {
     const placeholders = ids.map(() => "?").join(",");
     const rows = await db.all(`SELECT * FROM user_prompts WHERE id IN (${placeholders})`, ids);
     return rows.map((row) => this.rowToPrompt(row));
+  }
+
+  async updateProjectPath(oldProjectPath: string, newProjectPath: string): Promise<number> {
+    if (!oldProjectPath || !newProjectPath || oldProjectPath === newProjectPath) {
+      return 0;
+    }
+    const db = await this.ready();
+    const normalizedOldPath = oldProjectPath.replace(/\\/g, "/");
+    return db.run(
+      `UPDATE user_prompts
+       SET project_path = ?
+       WHERE REPLACE(project_path, '\\', '/') = ?`,
+      [newProjectPath, normalizedOldPath]
+    );
   }
 
   private rowToPrompt(row: Record<string, unknown>): UserPrompt {

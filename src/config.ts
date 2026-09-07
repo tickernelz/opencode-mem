@@ -13,7 +13,7 @@ const CONFIG_FILES = [
 ];
 
 type MemoryProviderType =
-  "atlas-cloud" | "openai-chat" | "openai-responses" | "anthropic" | "minimax";
+  "atlas-cloud" | "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "orcarouter";
 
 const ATLAS_CLOUD_API_URL = "https://api.atlascloud.ai/v1";
 const ATLAS_CLOUD_MODEL = "deepseek-ai/deepseek-v4-pro";
@@ -48,6 +48,7 @@ interface OpenCodeMemConfig {
   autoCaptureMaxIterations?: number;
   autoCaptureIterationTimeout?: number;
   autoCaptureMaxRetries?: number;
+  autoCaptureMaxContextBytes?: number;
   autoCaptureLanguage?: string;
   memoryProvider?: MemoryProviderType;
   memoryModel?: string;
@@ -87,6 +88,8 @@ interface OpenCodeMemConfig {
   userProfileCentroidDriftThreshold?: number;
   userProfileEmbeddingMinDescriptionLength?: number;
   userProfileMinEvidenceForRetention?: number;
+  userProfileAutoCleanupEnabled?: boolean;
+  userProfileAutoCleanupInterval?: number;
   userProfileValidationEnabled?: boolean;
   showAutoCaptureToasts?: boolean;
   showUserProfileToasts?: boolean;
@@ -158,6 +161,7 @@ const DEFAULTS: Required<
   autoCaptureMaxIterations: 5,
   autoCaptureIterationTimeout: 30000,
   autoCaptureMaxRetries: 3,
+  autoCaptureMaxContextBytes: 131072,
   aiSessionRetentionDays: 7,
   webServerEnabled: true,
   webServerPort: 4747,
@@ -185,6 +189,8 @@ const DEFAULTS: Required<
   userProfileCentroidDriftThreshold: 0.65,
   userProfileEmbeddingMinDescriptionLength: 5,
   userProfileMinEvidenceForRetention: 3,
+  userProfileAutoCleanupEnabled: true,
+  userProfileAutoCleanupInterval: 100,
   userProfileValidationEnabled: false,
   showAutoCaptureToasts: true,
   showUserProfileToasts: true,
@@ -226,6 +232,27 @@ function loadConfigFromPaths(paths: string[]): OpenCodeMemConfig {
     }
   }
   return {};
+}
+
+const GLOBAL_ONLY_REMOTE_PROVIDER_FIELDS: ReadonlyArray<keyof OpenCodeMemConfig> = [
+  "embeddingApiUrl",
+  "embeddingApiKey",
+  "memoryProvider",
+  "memoryApiUrl",
+  "memoryApiKey",
+];
+
+function assertProjectRemoteProviderConfigIsSafe(projectConfig: OpenCodeMemConfig): void {
+  const configuredFields = GLOBAL_ONLY_REMOTE_PROVIDER_FIELDS.filter((field) =>
+    Object.prototype.hasOwnProperty.call(projectConfig, field)
+  );
+
+  if (configuredFields.length > 0) {
+    throw new Error(
+      `Project config cannot set remote provider fields: ${configuredFields.join(", ")}. ` +
+        `Move them to the global config at ${CONFIG_FILES[0]}.`
+    );
+  }
 }
 
 const CONFIG_TEMPLATE = `{
@@ -349,7 +376,7 @@ const CONFIG_TEMPLATE = `{
   
   "autoCaptureEnabled": true,
   
-  // Provider type: "atlas-cloud" | "openai-chat" | "openai-responses" | "anthropic" | "minimax"
+  // Provider type: "atlas-cloud" | "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "orcarouter"
   // Note: "openai-chat" is a generic OpenAI API-compatible mode.
   // Any service that follows the OpenAI Chat Completions API can use it via custom "memoryApiUrl".
   "memoryProvider": "openai-chat",
@@ -410,6 +437,15 @@ const CONFIG_TEMPLATE = `{
   //   // Optional adaptive thinking for MiniMax-M3:
   //   "memoryExtraParams": { "thinking": { "type": "adaptive" } }
 
+  // OrcaRouter (OpenAI-compatible gateway, namespaced model IDs, with session support):
+  //   "memoryProvider": "orcarouter"
+  //   "memoryApiKey": "<OrcaRouter API key>"
+  //   // memoryApiUrl and memoryModel are optional — they default to
+  //   // https://api.orcarouter.ai/v1 and "orcarouter/auto" (a routing alias).
+  //   // OrcaRouter rejects bare model names, so if you set memoryModel, use a
+  //   // namespaced ID such as "openai/gpt-5.5" or "deepseek/deepseek-v4-flash".
+  //   "memoryModel": "openai/gpt-5.5"
+
   // Groq (OpenAI-compatible, use openai-chat provider):
   //   "memoryProvider": "openai-chat"
   //   "memoryModel": "llama-3.3-70b-versatile"
@@ -424,6 +460,11 @@ const CONFIG_TEMPLATE = `{
 
   // Maximum number of times to retry capturing a prompt if it fails (due to network, API errors, etc.)
   "autoCaptureMaxRetries": 3,
+
+  // Maximum UTF-8 bytes for the auto-capture markdown context sent to the summary model.
+  // Prevents HTTP 400 context overflows on models with ~131K token windows (e.g. Groq Llama).
+  // Rough guide: tokens ≈ bytes / 4 for mixed code/prose.
+  "autoCaptureMaxContextBytes": 131072,
    
   // Days to keep AI session history before cleanup
   "aiSessionRetentionDays": 7,
@@ -501,6 +542,11 @@ const CONFIG_TEMPLATE = `{
   // Minimum evidence count for a preference/pattern to survive confidence decay
   // Items confirmed fewer times are more likely to be pruned when confidence decays
   "userProfileMinEvidenceForRetention": 3,
+
+  // Periodically merge duplicate or irrelevant profile items with the configured AI provider
+  "userProfileAutoCleanupEnabled": true,
+  // Number of analyzed user prompts between automatic AI cleanup runs
+  "userProfileAutoCleanupInterval": 100,
 
   // Enable LLM validation of existing preferences against recent behavior.
   // When enabled, each analysis round checks if top-5 preferences still match recent prompts.
@@ -582,6 +628,20 @@ function getEmbeddingDimensions(model: string): number {
   return dimensionMap[model] || 768;
 }
 
+export function normalizeAutoCaptureMaxContextBytes(value: number): number {
+  if (!Number.isInteger(value) || value < 16384 || value > 16 * 1024 * 1024) {
+    throw new Error(`Invalid autoCaptureMaxContextBytes config: ${value}`);
+  }
+  return value;
+}
+
+export function normalizeAutoCleanupRetentionDays(value: number): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`Invalid autoCleanupRetentionDays config: ${value}`);
+  }
+  return value;
+}
+
 function buildConfig(fileConfig: OpenCodeMemConfig) {
   const memoryProvider = fileConfig.memoryProvider ?? "openai-chat";
   const isAtlasCloud = memoryProvider === "atlas-cloud";
@@ -593,6 +653,11 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
   const embeddingDimensions =
     fileConfig.embeddingDimensions ??
     getEmbeddingDimensions(fileConfig.embeddingModel ?? DEFAULTS.embeddingModel);
+  const autoCaptureMaxContextBytes = normalizeAutoCaptureMaxContextBytes(
+    fileConfig.autoCaptureMaxContextBytes ?? DEFAULTS.autoCaptureMaxContextBytes
+  );
+  const userProfileAutoCleanupInterval =
+    fileConfig.userProfileAutoCleanupInterval ?? DEFAULTS.userProfileAutoCleanupInterval;
 
   if (
     !Number.isInteger(embeddingDimensions) ||
@@ -600,6 +665,11 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     embeddingDimensions > 65536
   ) {
     throw new Error(`Invalid embeddingDimensions config: ${embeddingDimensions}`);
+  }
+  if (!Number.isInteger(userProfileAutoCleanupInterval) || userProfileAutoCleanupInterval <= 0) {
+    throw new Error(
+      `Invalid userProfileAutoCleanupInterval config: ${userProfileAutoCleanupInterval}`
+    );
   }
 
   return {
@@ -625,6 +695,7 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     autoCaptureIterationTimeout:
       fileConfig.autoCaptureIterationTimeout ?? DEFAULTS.autoCaptureIterationTimeout,
     autoCaptureMaxRetries: fileConfig.autoCaptureMaxRetries ?? DEFAULTS.autoCaptureMaxRetries,
+    autoCaptureMaxContextBytes,
     autoCaptureLanguage: fileConfig.autoCaptureLanguage,
     memoryProvider,
     memoryModel,
@@ -652,8 +723,9 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
       : undefined,
     maxVectorsPerShard: fileConfig.maxVectorsPerShard ?? DEFAULTS.maxVectorsPerShard,
     autoCleanupEnabled: fileConfig.autoCleanupEnabled ?? DEFAULTS.autoCleanupEnabled,
-    autoCleanupRetentionDays:
-      fileConfig.autoCleanupRetentionDays ?? DEFAULTS.autoCleanupRetentionDays,
+    autoCleanupRetentionDays: normalizeAutoCleanupRetentionDays(
+      fileConfig.autoCleanupRetentionDays ?? DEFAULTS.autoCleanupRetentionDays
+    ),
     deduplicationEnabled: fileConfig.deduplicationEnabled ?? DEFAULTS.deduplicationEnabled,
     deduplicationSimilarityThreshold:
       fileConfig.deduplicationSimilarityThreshold ?? DEFAULTS.deduplicationSimilarityThreshold,
@@ -696,6 +768,9 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
       DEFAULTS.userProfileEmbeddingMinDescriptionLength,
     userProfileMinEvidenceForRetention:
       fileConfig.userProfileMinEvidenceForRetention ?? DEFAULTS.userProfileMinEvidenceForRetention,
+    userProfileAutoCleanupEnabled:
+      fileConfig.userProfileAutoCleanupEnabled ?? DEFAULTS.userProfileAutoCleanupEnabled,
+    userProfileAutoCleanupInterval,
     userProfileValidationEnabled:
       fileConfig.userProfileValidationEnabled ?? DEFAULTS.userProfileValidationEnabled,
     userProfileStaleDays: fileConfig.userProfileStaleDays ?? DEFAULTS.userProfileStaleDays,
@@ -729,6 +804,7 @@ type RuntimeConfig = ReturnType<typeof buildConfig>;
 interface AutoCaptureProviderRuntimeConfig {
   opencodeProvider?: string;
   opencodeModel?: string;
+  memoryProvider?: string;
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
@@ -761,6 +837,17 @@ export function getAutoCaptureProviderStatus(
   const hasMemoryApiKey = hasValue(config.memoryApiKey);
   const hasPlaceholderMemoryApiKey = isPlaceholderApiKey(config.memoryApiKey);
 
+  // The orcarouter provider presets its endpoint and default model, so only
+  // an API key is required for the manual fallback path.
+  if (config.memoryProvider === "orcarouter") {
+    if (!hasMemoryApiKey) issues.push("memoryApiKey is not configured");
+    if (hasPlaceholderMemoryApiKey) issues.push("memoryApiKey contains a placeholder value");
+    if (hasMemoryApiKey && !hasPlaceholderMemoryApiKey) {
+      return { ready: true, mode: "manual", issues: [] };
+    }
+    return { ready: false, issues };
+  }
+
   if (!hasMemoryModel) issues.push("memoryModel is not configured");
   if (!hasMemoryApiUrl) issues.push("memoryApiUrl is not configured");
   if (!hasMemoryApiKey) issues.push("memoryApiKey is not configured");
@@ -784,7 +871,11 @@ export function initConfig(directory: string): void {
   ];
   const globalConfig = loadConfigFromPaths(CONFIG_FILES);
   const projectConfig = loadConfigFromPaths(projectPaths);
-  const merged: OpenCodeMemConfig = { ...globalConfig, ...projectConfig };
+  assertProjectRemoteProviderConfigIsSafe(projectConfig);
+  const projectOverrides = { ...projectConfig };
+  delete projectOverrides.autoCleanupEnabled;
+  delete projectOverrides.autoCleanupRetentionDays;
+  const merged: OpenCodeMemConfig = { ...globalConfig, ...projectOverrides };
   CONFIG = buildConfig(merged);
 }
 

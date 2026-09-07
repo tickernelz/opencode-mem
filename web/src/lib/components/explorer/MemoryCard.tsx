@@ -1,7 +1,7 @@
 import {
   ArrowDown,
   ArrowUp,
-  Edit3,
+  PenLine,
   Link as LinkIcon,
   MessageCircle,
   Pin,
@@ -126,7 +126,7 @@ export function MemoryCard({
                 </Button>
               )}
               <Button variant="ghost" size="icon-xs" onClick={() => onEdit?.(memory.id)}>
-                <Edit3 className="size-3.5" />
+                <PenLine className="size-3.5" />
               </Button>
               <Button
                 variant="destructive"
@@ -257,7 +257,7 @@ export function MemoryCard({
               </Button>
             )}
             <Button variant="ghost" size="icon-xs" onClick={() => onEdit?.(item.id)}>
-              <Edit3 className="size-3.5" />
+              <PenLine className="size-3.5" />
             </Button>
             <Button
               variant="destructive"

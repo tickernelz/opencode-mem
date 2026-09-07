@@ -109,6 +109,7 @@ export const PendingCleanupSchema = z.object({
 export const AICleanupRequestSchema = z.object({
   userId: z.string().optional(),
   includeIds: z.array(z.string()).optional(),
+  profileVersion: z.number().int().nonnegative().optional(),
 });
 
 export const ApplyCleanupRequestSchema = z.object({

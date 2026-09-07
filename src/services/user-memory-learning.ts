@@ -11,6 +11,50 @@ import { loadOpencodeProvider } from "./ai/opencode-provider-loader.js";
 
 let isLearningRunning = false;
 
+export function shouldRunAutomaticProfileCleanup(
+  previousPromptCount: number,
+  addedPromptCount: number,
+  interval: number = CONFIG.userProfileAutoCleanupInterval
+): boolean {
+  if (!CONFIG.userProfileAutoCleanupEnabled || !Number.isInteger(interval) || interval <= 0) {
+    return false;
+  }
+  return (
+    Math.floor(previousPromptCount / interval) <
+    Math.floor((previousPromptCount + addedPromptCount) / interval)
+  );
+}
+
+async function runAutomaticProfileCleanup(userId: string): Promise<void> {
+  try {
+    const profile = await userProfileManager.getActiveProfile(userId);
+    if (!profile) return;
+    const profileData: UserProfileData = JSON.parse(profile.profileData);
+    const itemCount =
+      profileData.preferences.length + profileData.patterns.length + profileData.workflows.length;
+    if (itemCount < 2) return;
+
+    const { aiCleanupProfile } = await import("./user-profile/ai-cleanup.js");
+    const result = await aiCleanupProfile(profileData);
+    if (result.diff.merged.length === 0 && result.diff.removed.length === 0) return;
+
+    const updated = await userProfileManager.updateProfile(
+      profile.id,
+      result.cleaned,
+      0,
+      `Automatic AI cleanup: ${result.diff.merged.length} merged, ${result.diff.removed.length} removed`
+    );
+    log("user-profile-learning: automatic cleanup complete", {
+      userId,
+      updated,
+      merged: result.diff.merged.length,
+      removed: result.diff.removed.length,
+    });
+  } catch (error) {
+    log("user-profile-learning: automatic cleanup failed", { userId, error: String(error) });
+  }
+}
+
 export async function performUserProfileLearning(
   ctx: PluginInput,
   directory: string
@@ -138,6 +182,7 @@ Rules:
     }
 
     const { raw: llmResult, merged: initialMerged } = analysisResult;
+    let cleanupPreviousPromptCount = 0;
 
     if (existingProfile) {
       let updatedProfileData = initialMerged!;
@@ -163,13 +208,14 @@ Rules:
             profileId: existingProfile.id,
           });
         }
+        cleanupPreviousPromptCount = existingProfile.totalPromptsAnalyzed;
 
         let changeSummary = generateChangeSummary(
           JSON.parse(existingProfile.profileData),
           updatedProfileData
         );
 
-        const validationSummary = applyValidations(
+        const validationSummary = await applyValidations(
           updatedProfileData,
           llmResult,
           existingProfile.id,
@@ -202,7 +248,7 @@ Rules:
           profileId: existingProfile?.id,
           userId,
         });
-        userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
+        await userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
         return;
       }
 
@@ -219,6 +265,10 @@ Rules:
       await userPromptManager.markMultipleAsUserLearningCaptured(prompts.map((p) => p.id));
     }
 
+    if (shouldRunAutomaticProfileCleanup(cleanupPreviousPromptCount, prompts.length)) {
+      await runAutomaticProfileCleanup(userId);
+    }
+
     if (CONFIG.showUserProfileToasts) {
       await ctx.client?.tui
         .showToast({
@@ -231,6 +281,14 @@ Rules:
         })
         .catch(() => {});
     }
+  } catch (error) {
+    // Guard against corrupt stored profileData (JSON.parse throws) and any other
+    // fault: this runs fire-and-forget from the idle timer, so an uncaught rejection
+    // would surface as an unhandled promise rejection. The caller (src/index.ts idle
+    // timer) already wraps this call in its own try/catch, and issue #265 requires
+    // provider errors to propagate instead of being masked, so rethrow after logging.
+    log("user-profile-learning: aborted", { error: String(error) });
+    throw error;
   } finally {
     isLearningRunning = false;
   }
@@ -375,14 +433,136 @@ CRITICAL: Only output observations grounded in the RECENT PROMPTS above. Write d
   return truncate(base);
 }
 
+/** Upper bound for LLM-inferred preference confidence (0–1 scale). */
+export const USER_PROFILE_LLM_CONFIDENCE_MAX = 1;
+
+/** Shared analysis schema for OpenCode structured output and external tool calls. */
+export function createUserProfileAnalysisSchema(z: typeof import("zod").z) {
+  return z.object({
+    preferences: z.array(
+      z.object({
+        category: z.string(),
+        description: z.string(),
+        confidence: z.number().min(0).max(USER_PROFILE_LLM_CONFIDENCE_MAX),
+        evidence: z.array(z.string()),
+      })
+    ),
+    patterns: z.array(
+      z.object({
+        category: z.string(),
+        description: z.string(),
+      })
+    ),
+    workflows: z.array(
+      z.object({
+        description: z.string(),
+        steps: z.array(z.string()),
+      })
+    ),
+    validations: z
+      .array(
+        z.object({
+          index: z.number(),
+          verdict: z.enum([
+            "confirmed",
+            "contradicted",
+            "no_evidence",
+            "inaccurate",
+            "oversimplified",
+          ]),
+          reason: z.string(),
+        })
+      )
+      .optional(),
+  });
+}
+
+export function createUserProfileToolSchema(existingProfile: boolean) {
+  return {
+    type: "function" as const,
+    function: {
+      name: "update_user_profile",
+      description: existingProfile
+        ? "Update existing user profile with new insights"
+        : "Create new user profile",
+      parameters: {
+        type: "object",
+        properties: {
+          preferences: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                category: { type: "string" },
+                description: { type: "string" },
+                confidence: {
+                  type: "number",
+                  minimum: 0,
+                  maximum: USER_PROFILE_LLM_CONFIDENCE_MAX,
+                },
+                evidence: { type: "array", items: { type: "string" }, maxItems: 3 },
+              },
+              required: ["category", "description", "confidence", "evidence"],
+            },
+          },
+          patterns: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                category: { type: "string" },
+                description: { type: "string" },
+              },
+              required: ["category", "description"],
+            },
+          },
+          workflows: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                description: { type: "string" },
+                steps: { type: "array", items: { type: "string" } },
+              },
+              required: ["description", "steps"],
+            },
+          },
+          validations: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                index: { type: "number" },
+                verdict: {
+                  type: "string",
+                  enum: [
+                    "confirmed",
+                    "contradicted",
+                    "no_evidence",
+                    "inaccurate",
+                    "oversimplified",
+                  ],
+                },
+                reason: { type: "string" },
+              },
+              required: ["index", "verdict", "reason"],
+            },
+          },
+        },
+        required: ["preferences", "patterns", "workflows"],
+      },
+    },
+  };
+}
+
 type AnalysisResult = { raw: UserProfileData; merged: UserProfileData | null };
 
-function applyValidations(
+async function applyValidations(
   profileData: UserProfileData,
   llmResult: UserProfileData,
   profileId: string,
   prefKeys?: string[]
-): string | null {
+): Promise<string | null> {
   const validations = (llmResult as any).validations as
     | Array<{
         index: number;
@@ -439,7 +619,12 @@ function applyValidations(
       const evidence = (item as any).evidence;
       if (Array.isArray(evidence) && evidence.length >= 3) {
         const itemType = profileData.preferences.includes(item) ? "preference" : "pattern";
-        userProfileManager.evolveAndUpdate(item, itemType, profileId).catch(() => {});
+        // Await so the in-place description/centroid mutation completes before the
+        // caller serializes updatedProfileData — otherwise the evolved description is
+        // included or lost nondeterministically. Failures stay non-fatal.
+        try {
+          await userProfileManager.evolveAndUpdate(item, itemType, profileId);
+        } catch {}
       }
     } else {
       results.push(`no_evidence [${v.index}] ${v.reason}`);
@@ -460,6 +645,7 @@ async function analyzeUserProfile(
   existingProfile: UserProfile | null
 ): Promise<AnalysisResult | null> {
   log("user-profile-learning: analyze called", { hasProfile: !!existingProfile });
+  let opencodeProviderError: unknown;
   if (CONFIG.opencodeProvider && CONFIG.opencodeModel) {
     log("user-profile-learning: trying opencode provider");
     try {
@@ -484,43 +670,7 @@ CRITICAL: All JSON string values MUST escape double quotes with backslash. Do NO
 Use the update_user_profile tool to save the ${existingProfile ? "updated" : "new"} profile.`;
 
       const { z } = await import("zod");
-      const schema = z.object({
-        preferences: z.array(
-          z.object({
-            category: z.string(),
-            description: z.string(),
-            confidence: z.number().min(0).max(0.5),
-            evidence: z.array(z.string()),
-          })
-        ),
-        patterns: z.array(
-          z.object({
-            category: z.string(),
-            description: z.string(),
-          })
-        ),
-        workflows: z.array(
-          z.object({
-            description: z.string(),
-            steps: z.array(z.string()),
-          })
-        ),
-        validations: z
-          .array(
-            z.object({
-              index: z.number(),
-              verdict: z.enum([
-                "confirmed",
-                "contradicted",
-                "no_evidence",
-                "inaccurate",
-                "oversimplified",
-              ]),
-              reason: z.string(),
-            })
-          )
-          .optional(),
-      });
+      const schema = createUserProfileAnalysisSchema(z);
 
       log("user-profile-learning: calling LLM", { contextLen: context.length });
 
@@ -558,6 +708,7 @@ Use the update_user_profile tool to save the ${existingProfile ? "updated" : "ne
       }
       return { raw: rawData, merged: null };
     } catch (e) {
+      opencodeProviderError = e;
       log("user-profile-learning: opencode provider failed, falling back to external API", {
         error: String(e),
       });
@@ -565,6 +716,9 @@ Use the update_user_profile tool to save the ${existingProfile ? "updated" : "ne
   }
 
   if (!CONFIG.memoryModel || !CONFIG.memoryApiUrl) {
+    if (opencodeProviderError) {
+      throw opencodeProviderError;
+    }
     log("User Profile Config Check Failed:", {
       memoryModel: CONFIG.memoryModel,
       memoryApiUrl: CONFIG.memoryApiUrl,
@@ -589,77 +743,7 @@ CRITICAL: All JSON string values MUST escape double quotes with backslash. Do NO
 
 Use the update_user_profile tool to save the ${existingProfile ? "updated" : "new"} profile.`;
 
-  const toolSchema = {
-    type: "function" as const,
-    function: {
-      name: "update_user_profile",
-      description: existingProfile
-        ? "Update existing user profile with new insights"
-        : "Create new user profile",
-      parameters: {
-        type: "object",
-        properties: {
-          preferences: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                category: { type: "string" },
-                description: { type: "string" },
-                confidence: { type: "number", minimum: 0, maximum: 0.5 },
-                evidence: { type: "array", items: { type: "string" }, maxItems: 3 },
-              },
-              required: ["category", "description", "confidence", "evidence"],
-            },
-          },
-          patterns: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                category: { type: "string" },
-                description: { type: "string" },
-              },
-              required: ["category", "description"],
-            },
-          },
-          workflows: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                description: { type: "string" },
-                steps: { type: "array", items: { type: "string" } },
-              },
-              required: ["description", "steps"],
-            },
-          },
-          validations: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                index: { type: "number" },
-                verdict: {
-                  type: "string",
-                  enum: [
-                    "confirmed",
-                    "contradicted",
-                    "no_evidence",
-                    "inaccurate",
-                    "oversimplified",
-                  ],
-                },
-                reason: { type: "string" },
-              },
-              required: ["index", "verdict", "reason"],
-            },
-          },
-        },
-        required: ["preferences", "patterns", "workflows"],
-      },
-    },
-  };
+  const toolSchema = createUserProfileToolSchema(Boolean(existingProfile));
 
   const result = await provider.executeToolCall(
     systemPrompt,

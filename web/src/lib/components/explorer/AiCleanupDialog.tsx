@@ -154,7 +154,7 @@ export function AiCleanupDialog({ open = false, profile = null, onOpenChange, on
     const result = await fetchAPI<PendingCleanup>("/api/user-profile/ai-cleanup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ includeIds: ids }),
+      body: JSON.stringify({ includeIds: ids, profileVersion: profile?.version }),
       timeout: 180000,
     });
     if (!result.success || !result.data) {

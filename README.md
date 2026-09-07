@@ -83,10 +83,10 @@ You do **not** need to ask OpenCode to “remember” things for the plugin to w
 
 ### Automatic vs manual memory
 
-| Approach                                               | When it runs                                        | What you do                                  |
-| ------------------------------------------------------ | --------------------------------------------------- | -------------------------------------------- |
-| **Auto-capture** (`autoCaptureEnabled: true`, default) | After conversation turns when the session goes idle | Nothing — extraction is automatic            |
-| **Manual** `memory` tool / commands                    | On demand                                           | `add`, `search`, `list`, `profile`, `forget` |
+| Approach                                               | When it runs                                        | What you do                                                                                |
+| ------------------------------------------------------ | --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| **Auto-capture** (`autoCaptureEnabled: true`, default) | After conversation turns when the session goes idle | Nothing — extraction is automatic                                                          |
+| **Manual** `memory` tool / commands                    | On demand                                           | `add`, `search`, `list`, `profile`, `forget`, `list-shards`, `migrate`, `export`, `import` |
 
 Manual search/add/list still work even if auto-capture has no provider configured. Auto-capture and user profile learning need a provider that can return structured/tool-call output.
 
@@ -120,6 +120,10 @@ memory({ mode: "search", query: "architecture decisions" });
 memory({ mode: "search", query: "architecture decisions", scope: "all-projects" });
 memory({ mode: "profile" });
 memory({ mode: "list", limit: 10 });
+memory({ mode: "list-shards" });
+memory({ mode: "migrate", fromPath: "/old/path/to/project" });
+memory({ mode: "export", outputPath: "./memories.json" });
+memory({ mode: "import", inputPath: "./memories.json" });
 ```
 
 Access the web interface at `http://127.0.0.1:4747` for visual memory browsing and management.
@@ -303,6 +307,72 @@ sub-repo's own git remote is intentionally ignored (it would describe only one
 nested repository). Without a marker, behavior is unchanged (git-based
 identity).
 
+### Moving or Recovering Project Memories
+
+opencode-mem keys project shards by a hash of the project identity. Moving a
+repository (OS migration, path reorganization, switching from a Windows mount
+to a native path) can therefore orphan the old shard under
+`~/.opencode-mem/data/projects/` while a new empty shard is created for the
+new path.
+
+These are OpenCode `memory` tool calls with JSON arguments, not commands to
+run in a terminal. The issue-style `memory migrate --from ...` notation maps
+to `memory({ mode: "migrate", fromPath: "..." })`.
+
+**1. Local move when you still know the old path**
+
+Open OpenCode in the **new** project directory. The target project must not
+already contain memories (migration aborts unchanged on conflict). Preview the
+detected source, destination, and file actions before changing anything:
+
+```typescript
+memory({ mode: "migrate", fromPath: "/old/path/to/project", dryRun: true });
+memory({ mode: "migrate", fromPath: "/old/path/to/project" });
+```
+
+For safety, migration refuses a source whose stored project directory still
+exists. If you intentionally want to move an active source, inspect the dry-run
+output first and then pass `allowLinkedSource: true`. Original source shard
+files are retained as timestamped `*.pre-path-migrate-*.bak` backups.
+
+**2. Old path is gone — discover the orphaned shard first**
+
+```typescript
+memory({ mode: "list-shards" });
+memory({ mode: "migrate", fromHash: "fa645294d88bbae2" });
+```
+
+`list-shards` reports each project hash, stored `projectPath`, memory count,
+and status (`current`, `linked`, `orphaned`, `missing-file`, `empty`, or
+`ambiguous`). `fromHash` is the 16-character lowercase hexadecimal `scopeHash`
+returned by this call. Prefer it when the old directory no longer exists or
+multiple shards contain the same stored path, because git-based identities
+cannot always be recomputed from a missing path.
+
+**3. Cross-machine backup / restore**
+
+```typescript
+// on the source machine / old checkout
+memory({ mode: "export", outputPath: "./memories.json" });
+
+// on the destination machine / new checkout
+memory({ mode: "import", inputPath: "./memories.json", dryRun: true });
+memory({ mode: "import", inputPath: "./memories.json" });
+```
+
+Export writes a versioned JSON document without vectors. Import remaps the
+memories onto the current project and recomputes embeddings with the currently
+configured model. Import adds memories to an existing project, but duplicate
+memory IDs abort the whole import before writing; this differs from `migrate`,
+which requires an empty target.
+
+Export files are plaintext and can contain memory content, user names/email
+addresses, repository URLs, and absolute project paths. Store them like other
+sensitive backups and delete them when no longer needed. Fully private entries
+are omitted, and user profiles and prompt history are not included. The
+document contains `schemaVersion: 1`; imports reject newer unsupported schema
+versions rather than guessing.
+
 ### Auto-Capture AI Provider
 
 Auto-capture runs a background AI request to summarize technical work and save it as memory. It needs one of the provider configurations below.
@@ -345,6 +415,12 @@ Manual `memoryProvider` modes:
 - `openai-responses`: OpenAI Responses API with function-call output.
 - `anthropic`: Anthropic Messages API with tool use.
 - `minimax`: MiniMax Anthropic Messages-compatible endpoint. Set `memoryApiUrl` to the global endpoint (`https://api.minimax.io`) or the China endpoint (`https://api.minimaxi.com`); the `/anthropic/v1/messages` path and `x-api-key` header are applied automatically. MiniMax text models such as `MiniMax-M3` support the adaptive thinking modes used by this plugin via `memoryExtraParams`.
+- `orcarouter`: OpenAI-compatible model gateway with namespaced model IDs. `memoryApiUrl` and `memoryModel` are optional — they default to `https://api.orcarouter.ai/v1` and `orcarouter/auto` (a routing alias that selects a capable model per request). If you set `memoryModel`, use a namespaced ID such as `openai/gpt-5.5` or `deepseek/deepseek-v4-flash`; OrcaRouter rejects bare model names. Example:
+  ```jsonc
+  "memoryProvider": "orcarouter",
+  "memoryApiKey": "<OrcaRouter API key>",
+  ```
+  [OrcaRouter](https://www.orcarouter.ai) also runs gateway-level, zero-trust security for AI agents on the same endpoint — screening every prompt/response and governing every tool call on a default-deny basis, with no application code changes.
 
 Troubleshooting:
 

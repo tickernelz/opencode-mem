@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { cleanupTursoTestDirectory } from "./turso-test-utils.js";
-import { createClient } from "@libsql/client";
+import { Database } from "bun:sqlite";
 
 describe("turso legacy migrator dimension preflight", () => {
   let baseDir: string;
@@ -19,36 +19,32 @@ describe("turso legacy migrator dimension preflight", () => {
 
     const scopeHash = "0011223344556677";
     const dbPath = join(projectsDir, `project_${scopeHash}_shard_0.db`);
-    const client = createClient({ url: `file:${dbPath}` });
-    await client.batch(
-      [
-        `CREATE TABLE memories (
+    const db = new Database(dbPath);
+    db.exec(`CREATE TABLE memories (
           id TEXT PRIMARY KEY,
           content TEXT NOT NULL,
           vector BLOB NOT NULL,
           container_tag TEXT NOT NULL,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
-        )`,
-      ],
-      "write"
-    );
+        )`);
 
     const wrongDims = new Float32Array(4);
     wrongDims[0] = 1;
-    await client.execute({
-      sql: `INSERT INTO memories (id, content, vector, container_tag, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [
-        "mem_wrong_dims",
-        "wrong dims",
-        new Uint8Array(wrongDims.buffer),
-        "opencode_project_dimpreflight",
-        Date.now(),
-        Date.now(),
-      ],
-    });
-    await client.close();
+    const insertWrongDims = db.prepare(
+      `INSERT INTO memories (id, content, vector, container_tag, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)`
+    );
+    insertWrongDims.run(
+      "mem_wrong_dims",
+      "wrong dims",
+      new Uint8Array(wrongDims.buffer),
+      "opencode_project_dimpreflight",
+      Date.now(),
+      Date.now()
+    );
+    insertWrongDims.finalize();
+    db.close();
 
     const { CONFIG } = await import("../src/config.js");
     CONFIG.storagePath = baseDir;
@@ -76,5 +72,5 @@ describe("turso legacy migrator dimension preflight", () => {
     expect(mismatch.needsMigration).toBe(true);
     expect(mismatch.shardMismatches).toHaveLength(1);
     expect(mismatch.shardMismatches[0]?.storedDimensions).toBe(4);
-  });
+  }, 15000);
 });

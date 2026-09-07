@@ -3,7 +3,7 @@ import {
   Activity,
   ArrowRight,
   Heart,
-  History,
+  RotateCcwClock,
   Info,
   Pencil,
   RefreshCw,
@@ -255,7 +255,7 @@ export function ProfileView({ profile, loading = false, onRefresh, onCleanup }: 
                 {t("btn-refresh")}
               </Button>
               <Button variant="secondary" size="sm" onClick={() => setChangelogOpen(true)}>
-                <History className="size-3.5" />
+                <RotateCcwClock className="size-3.5" />
                 History
               </Button>
             </div>

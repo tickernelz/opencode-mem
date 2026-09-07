@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import {
   CircleCheckIcon,
   InfoIcon,
-  Loader2Icon,
+  LoaderCircleIcon,
   OctagonXIcon,
   TriangleAlertIcon,
 } from "lucide-react";
@@ -24,7 +24,7 @@ function Toaster({ ...props }: ToasterProps) {
         } as CSSProperties
       }
       icons={{
-        loading: <Loader2Icon className="size-4 animate-spin" />,
+        loading: <LoaderCircleIcon className="size-4 animate-spin" />,
         success: <CircleCheckIcon className="size-4" />,
         error: <OctagonXIcon className="size-4" />,
         info: <InfoIcon className="size-4" />,

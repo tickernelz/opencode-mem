@@ -88,6 +88,7 @@ import { mock } from "bun:test";
 const promptCalls = [];
 const deleteCalls = [];
 let externalFetchCalled = false;
+let externalRequestBody = null;
 
 const cleanupJson = JSON.stringify({
   preferences: [{ id: "pref_0", category: "style", description: "Prefer concise answers" }],
@@ -107,6 +108,15 @@ mock.module(${JSON.stringify(configUrl)}, () => ({
     memoryModel: ${withExternalApi ? '"gpt-ext"' : "undefined"},
     memoryApiUrl: ${withExternalApi ? '"http://example.test/v1"' : "undefined"},
     memoryApiKey: "test-key",
+    memoryExtraParams: {
+      enable_thinking: false,
+      top_p: 0.7,
+      stream: true,
+      model: "must-not-override",
+      messages: [{ role: "user", content: "must-not-override" }],
+      temperature: 0.9,
+      response_format: { type: "text" },
+    },
   },
 }));
 
@@ -141,8 +151,9 @@ mock.module(${JSON.stringify(opencodeProviderLoaderUrl)}, () => ({
 }));
 
 if (${withExternalApi}) {
-  globalThis.fetch = async () => {
+  globalThis.fetch = async (_url, init) => {
     externalFetchCalled = true;
+    externalRequestBody = JSON.parse(String(init?.body));
     return {
       ok: true,
       status: 200,
@@ -178,6 +189,7 @@ console.log(
     promptCalls,
     deleteCalls,
     externalFetchCalled,
+    externalRequestBody,
     kept: result?.diff?.kept ?? null,
     removed: result?.diff?.removed?.map((r) => r.id) ?? null,
     noReply: promptCalls[0]?.noReply,
@@ -243,5 +255,14 @@ describe("AI cleanup opencode provider path (#177)", () => {
     expect(result.parsed?.errorMessage).toBeNull();
     expect(result.parsed?.externalFetchCalled).toBe(true);
     expect(result.parsed?.kept).toEqual(["Prefer concise answers"]);
+    expect(result.parsed?.externalRequestBody).toMatchObject({
+      model: "gpt-ext",
+      temperature: 0.3,
+      response_format: { type: "json_object" },
+      enable_thinking: false,
+      top_p: 0.7,
+    });
+    expect(result.parsed?.externalRequestBody?.stream).toBeUndefined();
+    expect(result.parsed?.externalRequestBody?.messages).toHaveLength(2);
   });
 });

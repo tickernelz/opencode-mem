@@ -47,12 +47,22 @@ export function tryExtractScopeFromContainerTag(
   }
 }
 
+export interface MemoryScopeRef {
+  scope: "user" | "project";
+  hash: string;
+}
+
 export function resolveMemoryScope(
   scope: "project" | "all-projects",
   containerTag: string
-): { scope: "user" | "project"; hash: string } {
+): MemoryScopeRef[] {
+  // "all-projects" must span both canonical scopes: user-scope memories live in
+  // user shards and would be silently excluded if only project shards were walked.
   if (scope === "all-projects") {
-    return { scope: "project", hash: "" };
+    return [
+      { scope: "user", hash: "" },
+      { scope: "project", hash: "" },
+    ];
   }
-  return extractScopeFromContainerTag(containerTag);
+  return [extractScopeFromContainerTag(containerTag)];
 }

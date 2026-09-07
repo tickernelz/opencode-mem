@@ -2,6 +2,7 @@ import type { ProviderConfig } from "./providers/base-provider.js";
 import { isPlaceholderApiKey } from "./api-key-placeholder.js";
 
 interface MemoryProviderRuntimeConfig {
+  memoryProvider?: string;
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
@@ -25,8 +26,12 @@ export function buildMemoryProviderConfig(
   const memoryApiKey = config.memoryApiKey;
   const issues: string[] = [];
 
-  if (!memoryModel) issues.push("missing memoryModel");
-  if (!memoryApiUrl) issues.push("missing memoryApiUrl");
+  // The orcarouter provider presets its own endpoint and default model, so
+  // memoryModel / memoryApiUrl are optional there. An API key is always required.
+  const isOrcaRouter = config.memoryProvider === "orcarouter";
+
+  if (!memoryModel && !isOrcaRouter) issues.push("missing memoryModel");
+  if (!memoryApiUrl && !isOrcaRouter) issues.push("missing memoryApiUrl");
   if (!memoryApiKey) issues.push("missing memoryApiKey");
   if (isPlaceholderApiKey(memoryApiKey)) issues.push("replace the placeholder memoryApiKey value");
 

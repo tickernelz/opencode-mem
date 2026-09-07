@@ -236,13 +236,13 @@ export class TursoVectorSearch {
           ? `
           SELECT m.id AS id, vector_distance_cos(m.${columnName}, vector32(?)) AS dist
           FROM vector_top_k('${indexName}', vector32(?), ?) AS v
-          JOIN memories m ON m.rowid = v.id
+          CROSS JOIN memories m ON m.rowid = v.id
           WHERE m.${columnName} IS NOT NULL
         `
           : `
           SELECT m.id AS id, vector_distance_cos(m.${columnName}, vector32(?)) AS dist
           FROM vector_top_k('${indexName}', vector32(?), ?) AS v
-          JOIN memories m ON m.rowid = v.id
+          CROSS JOIN memories m ON m.rowid = v.id
           WHERE m.${columnName} IS NOT NULL AND m.container_tag = ?
         `,
         containerTag === "" ? [queryJson, queryJson, k] : [queryJson, queryJson, k, containerTag]
@@ -461,6 +461,58 @@ export class TursoVectorSearch {
         git_repo_url
       FROM memories
     `);
+  }
+
+  async getProjectPathCounts(
+    db: TursoDb
+  ): Promise<Array<{ projectPath: string; count: number; containerTag: string | null }>> {
+    const rows = await db.all(`
+      SELECT
+        project_path AS project_path,
+        container_tag AS container_tag,
+        COUNT(*) AS cnt
+      FROM memories
+      WHERE project_path IS NOT NULL AND project_path != ''
+      GROUP BY project_path, container_tag
+      ORDER BY cnt DESC, project_path ASC
+    `);
+    return rows.map((row) => ({
+      projectPath: String(row.project_path),
+      count: Number(row.cnt ?? 0),
+      containerTag: row.container_tag ? String(row.container_tag) : null,
+    }));
+  }
+
+  async updateProjectAssociation(
+    db: TursoDb,
+    oldContainerTag: string,
+    update: {
+      containerTag: string;
+      projectPath?: string;
+      projectName?: string;
+      displayName?: string;
+      gitRepoUrl?: string | null;
+    }
+  ): Promise<number> {
+    return db.run(
+      `
+      UPDATE memories SET
+        container_tag = ?,
+        project_path = ?,
+        project_name = ?,
+        display_name = ?,
+        git_repo_url = ?
+      WHERE container_tag = ?
+    `,
+      [
+        update.containerTag,
+        update.projectPath ?? null,
+        update.projectName ?? null,
+        update.displayName ?? null,
+        update.gitRepoUrl ?? null,
+        oldContainerTag,
+      ]
+    );
   }
 
   async pinMemory(db: TursoDb, memoryId: string): Promise<void> {

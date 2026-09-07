@@ -16,6 +16,14 @@ export {
   UserProfileSchema,
 } from "./schemas.js";
 
+export {
+  ExportedMemorySchema,
+  MemoryExportDocumentSchema,
+  PORTABILITY_SCHEMA_VERSION,
+} from "./portability-schemas.js";
+
+export type { ExportedMemory, MemoryExportDocument } from "./portability-schemas.js";
+
 export type {
   AddMemoryRequest,
   AICleanupRequest,

@@ -3,7 +3,13 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { cleanupTursoTestDirectory } from "./turso-test-utils.js";
-import { createClient } from "@libsql/client";
+import { Database } from "bun:sqlite";
+
+// Each test runs the real migration: file renames behind prod's bounded
+// file-lock retry can legitimately exceed the 5s default on loaded Windows.
+const MIGRATION_TEST_TIMEOUT = 15000;
+const migrationTest = (name: string, fn: () => void | Promise<void>) =>
+  it(name, fn, MIGRATION_TEST_TIMEOUT);
 
 describe("turso legacy migrator", () => {
   let baseDir: string;
@@ -18,12 +24,10 @@ describe("turso legacy migrator", () => {
     memories: Array<{ id: string; vector: Float32Array; content: string; containerTag: string }>
   ): Promise<string> {
     const dbPath = join(dir, fileName);
-    const client = createClient({ url: `file:${dbPath}` });
+    const db = new Database(dbPath);
     const dims = memories[0]?.vector.length ?? 768;
 
-    await client.batch(
-      [
-        `CREATE TABLE memories (
+    db.exec(`CREATE TABLE memories (
           id TEXT PRIMARY KEY,
           content TEXT NOT NULL,
           vector BLOB NOT NULL,
@@ -41,25 +45,23 @@ describe("turso legacy migrator", () => {
           project_name TEXT,
           git_repo_url TEXT,
           is_pinned INTEGER DEFAULT 0
-        )`,
-      ],
-      "write"
-    );
+        )`);
 
+    const insert = db.prepare(
+      `INSERT INTO memories (id, content, vector, container_tag, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?)`
+    );
     for (const memory of memories) {
       const blob = new Uint8Array(memory.vector.buffer);
-      await client.execute({
-        sql: `INSERT INTO memories (id, content, vector, container_tag, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?)`,
-        args: [memory.id, memory.content, blob, memory.containerTag, Date.now(), Date.now()],
-      });
+      insert.run(memory.id, memory.content, blob, memory.containerTag, Date.now(), Date.now());
     }
 
-    await client.close();
+    insert.finalize();
+    db.close();
     return dbPath;
   }
 
-  it("migrates legacy shard and writes sidecar plus global marker", async () => {
+  migrationTest("migrates legacy shard and writes sidecar plus global marker", async () => {
     baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-"));
     const projectsDir = join(baseDir, "projects");
     mkdirSync(projectsDir, { recursive: true });
@@ -103,7 +105,7 @@ describe("turso legacy migrator", () => {
     expect(registered[0]?.vectorCount).toBe(1);
   });
 
-  it("resumes from backup after interrupted migration", async () => {
+  migrationTest("resumes from backup after interrupted migration", async () => {
     baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-resume-"));
     const projectsDir = join(baseDir, "projects");
     mkdirSync(projectsDir, { recursive: true });
@@ -153,74 +155,73 @@ describe("turso legacy migrator", () => {
     expect(String(restored?.content)).toBe("resume me");
   });
 
-  it("does not skip migration when marker exists but shard sidecar is incomplete", async () => {
-    baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-marker-"));
-    const projectsDir = join(baseDir, "projects");
-    mkdirSync(projectsDir, { recursive: true });
+  migrationTest(
+    "does not skip migration when marker exists but shard sidecar is incomplete",
+    async () => {
+      baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-marker-"));
+      const projectsDir = join(baseDir, "projects");
+      mkdirSync(projectsDir, { recursive: true });
 
-    const vector = new Float32Array(768);
-    vector[0] = 1;
-    await createLegacyShard(projectsDir, "project_marker_shard_0.db", [
-      {
-        id: "mem_marker_1",
-        vector,
-        content: "marker test",
-        containerTag: "opencode_project_marker",
-      },
-    ]);
+      const vector = new Float32Array(768);
+      vector[0] = 1;
+      await createLegacyShard(projectsDir, "project_marker_shard_0.db", [
+        {
+          id: "mem_marker_1",
+          vector,
+          content: "marker test",
+          containerTag: "opencode_project_marker",
+        },
+      ]);
 
-    writeFileSync(
-      join(baseDir, ".turso-migrated"),
-      JSON.stringify({ completedAt: new Date().toISOString(), shards: [] }),
-      "utf-8"
-    );
+      writeFileSync(
+        join(baseDir, ".turso-migrated"),
+        JSON.stringify({ completedAt: new Date().toISOString(), shards: [] }),
+        "utf-8"
+      );
 
-    const { CONFIG } = await import("../src/config.js");
-    CONFIG.storagePath = baseDir;
-    CONFIG.embeddingDimensions = 768;
+      const { CONFIG } = await import("../src/config.js");
+      CONFIG.storagePath = baseDir;
+      CONFIG.embeddingDimensions = 768;
 
-    const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
-    await runLegacyTursoMigration();
+      const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
+      await runLegacyTursoMigration();
 
-    const sidecarPath = join(projectsDir, "project_marker_shard_0.db.turso-migrate.json");
-    expect(existsSync(sidecarPath)).toBe(true);
-    const sidecar = JSON.parse(readFileSync(sidecarPath, "utf-8"));
-    expect(sidecar.status).toBe("complete");
-  });
+      const sidecarPath = join(projectsDir, "project_marker_shard_0.db.turso-migrate.json");
+      expect(existsSync(sidecarPath)).toBe(true);
+      const sidecar = JSON.parse(readFileSync(sidecarPath, "utf-8"));
+      expect(sidecar.status).toBe("complete");
+    }
+  );
 
-  it("aborts migration when legacy vector blob is unreadable", async () => {
+  migrationTest("aborts migration when legacy vector blob is unreadable", async () => {
     baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-corrupt-"));
     const projectsDir = join(baseDir, "projects");
     mkdirSync(projectsDir, { recursive: true });
 
     const dbPath = join(projectsDir, "project_corrupt_shard_0.db");
-    const client = createClient({ url: `file:${dbPath}` });
-    await client.batch(
-      [
-        `CREATE TABLE memories (
+    const db = new Database(dbPath);
+    db.exec(`CREATE TABLE memories (
           id TEXT PRIMARY KEY,
           content TEXT NOT NULL,
           vector BLOB NOT NULL,
           container_tag TEXT NOT NULL,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
-        )`,
-      ],
-      "write"
+        )`);
+    const insertCorrupt = db.prepare(
+      `INSERT INTO memories (id, content, vector, container_tag, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)`
     );
-    await client.execute({
-      sql: `INSERT INTO memories (id, content, vector, container_tag, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [
-        "mem_corrupt_1",
-        "bad vector",
-        new Uint8Array([1, 2, 3]),
-        "opencode_project_corrupt",
-        Date.now(),
-        Date.now(),
-      ],
-    });
-    await client.close();
+    insertCorrupt.run(
+      "mem_corrupt_1",
+      "bad vector",
+      new Uint8Array([1, 2, 3]),
+      "opencode_project_corrupt",
+      Date.now(),
+      Date.now()
+    );
+    insertCorrupt.finalize();
+    db.close();
 
     const { CONFIG } = await import("../src/config.js");
     CONFIG.storagePath = baseDir;
@@ -232,7 +233,7 @@ describe("turso legacy migrator", () => {
     expect(existsSync(join(baseDir, ".turso-migrated"))).toBe(false);
   });
 
-  it("does not skip migration when complete sidecar lacks vector index", async () => {
+  migrationTest("does not skip migration when complete sidecar lacks vector index", async () => {
     baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-fake-sidecar-"));
     const projectsDir = join(baseDir, "projects");
     mkdirSync(projectsDir, { recursive: true });
@@ -282,76 +283,84 @@ describe("turso legacy migrator", () => {
     expect(String(probe?.extracted || "").length).toBeGreaterThan(0);
   });
 
-  it("does not skip migration when index exists but embedding dimensions mismatch", async () => {
-    baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-dims-mismatch-"));
-    const projectsDir = join(baseDir, "projects");
-    mkdirSync(projectsDir, { recursive: true });
+  migrationTest(
+    "does not skip migration when index exists but embedding dimensions mismatch",
+    async () => {
+      baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-dims-mismatch-"));
+      const projectsDir = join(baseDir, "projects");
+      mkdirSync(projectsDir, { recursive: true });
 
-    const scopeHash = "d1d2d3d4e5f67890";
-    const { CONFIG } = await import("../src/config.js");
-    CONFIG.storagePath = baseDir;
-    CONFIG.embeddingDimensions = 768;
+      const scopeHash = "d1d2d3d4e5f67890";
+      const { CONFIG } = await import("../src/config.js");
+      CONFIG.storagePath = baseDir;
+      CONFIG.embeddingDimensions = 768;
 
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+      const { tursoConnectionManager } =
+        await import("../src/services/turso/connection-manager.js");
+      const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+      const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
 
-    const shard = await tursoShardManager.createShard("project", scopeHash, 0);
-    const db = await tursoConnectionManager.getConnection(shard.dbPath);
-    const vector = new Float32Array(768);
-    vector[0] = 1;
-    await tursoVectorSearch.insertVector(db, {
-      id: "mem_dims_mismatch_1",
-      content: "turso shard with wrong metadata dims",
-      vector,
-      containerTag: `opencode_project_${scopeHash}`,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-    await db.run(
-      `INSERT OR REPLACE INTO shard_metadata (key, value) VALUES ('embedding_dimensions', ?)`,
-      ["384"]
-    );
-    await tursoConnectionManager.closeConnection(shard.dbPath);
+      const shard = await tursoShardManager.createShard("project", scopeHash, 0);
+      const db = await tursoConnectionManager.getConnection(shard.dbPath);
+      const vector = new Float32Array(768);
+      vector[0] = 1;
+      await tursoVectorSearch.insertVector(db, {
+        id: "mem_dims_mismatch_1",
+        content: "turso shard with wrong metadata dims",
+        vector,
+        containerTag: `opencode_project_${scopeHash}`,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      await db.run(
+        `INSERT OR REPLACE INTO shard_metadata (key, value) VALUES ('embedding_dimensions', ?)`,
+        ["384"]
+      );
+      await tursoConnectionManager.closeConnection(shard.dbPath);
 
-    const sidecarPath = `${shard.dbPath}.turso-migrate.json`;
-    if (existsSync(sidecarPath)) {
-      rmSync(sidecarPath);
+      const sidecarPath = `${shard.dbPath}.turso-migrate.json`;
+      if (existsSync(sidecarPath)) {
+        rmSync(sidecarPath);
+      }
+
+      const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
+      await runLegacyTursoMigration();
+
+      expect(existsSync(`${shard.dbPath}.legacy.bak`)).toBe(true);
+      const sidecar = JSON.parse(readFileSync(sidecarPath, "utf-8"));
+      expect(sidecar.status).toBe("complete");
+
+      const migratedDb = await tursoConnectionManager.getConnection(shard.dbPath);
+      const meta = await migratedDb.get(
+        `SELECT value FROM shard_metadata WHERE key = 'embedding_dimensions'`
+      );
+      expect(Number(meta?.value)).toBe(768);
     }
+  );
 
-    const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
-    await runLegacyTursoMigration();
+  migrationTest(
+    "repairs the active shard flag while reconciling an existing registry",
+    async () => {
+      baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-registry-"));
+      const scopeHash = "1122334455667788";
 
-    expect(existsSync(`${shard.dbPath}.legacy.bak`)).toBe(true);
-    const sidecar = JSON.parse(readFileSync(sidecarPath, "utf-8"));
-    expect(sidecar.status).toBe("complete");
+      const { CONFIG } = await import("../src/config.js");
+      CONFIG.storagePath = baseDir;
+      CONFIG.embeddingDimensions = 4;
 
-    const migratedDb = await tursoConnectionManager.getConnection(shard.dbPath);
-    const meta = await migratedDb.get(
-      `SELECT value FROM shard_metadata WHERE key = 'embedding_dimensions'`
-    );
-    expect(Number(meta?.value)).toBe(768);
-  });
+      const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+      const { tursoConnectionManager } =
+        await import("../src/services/turso/connection-manager.js");
+      const shard = await tursoShardManager.createShard("project", scopeHash, 0);
+      const metadataDb = await tursoConnectionManager.getConnection(join(baseDir, "metadata.db"));
+      await metadataDb.run(`UPDATE shards SET is_active = 0 WHERE id = ?`, [shard.id]);
 
-  it("repairs the active shard flag while reconciling an existing registry", async () => {
-    baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-registry-"));
-    const scopeHash = "1122334455667788";
+      const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
+      await runLegacyTursoMigration();
 
-    const { CONFIG } = await import("../src/config.js");
-    CONFIG.storagePath = baseDir;
-    CONFIG.embeddingDimensions = 4;
-
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const shard = await tursoShardManager.createShard("project", scopeHash, 0);
-    const metadataDb = await tursoConnectionManager.getConnection(join(baseDir, "metadata.db"));
-    await metadataDb.run(`UPDATE shards SET is_active = 0 WHERE id = ?`, [shard.id]);
-
-    const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
-    await runLegacyTursoMigration();
-
-    const active = await tursoShardManager.getActiveShard("project", scopeHash);
-    expect(active?.id).toBe(shard.id);
-    expect(active?.isActive).toBe(true);
-  });
+      const active = await tursoShardManager.getActiveShard("project", scopeHash);
+      expect(active?.id).toBe(shard.id);
+      expect(active?.isActive).toBe(true);
+    }
+  );
 });

@@ -2,6 +2,11 @@ import type { UserProfileData } from "./types.js";
 import { CONFIG } from "../../config.js";
 import { log } from "../logger.js";
 import { loadOpencodeProvider } from "../ai/opencode-provider-loader.js";
+import {
+  EXTERNAL_PROFILE_CLEANUP_TIMEOUT_MS,
+  OPENCODE_PROFILE_CLEANUP_TIMEOUT_MS,
+} from "../request-timeouts.js";
+import { applySafeExtraParams } from "../ai/providers/base-provider.js";
 
 export interface AICleanupResult {
   cleaned: UserProfileData;
@@ -36,7 +41,7 @@ export async function aiCleanupProfile(profileData: UserProfileData): Promise<AI
   const counters = { cleaned: 0, original: 0 };
 
   const cleaned = rebuildProfileUsing(result.mapping, cleanedById, originalById, counters);
-  const diff = generateDiff(indexed, result.mapping);
+  const diff = generateDiff(indexed, result.mapping, cleanedById);
 
   const sampleCleaned = result.profile.preferences[0];
   log("AI cleanup: rebuild done", {
@@ -85,7 +90,7 @@ export async function aiCleanupProfileFromIndexed(
   const counters = { cleaned: 0, original: 0 };
 
   const cleaned = rebuildProfileUsing(result.mapping, cleanedById, originalById, counters);
-  const diff = generateDiff(indexed, result.mapping);
+  const diff = generateDiff(indexed, result.mapping, cleanedById);
 
   log("AI cleanup: complete (filtered)", {
     totalMs: Date.now() - t0,
@@ -129,6 +134,29 @@ interface AIMapping {
   kept: string[];
   merged: string[][];
   removed: string[];
+}
+
+// The model controls this JSON; it may omit fields or return wrong types. Coerce to a
+// well-formed AIMapping so rebuildProfileUsing/generateDiff never call .map/.filter/.includes
+// on undefined. A missing or malformed mapping degrades to a no-op cleanup (all originals are
+// preserved as "unmentioned") rather than aborting or corrupting the profile.
+function normalizeAIMapping(raw: any): AIMapping {
+  if (!raw || typeof raw !== "object") {
+    log("AI cleanup: response missing valid mapping; treating as no-op", {
+      mappingType: typeof raw,
+    });
+    return { kept: [], merged: [], removed: [] };
+  }
+  const isStr = (x: any): x is string => typeof x === "string";
+  const kept = Array.isArray(raw.kept) ? raw.kept.filter(isStr) : [];
+  const merged = Array.isArray(raw.merged)
+    ? raw.merged
+        .filter((g: any): g is any[] => Array.isArray(g))
+        .map((g: any[]) => g.filter(isStr))
+        .filter((g: string[]) => g.length > 0)
+    : [];
+  const removed = Array.isArray(raw.removed) ? raw.removed.filter(isStr) : [];
+  return { kept, merged, removed };
 }
 
 function addIdsToProfile(profile: UserProfileData): IndexedProfile {
@@ -215,22 +243,29 @@ async function callViaExternalAPI(
   const systemPrompt =
     "You are a user profile cleanup assistant. Merge duplicate entries and return only JSON.";
 
+  const requestBody: Record<string, unknown> = {};
+  if (CONFIG.memoryExtraParams) {
+    applySafeExtraParams(requestBody, CONFIG.memoryExtraParams);
+  }
+
+  Object.assign(requestBody, {
+    model: CONFIG.memoryModel,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: prompt },
+    ],
+    temperature: 0.3,
+    response_format: { type: "json_object" },
+  });
+
   const response = await fetch(`${CONFIG.memoryApiUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${CONFIG.memoryApiKey}`,
     },
-    body: JSON.stringify({
-      model: CONFIG.memoryModel,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.3,
-      response_format: { type: "json_object" },
-    }),
-    signal: AbortSignal.timeout(60000),
+    body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(EXTERNAL_PROFILE_CLEANUP_TIMEOUT_MS),
   });
 
   log("AI cleanup: external API http done", { httpMs: Date.now() - t0, status: response.status });
@@ -251,12 +286,9 @@ async function callViaExternalAPI(
   const parsed = JSON.parse(content);
   return {
     profile: parsed as IndexedProfile,
-    mapping: parsed.mapping as AIMapping,
+    mapping: normalizeAIMapping(parsed.mapping),
   };
 }
-
-/** Prompt timeout for profile cleanup sessions (large profiles can exceed 2 minutes). */
-const OPENCODE_CLEANUP_TIMEOUT_MS = 300000;
 
 type PromptPart = { type?: string; text?: string };
 type PromptInfo = {
@@ -326,7 +358,7 @@ async function callViaOpencodeWithClient(
   log("AI cleanup: session created", { sessionID, createMs: Date.now() - t0 });
 
   try {
-    const TIMEOUT_MS = OPENCODE_CLEANUP_TIMEOUT_MS;
+    const TIMEOUT_MS = OPENCODE_PROFILE_CLEANUP_TIMEOUT_MS;
     const promptResult = await raceWithTimeout(
       v2Client.session.prompt({
         sessionID,
@@ -357,7 +389,7 @@ async function callViaOpencodeWithClient(
     const parsed = JSON.parse(jsonMatch[0]);
     return {
       profile: parsed as IndexedProfile,
-      mapping: parsed.mapping as AIMapping,
+      mapping: normalizeAIMapping(parsed.mapping),
     };
   } finally {
     try {
@@ -374,7 +406,7 @@ function buildItemIndex(profile: IndexedProfile): Map<string, IndexedProfileItem
   return map;
 }
 
-function rebuildProfileUsing(
+export function rebuildProfileUsing(
   mapping: AIMapping,
   cleanedById: Map<string, IndexedProfileItem>,
   originalById: Map<string, IndexedProfileItem>,
@@ -440,6 +472,11 @@ function rebuildProfileUsing(
     }
 
     if (mergedGroups.some((g) => g[0] === id)) {
+      // The merge accumulation below dereferences originalItem unconditionally. If the
+      // model returned a keeper id that only exists in its cleaned output (a hallucinated
+      // id absent from originalById), skip the group instead of throwing and aborting the
+      // entire cleanup run.
+      if (!originalItem) continue;
       const group = mergedGroups.find((g) => g[0] === id)!;
       let bestFreq = (originalItem as any).frequency || 0;
       let bestCentroid = (originalItem as any).centroid;
@@ -522,7 +559,7 @@ function rebuildProfileUsing(
   }
   const unmentionedIds = new Set<string>();
   for (const id of allOriginalIds) {
-    if (!keptIds.has(id) && !mapping.removed.includes(id)) {
+    if (!keptIds.has(id) && !mergedSourceIds.has(id) && !mapping.removed.includes(id)) {
       unmentionedIds.add(id);
     }
   }
@@ -548,7 +585,11 @@ function rebuildProfileUsing(
   return result;
 }
 
-function generateDiff(original: IndexedProfile, mapping: AIMapping): CleanupDiff {
+function generateDiff(
+  original: IndexedProfile,
+  mapping: AIMapping,
+  cleanedById: Map<string, IndexedProfileItem>
+): CleanupDiff {
   const index = buildItemIndex(original);
 
   const diff: CleanupDiff = {
@@ -557,7 +598,7 @@ function generateDiff(original: IndexedProfile, mapping: AIMapping): CleanupDiff
       const first = group[0] ?? "";
       return {
         ids: group,
-        result: index.get(first)?.description || first,
+        result: cleanedById.get(first)?.description || index.get(first)?.description || first,
       };
     }),
     removed: mapping.removed.map((id) => ({

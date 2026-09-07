@@ -8,6 +8,7 @@ import { corsPreflightResponse, disallowedCorsResponse, isAllowedBrowserOrigin }
 import { assertWebServerNetworkAuth, authorizeApiRequest } from "./web-api-auth.js";
 import { getOrCreateAuthToken, isAuthorizedApiRequest } from "./auth-token.js";
 import { WebAuth } from "./web-auth.js";
+import { NODE_HTTP_IDLE_TIMEOUT_MS } from "./request-timeouts.js";
 import {
   handleListTags,
   handleListMemories,
@@ -55,6 +56,37 @@ interface PortableServerHandle {
 
 const isBun = typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
 
+const MIN_FAILED_TAKEOVERS = 3;
+
+type NodeEventSource = {
+  on(event: string, listener: (...args: any[]) => void): unknown;
+};
+
+export function attachNodeDisconnectHandlers(
+  req: NodeEventSource & {
+    aborted: boolean;
+    complete: boolean;
+    socket: NodeEventSource;
+  },
+  res: NodeEventSource & { writableEnded: boolean },
+  onDisconnect: () => void
+): void {
+  let disconnected = false;
+  const disconnectOnce = () => {
+    if (disconnected || res.writableEnded) return;
+    disconnected = true;
+    onDisconnect();
+  };
+
+  req.on("aborted", disconnectOnce);
+  req.on("close", () => {
+    if (req.aborted || !req.complete) disconnectOnce();
+  });
+  req.socket.on("error", disconnectOnce);
+  req.socket.on("close", disconnectOnce);
+  res.on("close", disconnectOnce);
+}
+
 function serveFetch(opts: {
   port: number;
   hostname: string;
@@ -77,15 +109,15 @@ function serveFetch(opts: {
   // helpers that ship with Node 18+.
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     let destroyed = false;
+    const abortController = new AbortController();
     const cleanup = () => {
       if (destroyed) return;
       destroyed = true;
+      abortController.abort();
       if (!res.writableEnded) res.destroy();
       if (!req.socket.destroyed) req.socket.destroy();
     };
-    req.on("close", cleanup);
-    req.socket.on("error", cleanup);
-    req.socket.on("close", cleanup);
+    attachNodeDisconnectHandlers(req, res, cleanup);
 
     try {
       const url = `http://${opts.hostname}:${opts.port}${req.url ?? "/"}`;
@@ -95,6 +127,7 @@ function serveFetch(opts: {
         method,
         headers: req.headers as Record<string, string>,
         body: hasBody ? (Readable.toWeb(req) as unknown as ReadableStream) : undefined,
+        signal: abortController.signal,
         ...(hasBody ? ({ duplex: "half" } as Record<string, unknown>) : {}),
       });
 
@@ -138,7 +171,7 @@ function serveFetch(opts: {
   // rebind after a crashed predecessor left orphaned sockets behind.
   server.listen({ port: opts.port, host: opts.hostname, reuseAddr: true, exclusive: false });
   server.unref();
-  server.timeout = 30000;
+  server.timeout = NODE_HTTP_IDLE_TIMEOUT_MS;
   server.keepAliveTimeout = 10000;
   server.headersTimeout = 11000;
 
@@ -156,6 +189,24 @@ function serveFetch(opts: {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+/**
+ * Port fallback policy for the takeover loop. A port that fails to bind AND
+ * answers no HTTP is treated as orphaned Windows kernel residue; after
+ * `minFailedTakeovers` consecutive failed takeovers the web server moves to
+ * `currentPort + 1`, bounded by `maxFallbackPort`.
+ */
+export function nextFallbackPort(
+  currentPort: number,
+  failedTakeovers: number,
+  maxFallbackPort: number,
+  minFailedTakeovers: number = MIN_FAILED_TAKEOVERS
+): number {
+  if (failedTakeovers < minFailedTakeovers || currentPort >= maxFallbackPort) {
+    return currentPort;
+  }
+  return currentPort + 1;
+}
+
 interface WebServerConfig {
   port: number;
   host: string;
@@ -171,13 +222,22 @@ export class WebServer {
   private startPromise: Promise<void> | null = null;
   private healthCheckInterval: NodeJS.Timeout | null = null;
   private onTakeoverCallback: (() => Promise<void>) | null = null;
+  private onPortsExhaustedCallback: (() => void) | null = null;
+  private portsExhaustedNotified = false;
+  private takeoverFailures: number = 0;
+  private readonly maxFallbackPort: number;
 
   constructor(config: WebServerConfig) {
     this.config = config;
+    this.maxFallbackPort = config.port + 10;
   }
 
   setOnTakeoverCallback(callback: () => Promise<void>): void {
     this.onTakeoverCallback = callback;
+  }
+
+  setOnPortsExhaustedCallback(callback: () => void): void {
+    this.onPortsExhaustedCallback = callback;
   }
 
   async start(): Promise<void> {
@@ -255,7 +315,38 @@ export class WebServer {
     await new Promise((resolve) => setTimeout(resolve, jitterMs));
 
     if (await this.checkServerAvailable()) {
+      // The original owner recovered. Reset the failure counter so a stale
+      // count can't advance the port on the next, unrelated failure.
+      this.takeoverFailures = 0;
       this.startHealthCheckLoop();
+      return;
+    }
+
+    // Windows can leave an orphaned LISTEN socket in the TCP table after a
+    // crash: the port refuses to bind (EADDRINUSE) yet nothing answers HTTP,
+    // so repeated takeovers fail forever. After a few consecutive failures,
+    // fall back to a free neighbor port instead of looping.
+    this.takeoverFailures += 1;
+    const nextPort = nextFallbackPort(
+      this.config.port,
+      this.takeoverFailures,
+      this.maxFallbackPort
+    );
+    if (nextPort !== this.config.port) {
+      this.takeoverFailures = 0;
+      log("Web server port held by a non-responsive process; falling back to next port", {
+        previousPort: this.config.port,
+        newPort: nextPort,
+      });
+      this.config.port = nextPort;
+    } else if (
+      this.config.port >= this.maxFallbackPort &&
+      this.takeoverFailures >= MIN_FAILED_TAKEOVERS
+    ) {
+      // Every candidate port is held by a non-responsive process. Stop the
+      // health loop instead of retrying every five seconds forever.
+      this.stopHealthCheckLoop();
+      this.notifyPortsExhausted();
       return;
     }
 
@@ -263,20 +354,36 @@ export class WebServer {
       // Reset startPromise so _start() can run again
       this.startPromise = null;
       await this._start();
-
-      if (this.isOwner) {
-        log("Web server takeover successful", { port: this.config.port });
-
-        if (this.onTakeoverCallback) {
-          try {
-            await this.onTakeoverCallback();
-          } catch (error) {
-            log("Takeover callback error", { error: String(error) });
-          }
-        }
-      }
     } catch (error) {
       this.startHealthCheckLoop();
+      return;
+    }
+
+    if (this.isOwner) {
+      this.takeoverFailures = 0;
+      log("Web server takeover successful", { port: this.config.port });
+
+      if (this.onTakeoverCallback) {
+        try {
+          await this.onTakeoverCallback();
+        } catch (error) {
+          log("Takeover callback error", { error: String(error) });
+        }
+      }
+    }
+  }
+
+  private notifyPortsExhausted(): void {
+    if (this.portsExhaustedNotified) return;
+    this.portsExhaustedNotified = true;
+    log("Web server unavailable: every candidate port is held by a non-responsive process", {
+      port: this.config.port,
+      maxFallbackPort: this.maxFallbackPort,
+    });
+    try {
+      this.onPortsExhaustedCallback?.();
+    } catch (error) {
+      log("Ports exhausted callback error", { error: String(error) });
     }
   }
 
@@ -315,7 +422,15 @@ export class WebServer {
         headers,
         signal: AbortSignal.timeout(2000),
       });
-      return response.ok;
+      if (!response.ok) return false;
+      // Fallback spans 10 neighbor ports; any 2xx from an unrelated local
+      // service must not be mistaken for an opencode-mem owner. Require the
+      // response to carry our API envelope.
+      const body = (await response.json()) as { success?: boolean; status?: string };
+      if (endpoint === "/api/health") {
+        return body.success === true && body.status === "ok";
+      }
+      return body.success === true;
     } catch {
       return false;
     }
@@ -567,7 +682,9 @@ export class WebServer {
         const includeIds = Array.isArray(body.includeIds)
           ? (body.includeIds as string[])
           : undefined;
-        const result = await handleAICleanup(userId, includeIds);
+        const profileVersion =
+          typeof body.profileVersion === "number" ? body.profileVersion : undefined;
+        const result = await handleAICleanup(userId, includeIds, profileVersion);
         return this.jsonResponse(result);
       }
 

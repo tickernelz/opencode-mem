@@ -1,5 +1,5 @@
 import { useEffect, useState, type MouseEvent } from "react";
-import { AlertTriangle, Loader, Menu, Plus, RefreshCw, Search, Trash, X } from "lucide-react";
+import { Loader, Menu, Plus, RefreshCw, Search, Trash, TriangleAlert, X } from "lucide-react";
 import { useMemoriesExplorer } from "@/hooks/useMemoriesExplorer";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { AiCleanupDialog } from "$lib/components/explorer/AiCleanupDialog";
@@ -16,6 +16,7 @@ import { Label } from "$lib/components/ui/label";
 import { Toaster } from "$lib/components/ui/sonner";
 import { Textarea } from "$lib/components/ui/textarea";
 import { cycleLanguage, getLanguage, useI18n } from "$lib/i18n";
+import { getDisplayedMemoryCount } from "$lib/memory-count";
 import { initRouter, navigate, ROUTES, useAppView } from "$lib/router";
 
 const MEMORY_TYPES = [
@@ -131,7 +132,7 @@ export default function App() {
           <div className="mx-auto w-full max-w-6xl flex-1 space-y-4 p-4 md:p-6">
             {explorer.showAuthWarning ? (
               <Alert variant="destructive">
-                <AlertTriangle />
+                <TriangleAlert />
                 <AlertDescription>{t("auth-warning-text")}</AlertDescription>
               </Alert>
             ) : null}
@@ -142,7 +143,15 @@ export default function App() {
               </h1>
               {currentView === "project" ? (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>{t("text-total", { count: explorer.statsTotal })}</span>
+                  <span>
+                    {t("text-total", {
+                      count: getDisplayedMemoryCount(
+                        explorer.isSearching,
+                        explorer.totalItems,
+                        explorer.statsTotal
+                      ),
+                    })}
+                  </span>
                   {explorer.refreshing ? <Loader className="size-3.5 animate-spin" /> : null}
                 </div>
               ) : null}
@@ -222,7 +231,7 @@ export default function App() {
 
                 {explorer.migrationNeeded ? (
                   <Alert variant="destructive" className="space-y-3">
-                    <AlertTriangle />
+                    <TriangleAlert />
                     <AlertDescription className="space-y-3">
                       <p>{explorer.migrationMessage || t("migration-mismatch")}</p>
                       <label className="flex items-start gap-2 text-sm">

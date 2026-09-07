@@ -4,7 +4,11 @@ import { tursoVectorSearch } from "./turso/vector-search.js";
 import { tursoConnectionManager } from "./turso/connection-manager.js";
 import { ensureTursoReady } from "./turso/ready.js";
 import { formatTagsForEmbedding } from "./turso/vector-utils.js";
-import { extractScopeFromContainerTag, resolveMemoryScope } from "./memory-scope.js";
+import {
+  extractScopeFromContainerTag,
+  resolveMemoryScope,
+  type MemoryScopeRef,
+} from "./memory-scope.js";
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
 import type { MemoryType } from "../types/index.js";
@@ -40,10 +44,7 @@ function safeJSONParse(jsonString: any): any {
   }
 }
 
-function resolveScopeValue(
-  scope: MemoryScope,
-  containerTag: string
-): { scope: "user" | "project"; hash: string } {
+function resolveScopeValue(scope: MemoryScope, containerTag: string): MemoryScopeRef[] {
   return resolveMemoryScope(scope, containerTag);
 }
 
@@ -115,7 +116,9 @@ export class LocalMemoryClient {
 
       const queryVector = await embeddingService.embedWithTimeout(query, { task: "query" });
       const resolved = resolveScopeValue(scope, containerTag);
-      const shards = await tursoShardManager.getAllShards(resolved.scope, resolved.hash);
+      const shards = (
+        await Promise.all(resolved.map((ref) => tursoShardManager.getAllShards(ref.scope, ref.hash)))
+      ).flat();
 
       if (shards.length === 0) {
         return { success: true as const, results: [], total: 0, timing: 0 };
@@ -265,7 +268,9 @@ export class LocalMemoryClient {
       await this.initialize();
 
       const resolved = resolveScopeValue(scope, containerTag);
-      const shards = await tursoShardManager.getAllShards(resolved.scope, resolved.hash);
+      const shards = (
+        await Promise.all(resolved.map((ref) => tursoShardManager.getAllShards(ref.scope, ref.hash)))
+      ).flat();
 
       if (shards.length === 0) {
         return {
@@ -316,6 +321,68 @@ export class LocalMemoryClient {
         memories: [],
         pagination: { currentPage: 1, totalItems: 0, totalPages: 0 },
       };
+    }
+  }
+
+  async ensureStorageReady(): Promise<void> {
+    await this.initialize();
+  }
+
+  async listShards(currentDirectory: string) {
+    try {
+      await this.initialize();
+      const { shardInventoryService } = await import("./shard-inventory-service.js");
+      return await shardInventoryService.listShards(currentDirectory);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log("listShards: error", { error: errorMessage });
+      return { success: false as const, error: errorMessage };
+    }
+  }
+
+  async migrateProjectPath(options: {
+    currentDirectory: string;
+    fromPath?: string;
+    fromHash?: string;
+    dryRun?: boolean;
+    allowLinkedSource?: boolean;
+  }) {
+    try {
+      await this.initialize();
+      const { shardPathMigrationService } = await import("./shard-path-migration-service.js");
+      return await shardPathMigrationService.migrate(options);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log("migrateProjectPath: error", { error: errorMessage });
+      return { success: false as const, dryRun: Boolean(options.dryRun), error: errorMessage };
+    }
+  }
+
+  async exportMemories(currentDirectory: string, outputPath: string) {
+    try {
+      await this.initialize();
+      const { memoryPortabilityService } = await import("./memory-portability-service.js");
+      return await memoryPortabilityService.exportMemories({ currentDirectory, outputPath });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log("exportMemories: error", { error: errorMessage });
+      return { success: false as const, error: errorMessage };
+    }
+  }
+
+  async importMemories(currentDirectory: string, inputPath: string, dryRun?: boolean) {
+    try {
+      await this.initialize();
+      const { memoryPortabilityService } = await import("./memory-portability-service.js");
+      return await memoryPortabilityService.importMemories({
+        currentDirectory,
+        inputPath,
+        dryRun,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log("importMemories: error", { error: errorMessage });
+      return { success: false as const, dryRun: Boolean(dryRun), error: errorMessage };
     }
   }
 

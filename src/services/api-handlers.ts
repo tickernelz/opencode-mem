@@ -248,9 +248,16 @@ export async function handleListMemories(
     }
 
     const sortedTimeline: any[] = [];
-    const pairs = Array.from(linkedPairs.values())
+    const pairValues = Array.from(linkedPairs.values());
+    const pairs = pairValues
       .filter((p) => p.memory && p.prompt)
       .sort((a, b) => b.memory.createdAt - a.memory.createdAt);
+    // A memory or prompt whose counterpart is missing (linked prompt deleted,
+    // or prompt capture off) must still show up in the timeline, unlinked.
+    for (const pair of pairValues) {
+      if (pair.memory && !pair.prompt) standalone.push(pair.memory);
+      else if (pair.prompt && !pair.memory) standalone.push(pair.prompt);
+    }
     for (const pair of pairs) {
       sortedTimeline.push(pair.memory);
       sortedTimeline.push(pair.prompt);
@@ -1022,15 +1029,18 @@ const pendingCleanups = new Map<
     cleaned: UserProfileData;
     oldProfileData: UserProfileData;
     diff: any;
-    allMergedIds: string[][];
+    allMerged: Array<{ ids: string[]; result: string }>;
     allRemovedIds: string[];
+    includeIds?: string[];
+    profileVersion: number;
     expiresAt: number;
   }
 >();
 
 export async function handleAICleanup(
   userId?: string,
-  includeIds?: string[]
+  includeIds?: string[],
+  profileVersion?: number
 ): Promise<ApiResponse<any>> {
   try {
     const { userProfileManager } = await import("./user-profile/user-profile-manager.js");
@@ -1048,13 +1058,20 @@ export async function handleAICleanup(
     if (!profile) {
       return { success: false, error: "No profile found to clean up" };
     }
+    if (profileVersion !== undefined && profile.version !== profileVersion) {
+      return { success: false, error: "Profile changed. Reload it before running AI cleanup." };
+    }
 
     const profileData: UserProfileData = JSON.parse(profile.profileData);
+    profileData.preferences = sortProfileItems(profileData.preferences as any[], "confidence");
+    profileData.patterns = sortProfileItems(profileData.patterns as any[], "frequency");
+    profileData.workflows = sortProfileItems(profileData.workflows as any[], "frequency");
 
     let indexed;
     let result;
-    if (includeIds && includeIds.length > 0) {
-      indexed = filterProfileForCleanup(profileData, includeIds);
+    const scopedIds = includeIds && includeIds.length > 0 ? includeIds : undefined;
+    if (scopedIds) {
+      indexed = filterProfileForCleanup(profileData, scopedIds);
       result = await aiCleanupProfileFromIndexed(indexed);
     } else {
       result = await aiCleanupProfile(profileData);
@@ -1064,8 +1081,10 @@ export async function handleAICleanup(
       cleaned: result.cleaned,
       oldProfileData: profileData,
       diff: result.diff,
-      allMergedIds: (result.diff?.merged || []).map((m: any) => m.ids || []),
+      allMerged: result.diff?.merged || [],
       allRemovedIds: (result.diff?.removed || []).map((r: any) => r.id),
+      includeIds: scopedIds,
+      profileVersion: profile.version,
       expiresAt: Date.now() + 30 * 60 * 1000,
     });
 
@@ -1081,6 +1100,102 @@ export async function handleAICleanup(
     log("handleAICleanup: error", { error: String(error) });
     return { success: false, error: String(error) };
   }
+}
+
+/**
+ * Merge an AI-cleanup result into a full profile.
+ * When includeIds is set, only scoped items are mutated; everything else is preserved.
+ */
+export function mergeCleanupIntoProfile(args: {
+  currentProfile: UserProfileData;
+  oldProfileData: UserProfileData;
+  cleanedData: UserProfileData;
+  includeIds?: string[];
+  acceptedMerged?: string[][];
+  acceptedRemoved?: string[];
+  allMerged?: Array<{ ids: string[]; result: string }>;
+  allRemovedIds?: string[];
+  /** True when the client sent acceptance arrays (even if empty = reject all). */
+  explicitAcceptance?: boolean;
+}): UserProfileData {
+  const {
+    currentProfile,
+    oldProfileData,
+    cleanedData,
+    includeIds,
+    acceptedMerged = [],
+    acceptedRemoved = [],
+    allMerged = [],
+    allRemovedIds = [],
+    explicitAcceptance = false,
+  } = args;
+
+  // Start from cleaned data, then restore any rejected removals/merges.
+  const scopedResult: UserProfileData = {
+    preferences: [...cleanedData.preferences],
+    patterns: [...cleanedData.patterns],
+    workflows: [...cleanedData.workflows],
+  };
+
+  if (explicitAcceptance) {
+    for (const id of acceptedRemoved) {
+      removeItemFromProfile(scopedResult, oldProfileData, id);
+    }
+
+    for (const ids of acceptedMerged) {
+      for (let i = 1; i < ids.length; i++) {
+        removeItemFromProfile(scopedResult, oldProfileData, ids[i] ?? "");
+      }
+    }
+
+    const acceptedTargetIds = new Set(acceptedMerged.map((g) => g[0]));
+    for (const merge of allMerged) {
+      const groupIds = merge.ids;
+      if (groupIds.length <= 1) continue;
+      if (acceptedTargetIds.has(groupIds[0])) continue;
+      removeOneByDescription(scopedResult, merge.result, itemTypeFromId(groupIds[0] ?? ""));
+      for (const id of groupIds) {
+        if (id) pushItemFromProfile(scopedResult, oldProfileData, id);
+      }
+    }
+
+    const acceptedRemovedSet = new Set(acceptedRemoved);
+    for (const removedId of allRemovedIds) {
+      if (acceptedRemovedSet.has(removedId)) continue;
+      pushItemFromProfile(scopedResult, oldProfileData, removedId);
+    }
+  }
+
+  // Full-profile cleanup: cleaned (+ acceptance) replaces the whole profile.
+  if (!includeIds || includeIds.length === 0) {
+    return scopedResult;
+  }
+
+  // Partial selection: mutate only the analyzed scope inside the current full profile.
+  const result: UserProfileData = {
+    preferences: [...currentProfile.preferences],
+    patterns: [...currentProfile.patterns],
+    workflows: [...currentProfile.workflows],
+  };
+
+  for (const id of includeIds) {
+    removeItemFromProfile(result, oldProfileData, id);
+  }
+
+  result.preferences.push(...scopedResult.preferences);
+  result.patterns.push(...scopedResult.patterns);
+  result.workflows.push(...scopedResult.workflows);
+
+  return result;
+}
+
+function pushItemFromProfile(target: UserProfileData, source: UserProfileData, id: string): void {
+  const srcItem = findItemById(source, id);
+  if (!srcItem) return;
+  const { id: _id, ...rest } = srcItem as any;
+  if (id.startsWith("pref_")) target.preferences.push(rest);
+  else if (id.startsWith("pat_")) target.patterns.push(rest);
+  else if (id.startsWith("wf_")) target.workflows.push(rest);
 }
 
 export async function handleApplyCleanup(userId?: string, body?: any): Promise<ApiResponse<any>> {
@@ -1108,90 +1223,41 @@ export async function handleApplyCleanup(userId?: string, body?: any): Promise<A
     if (!profile) {
       return { success: false, error: "Profile not found" };
     }
+    if (profile.version !== pending.profileVersion) {
+      pendingCleanups.delete(targetUserId);
+      return { success: false, error: "Profile changed. Run AI cleanup again." };
+    }
 
     const cleanedData = body?.profile || pending.cleaned;
-    const acceptedMerged: string[][] = body?.acceptedMerged || [];
-    const acceptedRemoved: string[] = body?.acceptedRemoved || [];
+    const acceptedMerged: string[][] = Array.isArray(body?.acceptedMerged)
+      ? body.acceptedMerged
+      : [];
+    const acceptedRemoved: string[] = Array.isArray(body?.acceptedRemoved)
+      ? body.acceptedRemoved
+      : [];
+    const explicitAcceptance =
+      Array.isArray(body?.acceptedMerged) || Array.isArray(body?.acceptedRemoved);
+    const existingData: UserProfileData = JSON.parse(profile.profileData);
 
-    // Partial application: start from cleaned data (which has shrunk descriptions)
-    // and only apply removals for items the user unchecked.
-    if (acceptedMerged.length > 0 || acceptedRemoved.length > 0) {
-      const existingData: UserProfileData = JSON.parse(profile.profileData);
-      const result: UserProfileData = {
-        preferences: [...cleanedData.preferences],
-        patterns: [...cleanedData.patterns],
-        workflows: [...cleanedData.workflows],
-      };
+    const result = mergeCleanupIntoProfile({
+      currentProfile: existingData,
+      oldProfileData: pending.oldProfileData,
+      cleanedData,
+      includeIds: pending.includeIds,
+      acceptedMerged,
+      acceptedRemoved,
+      allMerged: pending.allMerged,
+      allRemovedIds: pending.allRemovedIds,
+      explicitAcceptance,
+    });
 
-      // Remove items the user chose NOT to merge (revert to old descriptions)
-      for (const id of acceptedRemoved) {
-        const desc = findItemDesc(pending.oldProfileData, id);
-        if (desc) removeByDesc(result, desc, itemTypeFromId(id));
-      }
-
-      // For merges: just remove the source items; target is already in cleaned
-      for (const ids of acceptedMerged) {
-        for (let i = 1; i < ids.length; i++) {
-          const srcDesc = findItemDesc(pending.oldProfileData, ids[i] ?? "");
-          if (srcDesc) removeByDesc(result, srcDesc, itemTypeFromId(ids[i] ?? ""));
-        }
-      }
-
-      // Restore source items from unapproved merges
-      const acceptedTargetIds = new Set(acceptedMerged.map((g) => g[0]));
-      for (const groupIds of pending.allMergedIds || []) {
-        if (groupIds.length <= 1) continue;
-        if (acceptedTargetIds.has(groupIds[0])) continue;
-        for (let i = 1; i < groupIds.length; i++) {
-          const srcId = groupIds[i] ?? "";
-          if (!srcId) continue;
-          const srcDesc = findItemDesc(pending.oldProfileData, srcId);
-          if (!srcDesc) continue;
-          const srcItem = findItemByDesc(pending.oldProfileData, srcDesc);
-          if (srcItem) {
-            const { id: _id, ...rest } = srcItem as any;
-            if (srcId.startsWith("pref_")) result.preferences.push(rest);
-            else if (srcId.startsWith("pat_")) result.patterns.push(rest);
-            else if (srcId.startsWith("wf_")) result.workflows.push(rest);
-          }
-        }
-      }
-
-      // Restore items from unapproved removals
-      const acceptedRemovedSet = new Set(acceptedRemoved);
-      for (const removedId of pending.allRemovedIds || []) {
-        if (acceptedRemovedSet.has(removedId)) continue;
-        const desc = findItemDesc(pending.oldProfileData, removedId);
-        if (!desc) continue;
-        const srcItem = findItemByDesc(pending.oldProfileData, desc);
-        if (srcItem) {
-          const { id: _id, ...rest } = srcItem as any;
-          if (removedId.startsWith("pref_")) result.preferences.push(rest);
-          else if (removedId.startsWith("pat_")) result.patterns.push(rest);
-          else if (removedId.startsWith("wf_")) result.workflows.push(rest);
-        }
-      }
-
-      const success = await userProfileManager.updateProfile(
-        profile.id,
-        result,
-        0,
-        "AI cleanup applied (partial)"
-      );
-      if (!success)
-        return { success: false, error: "Profile was modified by another session. Please retry." };
-      pendingCleanups.delete(targetUserId);
-      return {
-        success: true,
-        data: { message: "Partial cleanup applied", version: profile.version + 1 },
-      };
-    }
+    const partial = (pending.includeIds && pending.includeIds.length > 0) || explicitAcceptance;
 
     const success = await userProfileManager.updateProfile(
       profile.id,
-      cleanedData,
+      result,
       0,
-      "AI cleanup applied"
+      partial ? "AI cleanup applied (partial)" : "AI cleanup applied"
     );
 
     if (!success) {
@@ -1202,7 +1268,10 @@ export async function handleApplyCleanup(userId?: string, body?: any): Promise<A
 
     return {
       success: true,
-      data: { message: "Cleanup applied successfully", version: profile.version + 1 },
+      data: {
+        message: partial ? "Partial cleanup applied" : "Cleanup applied successfully",
+        version: profile.version + 1,
+      },
     };
   } catch (error) {
     log("handleApplyCleanup: error", { error: String(error) });
@@ -1215,36 +1284,52 @@ function itemTypeFromId(id: string): string {
   if (id.startsWith("pat_")) return "patterns";
   return "workflows";
 }
-function findItemDesc(profile: UserProfileData, id: string): string | null {
+function findItemById(profile: UserProfileData, id: string): any | null {
   if (typeof id !== "string" || !id.includes("_")) return null;
   const parts = id.split("_");
   const prefix = parts[0];
   const idx = parseInt(parts[1] || "", 10);
   if (isNaN(idx)) return null;
 
-  if (prefix === "pref") return profile.preferences[idx]?.description || null;
-  if (prefix === "pat") return profile.patterns[idx]?.description || null;
-  if (prefix === "wf") return profile.workflows[idx]?.description || null;
+  if (prefix === "pref") return profile.preferences[idx] || null;
+  if (prefix === "pat") return profile.patterns[idx] || null;
+  if (prefix === "wf") return profile.workflows[idx] || null;
 
   return null;
 }
-function findItemByDesc(profile: UserProfileData, desc: string): any | null {
-  for (const key of ["preferences", "patterns", "workflows"] as const) {
-    const found = (profile as any)[key].find((p: any) => p.description === desc);
-    if (found) return found;
-  }
-  return null;
+function removeItemFromProfile(
+  target: UserProfileData,
+  source: UserProfileData,
+  id: string
+): boolean {
+  const sourceItem = findItemById(source, id);
+  if (!sourceItem) return false;
+  const itemType = itemTypeFromId(id) as keyof Pick<
+    UserProfileData,
+    "preferences" | "patterns" | "workflows"
+  >;
+  const items = target[itemType] as any[];
+  const sourceKey = profileItemIdentityKey(sourceItem);
+  const index = items.findIndex((item) => profileItemIdentityKey(item) === sourceKey);
+  if (index < 0) return false;
+  items.splice(index, 1);
+  return true;
 }
-function removeByDesc(profile: UserProfileData, desc: string, itemType?: string) {
-  if (!itemType || itemType === "preferences") {
-    profile.preferences = profile.preferences.filter((p) => p.description !== desc);
-  }
-  if (!itemType || itemType === "patterns") {
-    profile.patterns = profile.patterns.filter((p) => p.description !== desc);
-  }
-  if (!itemType || itemType === "workflows") {
-    profile.workflows = profile.workflows.filter((w) => w.description !== desc);
-  }
+function profileItemIdentityKey(item: any): string {
+  return JSON.stringify({
+    category: item.category ?? null,
+    description: item.description ?? null,
+    steps: Array.isArray(item.steps) ? item.steps : null,
+  });
+}
+function removeOneByDescription(profile: UserProfileData, desc: string, itemType: string): boolean {
+  const items = profile[
+    itemType as keyof Pick<UserProfileData, "preferences" | "patterns" | "workflows">
+  ] as any[];
+  const index = items.findIndex((item) => item.description === desc);
+  if (index < 0) return false;
+  items.splice(index, 1);
+  return true;
 }
 
 export async function handleUpdateProfileItem(body?: any): Promise<ApiResponse<any>> {

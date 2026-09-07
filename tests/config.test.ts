@@ -15,6 +15,8 @@ const {
   hasAutoCaptureProviderConfig,
   isConfigured,
   isPlaceholderApiKey,
+  normalizeAutoCleanupRetentionDays,
+  normalizeAutoCaptureMaxContextBytes,
 } = await import("../src/config.js");
 
 afterAll(() => {
@@ -88,6 +90,25 @@ describe("config", () => {
       expect(typeof CONFIG.deduplicationEnabled).toBe("boolean");
     });
 
+    it("should default autoCaptureMaxContextBytes to 131072", () => {
+      expect(CONFIG.autoCaptureMaxContextBytes).toBe(131072);
+    });
+
+    it("should reject unsafe auto-capture context budgets", () => {
+      expect(() => normalizeAutoCaptureMaxContextBytes(-1)).toThrow();
+      expect(() => normalizeAutoCaptureMaxContextBytes(1024)).toThrow();
+      expect(() => normalizeAutoCaptureMaxContextBytes(16 * 1024 * 1024 + 1)).toThrow();
+    });
+
+    it("should reject unsafe automatic cleanup retention periods", () => {
+      expect(() => normalizeAutoCleanupRetentionDays(0)).toThrow();
+      expect(() => normalizeAutoCleanupRetentionDays(-1)).toThrow();
+      expect(() => normalizeAutoCleanupRetentionDays(1.5)).toThrow();
+      expect(() => normalizeAutoCleanupRetentionDays(Number.POSITIVE_INFINITY)).toThrow();
+      expect(normalizeAutoCleanupRetentionDays(1)).toBe(1);
+      expect(normalizeAutoCleanupRetentionDays(30)).toBe(30);
+    });
+
     it("should expose memory scope config", () => {
       const defaultScope = CONFIG.memory.defaultScope ?? "project";
       expect(["project", "all-projects"]).toContain(defaultScope);
@@ -100,6 +121,10 @@ describe("config", () => {
       expect(typeof CONFIG.userProfileDisplayWorkflows).toBe("number");
       expect(typeof CONFIG.userProfileConfidenceDecayDays).toBe("number");
       expect(typeof CONFIG.userProfileChangelogRetentionCount).toBe("number");
+      expect(CONFIG.userProfileStaleDays).toBe(2);
+      expect(CONFIG.userProfileMinEvidenceForRetention).toBe(3);
+      expect(CONFIG.userProfileAutoCleanupEnabled).toBe(true);
+      expect(CONFIG.userProfileAutoCleanupInterval).toBe(100);
     });
 
     it("should have toast settings as booleans", () => {

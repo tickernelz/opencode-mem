@@ -12,6 +12,8 @@ export async function ensureTursoReady(): Promise<void> {
   initPromise = (async () => {
     try {
       await runLegacyTursoMigration();
+      const { shardPathMigrationService } = await import("../shard-path-migration-service.js");
+      await shardPathMigrationService.recoverInterruptedSwap();
       await tursoShardManager.getAllShards("user", "");
       isReady = true;
     } catch (error) {

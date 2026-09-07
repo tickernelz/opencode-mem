@@ -62,8 +62,13 @@ export class UserProfileValidator {
       if (!pref.description || typeof pref.description !== "string") {
         errors.push(`preferences[${i}].description is missing or invalid`);
       }
-      if (typeof pref.confidence !== "number") {
-        errors.push(`preferences[${i}].confidence is missing or invalid`);
+      if (
+        typeof pref.confidence !== "number" ||
+        !Number.isFinite(pref.confidence) ||
+        pref.confidence < 0 ||
+        pref.confidence > 1
+      ) {
+        errors.push(`preferences[${i}].confidence must be a finite number between 0 and 1`);
       }
       if (!Array.isArray(pref.evidence)) {
         errors.push(`preferences[${i}].evidence must be an array`);

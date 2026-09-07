@@ -54,6 +54,92 @@ function extractSessionTitle(response: unknown): string | undefined {
   return obj.data?.title ?? obj.title;
 }
 
+function unwrapSdkData<T>(response: unknown): T | undefined {
+  if (!response || typeof response !== "object") return undefined;
+  const obj = response as { data?: T };
+  return (obj.data ?? response) as T;
+}
+
+/**
+ * Resolve the session's active agent so compaction memory injection does not
+ * reset OpenCode to the stock "general-purpose" fallback (issue #236).
+ *
+ * Preference order:
+ * 1. session.get().agent (v2 hosts)
+ * 2. Latest non-compaction user message agent
+ * 3. Latest non-compaction / non-summary assistant mode (v1) or agent (v2)
+ */
+export async function resolveSessionAgent(
+  client: unknown,
+  sessionID: string
+): Promise<string | undefined> {
+  const sessionClient = (
+    client as {
+      session?: {
+        get?: (args: unknown) => Promise<unknown>;
+        messages?: (args: unknown) => Promise<unknown>;
+      };
+    }
+  )?.session;
+
+  if (typeof sessionClient?.get === "function") {
+    try {
+      const session = unwrapSdkData<{ agent?: string }>(
+        await sessionClient.get({ path: { id: sessionID } })
+      );
+      if (typeof session?.agent === "string" && session.agent.trim()) {
+        return session.agent.trim();
+      }
+    } catch (error) {
+      log("resolveSessionAgent: session.get failed", { sessionID, error: String(error) });
+    }
+  }
+
+  if (typeof sessionClient?.messages !== "function") {
+    return undefined;
+  }
+
+  try {
+    const messages = unwrapSdkData<
+      Array<{
+        info?: {
+          role?: string;
+          agent?: string;
+          mode?: string;
+          summary?: boolean;
+        };
+      }>
+    >(await sessionClient.messages({ path: { id: sessionID } }));
+
+    if (!Array.isArray(messages)) return undefined;
+
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const info = messages[i]?.info;
+      if (!info) continue;
+
+      if (info.role === "user") {
+        if (typeof info.agent === "string" && info.agent.trim()) {
+          return info.agent.trim();
+        }
+        continue;
+      }
+
+      if (info.role === "assistant") {
+        if (info.summary === true || info.mode === "compaction") continue;
+        const agent =
+          (typeof info.agent === "string" && info.agent.trim()) ||
+          (typeof info.mode === "string" && info.mode.trim()) ||
+          undefined;
+        if (agent) return agent;
+      }
+    }
+  } catch (error) {
+    log("resolveSessionAgent: session.messages failed", { sessionID, error: String(error) });
+  }
+
+  return undefined;
+}
+
 async function isInternalCaptureSession(client: unknown, sessionID: string): Promise<boolean> {
   // Fast path: sessions we created ourselves (survives brief post-delete window).
   if (isTrackedInternalCaptureSession(sessionID)) {
@@ -243,6 +329,21 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                   message: "Took over web server ownership",
                   variant: "success",
                   duration: 3000,
+                },
+              })
+              .catch(() => {});
+          }
+        });
+
+        webServer.setOnPortsExhaustedCallback(() => {
+          if (ctx.client?.tui) {
+            ctx.client.tui
+              .showToast({
+                body: {
+                  title: "Memory Explorer",
+                  message: `Web UI unavailable: ports ${CONFIG.webServerPort}-${CONFIG.webServerPort + 10} are held by non-responsive processes`,
+                  variant: "error",
+                  duration: 5000,
                 },
               })
               .catch(() => {});
@@ -467,9 +568,22 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
     tool: {
       memory: tool({
-        description: `Manage and query project memory (MATCH USER LANGUAGE: ${getLanguageName(CONFIG.autoCaptureLanguage || "en")}). Use 'search' with technical keywords/tags, 'add' to store knowledge, 'profile' for preferences. Search/list scope: project or all-projects.`,
+        description: `Manage and query project memory (MATCH USER LANGUAGE: ${getLanguageName(CONFIG.autoCaptureLanguage || "en")}). Use 'search' with technical keywords/tags, 'add' to store knowledge, 'profile' for preferences. Use migrate/list-shards/export/import when a project directory moves. Search/list scope: project or all-projects.`,
         args: {
-          mode: tool.schema.enum(["add", "search", "profile", "list", "forget", "help"]).optional(),
+          mode: tool.schema
+            .enum([
+              "add",
+              "search",
+              "profile",
+              "list",
+              "forget",
+              "help",
+              "migrate",
+              "list-shards",
+              "export",
+              "import",
+            ])
+            .optional(),
           content: tool.schema.string().optional(),
           query: tool.schema.string().optional(),
           tags: tool.schema.string().optional(),
@@ -477,9 +591,25 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           memoryId: tool.schema.string().optional(),
           limit: tool.schema.number().optional(),
           scope: tool.schema.enum(["project", "all-projects"]).optional(),
+          fromPath: tool.schema.string().optional(),
+          fromHash: tool.schema.string().optional(),
+          outputPath: tool.schema.string().optional(),
+          inputPath: tool.schema.string().optional(),
+          dryRun: tool.schema.boolean().optional(),
+          allowLinkedSource: tool.schema.boolean().optional(),
         },
         async execute(args: {
-          mode?: "add" | "search" | "profile" | "list" | "forget" | "help";
+          mode?:
+            | "add"
+            | "search"
+            | "profile"
+            | "list"
+            | "forget"
+            | "help"
+            | "migrate"
+            | "list-shards"
+            | "export"
+            | "import";
           content?: string;
           query?: string;
           tags?: string;
@@ -487,6 +617,12 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           memoryId?: string;
           limit?: number;
           scope?: MemoryScope;
+          fromPath?: string;
+          fromHash?: string;
+          outputPath?: string;
+          inputPath?: string;
+          dryRun?: boolean;
+          allowLinkedSource?: boolean;
         }) {
           if (!isConfigured()) {
             return JSON.stringify({
@@ -495,13 +631,22 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
             });
           }
 
-          const embeddingInitError = memoryClient.getEmbeddingInitError?.();
-          if (embeddingInitError) {
-            return JSON.stringify({ success: false, error: embeddingInitError });
+          const mode = args.mode || "help";
+          const needsEmbedding = !["help", "list-shards", "migrate", "export"].includes(mode);
+
+          if (needsEmbedding) {
+            const embeddingInitError = memoryClient.getEmbeddingInitError?.();
+            if (embeddingInitError) {
+              return JSON.stringify({ success: false, error: embeddingInitError });
+            }
           }
 
           try {
-            await memoryClient.warmup();
+            if (needsEmbedding) {
+              await memoryClient.warmup();
+            } else if (mode !== "help") {
+              await memoryClient.ensureStorageReady();
+            }
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             return JSON.stringify({
@@ -510,7 +655,6 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
             });
           }
 
-          const mode = args.mode || "help";
           const langName = getLanguageName(CONFIG.autoCaptureLanguage || "en");
 
           try {
@@ -538,6 +682,28 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                     },
                     { command: "list", description: "List recent memories", args: ["limit?"] },
                     { command: "forget", description: "Remove memory", args: ["memoryId"] },
+                    {
+                      command: "list-shards",
+                      description: "List project memory shards and orphaned path associations",
+                      args: [],
+                    },
+                    {
+                      command: "migrate",
+                      description:
+                        "Reassociate orphaned project shards after a directory move (target must be empty)",
+                      args: ["fromPath?", "fromHash?", "dryRun?", "allowLinkedSource?"],
+                    },
+                    {
+                      command: "export",
+                      description: "Export current project memories to a portable JSON file",
+                      args: ["outputPath"],
+                    },
+                    {
+                      command: "import",
+                      description:
+                        "Import memories from a portable JSON file (re-embeds; aborts on duplicate ids)",
+                      args: ["inputPath", "dryRun?"],
+                    },
                   ],
                   tagGuidance: "Use technical keywords for search. Tags rank highest.",
                 });
@@ -702,6 +868,49 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                 const delRes = await memoryClient.deleteMemory(args.memoryId);
                 return JSON.stringify({ success: delRes.success, message: `Memory removed` });
 
+              case "list-shards": {
+                const listShardsRes = await memoryClient.listShards(directory);
+                return JSON.stringify(listShardsRes);
+              }
+
+              case "migrate": {
+                if (!args.fromPath && !args.fromHash) {
+                  return JSON.stringify({
+                    success: false,
+                    error:
+                      "fromPath or fromHash required. Run memory list-shards to discover orphaned shards.",
+                  });
+                }
+                const migrateRes = await memoryClient.migrateProjectPath({
+                  currentDirectory: directory,
+                  fromPath: args.fromPath,
+                  fromHash: args.fromHash,
+                  dryRun: args.dryRun,
+                  allowLinkedSource: args.allowLinkedSource,
+                });
+                return JSON.stringify(migrateRes);
+              }
+
+              case "export": {
+                if (!args.outputPath) {
+                  return JSON.stringify({ success: false, error: "outputPath required" });
+                }
+                const exportRes = await memoryClient.exportMemories(directory, args.outputPath);
+                return JSON.stringify(exportRes);
+              }
+
+              case "import": {
+                if (!args.inputPath) {
+                  return JSON.stringify({ success: false, error: "inputPath required" });
+                }
+                const importRes = await memoryClient.importMemories(
+                  directory,
+                  args.inputPath,
+                  args.dryRun
+                );
+                return JSON.stringify(importRes);
+              }
+
               default:
                 return JSON.stringify({ success: false, error: `Unknown mode: ${mode}` });
             }
@@ -765,12 +974,30 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           }
 
           const memoryContext = formatMemoriesForCompaction(memoriesResult.results);
+          const agent = await resolveSessionAgent(ctx.client, sessionID);
+          if (!agent) {
+            log(
+              "Compaction: skipped memory injection because session agent could not be resolved",
+              {
+                sessionID,
+              }
+            );
+            return;
+          }
 
           await ctx.client.session.prompt({
             path: { id: sessionID },
             body: {
-              parts: [{ id: `prt-compaction-${Date.now()}`, type: "text", text: memoryContext }],
+              parts: [
+                {
+                  id: `prt-compaction-${Date.now()}`,
+                  type: "text",
+                  text: memoryContext,
+                  synthetic: true,
+                },
+              ],
               noReply: true,
+              agent,
             },
           });
 
@@ -790,6 +1017,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           log("Compaction memory injected", {
             sessionID,
             count: memoriesResult.results.length,
+            agent: agent ?? null,
           });
         } catch (error) {
           log("Compaction handler error", { error: String(error) });
@@ -813,14 +1041,51 @@ function formatSearchResults(query: string, results: any, limit?: number): strin
   });
 }
 
+const EMBEDDED_TAGS_FOOTER_RE = /\n*Tags: ([^\n]*)\s*$/;
+
+function normalizeTagsKey(tags: string[]): string {
+  return tags
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0)
+    .sort()
+    .join("\0");
+}
+
+function stripMatchingEmbeddedTagsFooter(memory: string, tags: string[]): string {
+  const match = memory.match(EMBEDDED_TAGS_FOOTER_RE);
+  if (!match) {
+    return memory;
+  }
+
+  const footerValue = match[1];
+  if (footerValue === undefined) {
+    return memory;
+  }
+
+  const embeddedTags = footerValue
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0);
+
+  if (normalizeTagsKey(embeddedTags) !== normalizeTagsKey(tags)) {
+    return memory;
+  }
+
+  return memory.replace(EMBEDDED_TAGS_FOOTER_RE, "");
+}
+
 function formatMemoriesForCompaction(memories: any[]): string {
   let output = `## Restored Session Memory\n\n`;
 
   memories.forEach((m, i) => {
+    const tags = Array.isArray(m.tags) ? m.tags : [];
+    const body =
+      tags.length > 0 ? stripMatchingEmbeddedTagsFooter(m.memory ?? "", tags) : (m.memory ?? "");
+
     output += `### Memory ${i + 1}\n`;
-    output += `${m.memory}\n\n`;
-    if (m.tags && m.tags.length > 0) {
-      output += `Tags: ${m.tags.join(", ")}\n\n`;
+    output += `${body}\n\n`;
+    if (tags.length > 0) {
+      output += `Tags: ${tags.join(", ")}\n\n`;
     }
   });
 
