@@ -10,10 +10,10 @@
     "check": "tsc -b --pretty false"
   },
   "dependencies": {
-    "dompurify": "^3.4.14",
+    "dompurify": "^3.4.15",
     "jsonrepair": "^3.15.0",
-    "marked": "^18.0.11",
-    "zod": "^4.4.3"
+    "marked": "^18.0.12",
+    "zod": "^4.6.2"
   },
   "devDependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
@@ -24,20 +24,20 @@
     "@radix-ui/react-separator": "^1.1.7",
     "@radix-ui/react-slot": "^1.2.3",
     "@tailwindcss/vite": "^4.3.3",
-    "@types/node": "^26.4.0",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.5",
+    "@types/node": "^26.5.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.34.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "lucide-react": "^1.44.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.3",
     "tw-animate-css": "^1.4.0",
     "typescript": "~7.0.2",
-    "vite": "^8.2.2"
+    "vite": "^8.3.0"
   }
 }

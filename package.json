@@ -51,7 +51,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
-    "@libsql/client": "^0.17.4",
+    "@libsql/client": "^0.18.0",
     "@opencode-ai/plugin": "^1.18.15",
     "@opencode-ai/sdk": "^1.18.15",
     "franc-min": "^6.2.0",
