@@ -8,7 +8,7 @@ import {
 } from "react";
 import { translations, type Lang, type TranslationKey } from "./translations";
 
-const LANGS: Lang[] = ["en", "zh", "ar"];
+const LANGS: Lang[] = ["en", "zh", "ar", "tr"];
 
 export type TranslateFn = (
   key: TranslationKey | string,
@@ -18,7 +18,7 @@ export type TranslateFn = (
 function readLang(): Lang {
   if (typeof window === "undefined") return "en";
   const stored = localStorage.getItem("opencode-mem-lang");
-  if (stored === "en" || stored === "zh" || stored === "ar") return stored;
+  if (stored === "en" || stored === "zh" || stored === "ar" || stored === "tr") return stored;
   return "en";
 }
 
