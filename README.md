@@ -57,7 +57,16 @@ If a shard becomes incompatible (for example after changing `embeddingDimensions
 
 ## Getting Started
 
-Add to your OpenCode configuration at `~/.config/opencode/opencode.json`:
+For OpenCode v2, use the native v2 entrypoint:
+
+```jsonc
+{
+  "plugins": ["opencode-mem/v2"],
+}
+```
+
+For OpenCode v1, add the default entrypoint to your configuration at
+`~/.config/opencode/opencode.json`:
 
 ```jsonc
 {

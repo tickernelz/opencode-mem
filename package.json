@@ -14,6 +14,10 @@
       "import": "./dist/plugin.js",
       "types": "./dist/index.d.ts"
     },
+    "./v2": {
+      "import": "./dist/v2/plugin.js",
+      "types": "./dist/v2/plugin.d.ts"
+    },
     "./tags": {
       "import": "./dist/services/tags.js",
       "types": "./dist/services/tags.d.ts"
@@ -66,6 +70,7 @@
     "bun-types": "1.3.14"
   },
   "devDependencies": {
+    "@opencode/plugin": "^2.0.3",
     "@types/bun": "^1.4.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.3.0",
