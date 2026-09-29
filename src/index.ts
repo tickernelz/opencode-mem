@@ -140,6 +140,41 @@ export async function resolveSessionAgent(
   return undefined;
 }
 
+/**
+ * Resolve the session's current model (the server-side `session.model`, written by the most
+ * recent real user message and left untouched by compaction). Compaction memory injection must
+ * pass it explicitly: OpenCode resolves `input.model ?? agent.model ?? session.model`, so when the
+ * active agent declares its own model the injected message would otherwise switch the session to
+ * that agent's default model and variant.
+ */
+export async function resolveSessionModel(
+  client: unknown,
+  sessionID: string
+): Promise<{ model: { providerID: string; modelID: string }; variant?: string } | undefined> {
+  const sessionClient = (client as { session?: { get?: (args: unknown) => Promise<unknown> } })
+    ?.session;
+  if (typeof sessionClient?.get !== "function") return undefined;
+
+  try {
+    const session = unwrapSdkData<{
+      model?: { providerID?: string; id?: string; variant?: string };
+    }>(await sessionClient.get({ path: { id: sessionID } }));
+    const model = session?.model;
+    if (typeof model?.providerID !== "string" || typeof model?.id !== "string") return undefined;
+    const variant =
+      typeof model.variant === "string" && model.variant && model.variant !== "default"
+        ? model.variant
+        : undefined;
+    return {
+      model: { providerID: model.providerID, modelID: model.id },
+      ...(variant ? { variant } : {}),
+    };
+  } catch (error) {
+    log("resolveSessionModel: session.get failed", { sessionID, error: String(error) });
+    return undefined;
+  }
+}
+
 async function isInternalCaptureSession(client: unknown, sessionID: string): Promise<boolean> {
   // Fast path: sessions we created ourselves (survives brief post-delete window).
   if (isTrackedInternalCaptureSession(sessionID)) {
@@ -998,6 +1033,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
             );
             return;
           }
+          const current = await resolveSessionModel(ctx.client, sessionID);
 
           await ctx.client.session.prompt({
             path: { id: sessionID },
@@ -1012,6 +1048,8 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
               ],
               noReply: true,
               agent,
+              ...(current ? { model: current.model } : {}),
+              ...(current?.variant ? { variant: current.variant } : {}),
             },
           });
 
@@ -1032,6 +1070,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
             sessionID,
             count: memoriesResult.results.length,
             agent: agent ?? null,
+            model: current ? `${current.model.providerID}/${current.model.modelID}` : null,
           });
         } catch (error) {
           log("Compaction handler error", { error: String(error) });

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveSessionAgent } from "../src/index.js";
+import { resolveSessionAgent, resolveSessionModel } from "../src/index.js";
 
 const tempDirs: string[] = [];
 
@@ -76,6 +76,56 @@ describe("resolveSessionAgent (#236)", () => {
   });
 });
 
+describe("resolveSessionModel", () => {
+  it("returns the session's current model and variant", async () => {
+    const client = {
+      session: {
+        get: async () => ({
+          data: { model: { providerID: "deepseek", id: "deepseek-flash", variant: "max" } },
+        }),
+      },
+    };
+
+    await expect(resolveSessionModel(client, "ses-1")).resolves.toEqual({
+      model: { providerID: "deepseek", modelID: "deepseek-flash" },
+      variant: "max",
+    });
+  });
+
+  it("omits the default variant", async () => {
+    const client = {
+      session: {
+        get: async () => ({
+          data: { model: { providerID: "anthropic", id: "claude-opus-5-5", variant: "default" } },
+        }),
+      },
+    };
+
+    await expect(resolveSessionModel(client, "ses-1")).resolves.toEqual({
+      model: { providerID: "anthropic", modelID: "claude-opus-5-5" },
+    });
+  });
+
+  it("returns undefined when the session has no model or cannot be read", async () => {
+    await expect(
+      resolveSessionModel({ session: { get: async () => ({ data: {} }) } }, "ses-1")
+    ).resolves.toBeUndefined();
+    await expect(
+      resolveSessionModel(
+        {
+          session: {
+            get: async () => {
+              throw new Error("boom");
+            },
+          },
+        },
+        "ses-1"
+      )
+    ).resolves.toBeUndefined();
+    await expect(resolveSessionModel({}, "ses-1")).resolves.toBeUndefined();
+  });
+});
+
 const indexUrl = new URL("../src/index.js", import.meta.url).href;
 const clientUrl = new URL("../src/services/client.js", import.meta.url).href;
 const configUrl = new URL("../src/config.js", import.meta.url).href;
@@ -96,6 +146,7 @@ function runCompactionScenario(opts: {
   memories: Array<{ memory: string; tags?: string[] }>;
   messages: Array<{ info: Record<string, unknown> }>;
   sessionAgent?: string;
+  sessionModel?: Record<string, unknown>;
   compactionEnabled?: boolean;
 }) {
   const dir = mkdtempSync(join(tmpdir(), "opencode-mem-compaction-agent-"));
@@ -149,7 +200,9 @@ mock.module(${JSON.stringify(languageUrl)}, () => ({ getLanguageName: () => "Eng
 
 const mockClient = {
   session: {
-    get: async () => ({ data: ${JSON.stringify({ agent: opts.sessionAgent })} }),
+    get: async () => ({
+      data: ${JSON.stringify({ agent: opts.sessionAgent, model: opts.sessionModel })},
+    }),
     messages: async () => ({ data: ${JSON.stringify(opts.messages)} }),
     prompt: async (args) => {
       promptCalls.push(args);
@@ -295,5 +348,39 @@ describe("session.compacted agent preservation (#236)", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.parsed?.promptCalls).toEqual([]);
+  });
+});
+
+describe("session.compacted model preservation", () => {
+  it("passes the session's current model and variant to session.prompt", () => {
+    const result = runCompactionScenario({
+      sessionAgent: "my-orchestrator",
+      sessionModel: { providerID: "deepseek", id: "deepseek-flash", variant: "max" },
+      memories: [{ memory: "remember this", tags: ["t1"] }],
+      messages: [{ info: { role: "user", agent: "my-orchestrator" } }],
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.parsed?.promptCalls).toHaveLength(1);
+    expect(result.parsed?.promptCalls[0]?.body?.model).toEqual({
+      providerID: "deepseek",
+      modelID: "deepseek-flash",
+    });
+    expect(result.parsed?.promptCalls[0]?.body?.variant).toBe("max");
+  });
+
+  it("leaves model unset when the session has no current model", () => {
+    const result = runCompactionScenario({
+      sessionAgent: "my-orchestrator",
+      memories: [{ memory: "remember this", tags: ["t1"] }],
+      messages: [{ info: { role: "user", agent: "my-orchestrator" } }],
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.parsed?.promptCalls).toHaveLength(1);
+    expect(result.parsed?.promptCalls[0]?.body?.model).toBeUndefined();
+    expect(result.parsed?.promptCalls[0]?.body?.variant).toBeUndefined();
   });
 });
