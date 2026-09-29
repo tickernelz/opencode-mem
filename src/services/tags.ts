@@ -126,6 +126,7 @@ function runGit(args: string[], directory: string = process.cwd()): string | nul
       cwd: directory,
       stdio: ["ignore", "pipe", "ignore"],
       shell: gitCommand.shell,
+      windowsHide: true,
     }).trim();
     return output || null;
   } catch {
