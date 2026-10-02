@@ -9,6 +9,8 @@ import {
   withSqliteFileLockRetry,
   renameSqliteDatabase,
   copySqliteDatabase,
+  removeSqliteDatabase,
+  collectReleasedSqliteHandles,
 } from "./sqlite-handle-release.js";
 import { tursoConnectionManager, resolveDatabaseEncryption } from "./connection-manager.js";
 import { TursoDb } from "./turso-db.js";
@@ -201,8 +203,10 @@ async function rewriteMemoryShard(dbPath: string): Promise<void> {
     await tursoConnectionManager.closeConnection(stagedPath);
   }
 
+  // Match encryption-migrator: Windows cannot rename over an existing file (EPERM).
   await withSqliteFileLockRetry(() => {
     copySqliteDatabase(dbPath, backupPath);
+    removeSqliteDatabase(dbPath);
     renameSqliteDatabase(stagedPath, dbPath);
   });
 
@@ -254,10 +258,13 @@ async function rewriteGenericDb(dbPath: string, tables: string[]): Promise<void>
     }
   } finally {
     await staged.close();
+    await collectReleasedSqliteHandles();
   }
 
+  // Match encryption-migrator: Windows cannot rename over an existing file (EPERM).
   await withSqliteFileLockRetry(() => {
     copySqliteDatabase(dbPath, backupPath);
+    removeSqliteDatabase(dbPath);
     renameSqliteDatabase(stagedPath, dbPath);
   });
   log("Migrated auxiliary DB to @tursodatabase/database", { dbPath, backupPath });
