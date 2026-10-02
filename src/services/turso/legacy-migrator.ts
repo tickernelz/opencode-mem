@@ -11,6 +11,7 @@ import { CONFIG } from "../../config.js";
 import { log } from "../logger.js";
 import { tursoConnectionManager } from "./connection-manager.js";
 import { tursoShardManager } from "./shard-manager.js";
+import { runTursoEngineMigration } from "./engine-migrator.js";
 import {
   withSqliteFileLockRetry,
   renameSqliteDatabase,
@@ -612,6 +613,11 @@ export async function runLegacyTursoMigration(): Promise<void> {
   }
 
   recoverInterruptedReembedSwaps();
+
+  // Recovery may put a libSQL shard back at its active path. Convert DiskANN
+  // indexes before any legacy verification opens it with the Turso engine,
+  // and before taking the legacy lock that would block the engine migration.
+  await runTursoEngineMigration();
 
   const marker = readMarker(CONFIG.storagePath);
   if (marker && (await allShardsComplete())) {

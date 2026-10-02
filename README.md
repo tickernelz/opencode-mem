@@ -43,6 +43,8 @@ This plugin uses embedded Turso (`@tursodatabase/database`) with `F32_BLOB` vect
 
 ### Upgrading from legacy SQLite shards
 
+Startup recovers interrupted re-embed swaps, converts libSQL DiskANN indexes to the current Turso engine, and then verifies or upgrades the legacy shard schema. Engine conversion runs even when a store already has a completed legacy migration marker, and preserves stored vectors without re-embedding. Each converted database is backed up as `<database>.pre-tursodb-<timestamp>.bak`.
+
 On first startup after upgrading, opencode-mem automatically migrates existing memory shard databases to native Turso/libSQL vector format:
 
 - Each shard is backed up as `<shard>.db.legacy.bak` before rewrite
