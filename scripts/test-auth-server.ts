@@ -1,11 +1,11 @@
-import { WebServer } from "../src/services/web-server.js";
-import { WebAuth } from "../src/services/web-auth.js";
-import { resolveSecretValue } from "../src/services/secret-resolver.js";
+import { WebServer } from "../src/runtime/http/web-server.js";
+import { WebAuth } from "../src/runtime/http/web-auth.js";
+import { resolveSecretValue } from "../src/infra/secret-resolver.js";
 
 const PORT = Number(process.env.PORT ?? 14747);
 const HOST = process.env.HOST ?? "127.0.0.1";
 
-// Mirrors how src/index.ts plumbs the opencode-mem config through to WebAuth:
+// Mirrors how src/hosts/opencode/plugin.ts plumbs the opencode-mem config through to WebAuth:
 // both values are optional in the config file, and `webServerAuthPassword`
 // accepts the same env:// / file:// shorthand as `memoryApiKey`.
 const password = resolveSecretValue(process.env.WEB_AUTH_PASSWORD);

@@ -3,7 +3,7 @@ import {
   corsPreflightResponse,
   disallowedCorsResponse,
   isAllowedBrowserOrigin,
-} from "../src/services/cors.js";
+} from "../src/runtime/http/cors.js";
 
 describe("web server CORS policy", () => {
   describe("isAllowedBrowserOrigin", () => {

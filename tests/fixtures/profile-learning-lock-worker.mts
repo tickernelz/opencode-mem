@@ -56,8 +56,8 @@ import { join } from "node:path";
 import * as importedFs from "node:fs";
 import * as importedChildProcess from "node:child_process";
 import { connect } from "@tursodatabase/database";
-import { TursoDb } from "../../src/services/turso/turso-db.js";
-import { tursoExperimentalFeatures } from "../../src/services/turso/connection-manager.js";
+import { TursoDb } from "../../src/storage/turso/turso-db.js";
+import { tursoExperimentalFeatures } from "../../src/storage/turso/connection-manager.js";
 
 const storage = process.env.PLL_STORAGE;
 const mode = process.env.PLL_MODE;
@@ -73,8 +73,8 @@ const realReadFileSync = importedFs.readFileSync;
 const realSpawnSync = importedChildProcess.spawnSync;
 
 const configUrl = new URL("../../src/config.js", import.meta.url).href;
-const loggerUrl = new URL("../../src/services/logger.js", import.meta.url).href;
-const lockUrl = new URL("../../src/services/user-profile/learning-lock.js", import.meta.url).href;
+const loggerUrl = new URL("../../src/infra/logger.js", import.meta.url).href;
+const lockUrl = new URL("../../src/user-profile/learning-lock.js", import.meta.url).href;
 
 mock.module(configUrl, () => ({
   CONFIG: { storagePath: storage },

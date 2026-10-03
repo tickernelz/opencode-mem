@@ -18,9 +18,9 @@ describe("turso shard rotation", () => {
     CONFIG.embeddingDimensions = 4;
     CONFIG.maxVectorsPerShard = 1;
 
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
     const hash = "abcdef0123456789";
 
     const first = await tursoShardManager.getWriteShard("project", hash);
@@ -50,8 +50,8 @@ describe("turso shard rotation", () => {
     const { CONFIG } = await import("../src/config.js");
     CONFIG.storagePath = baseDir;
     CONFIG.embeddingDimensions = 4;
-    const { acquireTursoOperationLock } = await import("../src/services/turso/operation-lock.js");
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+    const { acquireTursoOperationLock } = await import("../src/storage/turso/operation-lock.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
 
     const release = acquireTursoOperationLock("test");
     await expect(tursoShardManager.getWriteShard("project", "abcdef0123456789")).rejects.toThrow(

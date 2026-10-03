@@ -1,6 +1,6 @@
 import type { Plugin } from "@opencode/plugin/promise/plugin";
 import { OpenCodeMemPlugin } from "../index.js";
-import { loadOpencodeProvider } from "../services/ai/opencode-provider-loader.js";
+import { loadOpencodeProvider } from "../ai/opencode-provider-loader.js";
 import { registerV2Adapter } from "./adapter.js";
 import { createLegacyClient } from "./legacy-client.js";
 

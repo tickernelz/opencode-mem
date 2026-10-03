@@ -1,11 +1,11 @@
 import { describe, it, expect } from "bun:test";
-import { stripPrivateContent, isFullyPrivate } from "../src/services/privacy.js";
+import { stripPrivateContent, isFullyPrivate } from "../src/infra/privacy.js";
 
 const SECRET = "sk-live-abc123";
 
 /**
  * `stripPrivateContent` is the last thing between a `<private>` block and
- * persistent storage (`src/index.ts:548` for memories, `:612` for the user
+ * persistent storage (`src/hosts/opencode/plugin.ts:548` for memories, `:612` for the user
  * profile). Malformed markup must fail *closed*: the caller writes the result to
  * a database, so under-redacting is an unrecoverable disclosure while
  * over-redacting only loses text the user can retype.

@@ -2,11 +2,11 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "bun:test"
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildMemoryProviderConfig } from "../src/services/ai/provider-config.js";
-import { applySafeExtraParams } from "../src/services/ai/providers/base-provider.js";
-import { OpenAIChatCompletionProvider } from "../src/services/ai/providers/openai-chat-completion.js";
-import { OpenAIResponsesProvider } from "../src/services/ai/providers/openai-responses.js";
-import type { ChatCompletionTool } from "../src/services/ai/tools/tool-schema.js";
+import { buildMemoryProviderConfig } from "../src/ai/provider-config.js";
+import { applySafeExtraParams } from "../src/ai/providers/base-provider.js";
+import { OpenAIChatCompletionProvider } from "../src/ai/providers/openai-chat-completion.js";
+import { OpenAIResponsesProvider } from "../src/ai/providers/openai-responses.js";
+import type { ChatCompletionTool } from "../src/ai/tools/tool-schema.js";
 
 const toolSchema: ChatCompletionTool = {
   type: "function",

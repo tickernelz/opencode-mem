@@ -3,7 +3,7 @@ import {
   buildBoundedSummaryPrompt,
   buildMarkdownContext,
   getAutoCaptureMarkdownBudget,
-} from "../src/services/auto-capture.js";
+} from "../src/memory/auto-capture.js";
 import { utf8ByteLength } from "../src/utils/context-limit.js";
 
 describe("buildMarkdownContext budgeting (#232)", () => {

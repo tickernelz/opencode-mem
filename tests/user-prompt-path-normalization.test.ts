@@ -2,7 +2,7 @@ import { afterAll, beforeEach, afterEach, describe, expect, it } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { TursoDb } from "../src/services/turso/turso-db.js";
+import type { TursoDb } from "../src/storage/turso/turso-db.js";
 
 const sandbox = mkdtempSync(join(tmpdir(), "opencode-mem-path-home-"));
 const originalHome = process.env.HOME;
@@ -10,7 +10,7 @@ const originalUserProfile = process.env.USERPROFILE;
 process.env.HOME = sandbox;
 process.env.USERPROFILE = sandbox;
 
-const { UserPromptManager } = await import("../src/services/user-prompt/user-prompt-manager.js");
+const { UserPromptManager } = await import("../src/memory/user-prompt/user-prompt-manager.js");
 
 type TestableManager = InstanceType<typeof UserPromptManager> & {
   ready(): Promise<TursoDb>;

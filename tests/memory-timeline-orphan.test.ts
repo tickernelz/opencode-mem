@@ -17,13 +17,13 @@ describe("memory timeline listing", () => {
     const { CONFIG } = await import("../src/config.js");
     CONFIG.storagePath = baseDir;
 
-    const { ensureTursoReady } = await import("../src/services/turso/ready.js");
+    const { ensureTursoReady } = await import("../src/storage/turso/ready.js");
     await ensureTursoReady();
 
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
-    const { handleListMemories } = await import("../src/services/api-handlers.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
+    const { handleListMemories } = await import("../src/runtime/http/api-handlers.js");
 
     const dims = CONFIG.embeddingDimensions;
     const vector = new Float32Array(dims);
@@ -58,15 +58,14 @@ describe("memory timeline listing", () => {
     const { CONFIG } = await import("../src/config.js");
     CONFIG.storagePath = baseDir;
 
-    const { ensureTursoReady } = await import("../src/services/turso/ready.js");
+    const { ensureTursoReady } = await import("../src/storage/turso/ready.js");
     await ensureTursoReady();
 
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
-    const { handleListMemories } = await import("../src/services/api-handlers.js");
-    const { userPromptManager } =
-      await import("../src/services/user-prompt/user-prompt-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
+    const { handleListMemories } = await import("../src/runtime/http/api-handlers.js");
+    const { userPromptManager } = await import("../src/memory/user-prompt/user-prompt-manager.js");
 
     const dims = CONFIG.embeddingDimensions;
     const vector = new Float32Array(dims);

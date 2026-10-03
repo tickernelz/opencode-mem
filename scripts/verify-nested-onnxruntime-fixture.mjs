@@ -338,7 +338,7 @@ async function main() {
   const embeddingUrl = pathToFileURL(join(pluginRoot, "dist", "services", "embedding.js")).href;
   const embeddingMod = await import(embeddingUrl);
   if (typeof embeddingMod.loadLocalTransformersBackend !== "function") {
-    fail("dist/services/embedding.js does not export loadLocalTransformersBackend");
+    fail("dist/memory/embedding.js does not export loadLocalTransformersBackend");
   }
 
   const transformers = await embeddingMod.loadLocalTransformersBackend();

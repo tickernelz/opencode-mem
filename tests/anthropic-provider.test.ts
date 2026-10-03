@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { AnthropicMessagesProvider } from "../src/services/ai/providers/anthropic-messages.js";
-import type { ChatCompletionTool } from "../src/services/ai/tools/tool-schema.js";
+import { AnthropicMessagesProvider } from "../src/ai/providers/anthropic-messages.js";
+import type { ChatCompletionTool } from "../src/ai/tools/tool-schema.js";
 
 const toolSchema: ChatCompletionTool = {
   type: "function",

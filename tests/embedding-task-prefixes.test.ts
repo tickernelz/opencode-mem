@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { applyEmbeddingTaskPrefix } from "../src/services/embedding.js";
+import { applyEmbeddingTaskPrefix } from "../src/memory/embedding.js";
 
 describe("applyEmbeddingTaskPrefix", () => {
   it("returns text unchanged when prefixes are disabled", () => {

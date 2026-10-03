@@ -54,14 +54,14 @@ describe("turso engine migrator", () => {
     const marker = join(baseDir, ".tursodb-engine-v1");
     writeFileSync(marker, JSON.stringify({ migratedAt: "already" }));
 
-    const { runTursoEngineMigration } = await import("../src/services/turso/engine-migrator.js");
+    const { runTursoEngineMigration } = await import("../src/storage/turso/engine-migrator.js");
     await runTursoEngineMigration();
     expect(JSON.parse(readFileSync(marker, "utf-8")).migratedAt).toBe("already");
   });
 
   migrationTest("writes marker when storage has no databases", async () => {
     await withStorage();
-    const { runTursoEngineMigration } = await import("../src/services/turso/engine-migrator.js");
+    const { runTursoEngineMigration } = await import("../src/storage/turso/engine-migrator.js");
     await runTursoEngineMigration();
     expect(existsSync(join(baseDir, ".tursodb-engine-v1"))).toBe(true);
   });
@@ -111,7 +111,7 @@ describe("turso engine migrator", () => {
       client.close();
     }
 
-    const { runTursoEngineMigration } = await import("../src/services/turso/engine-migrator.js");
+    const { runTursoEngineMigration } = await import("../src/storage/turso/engine-migrator.js");
     await runTursoEngineMigration();
 
     expect(existsSync(join(baseDir, ".tursodb-engine-v1"))).toBe(true);
@@ -141,7 +141,7 @@ describe("turso engine migrator", () => {
       await db.close();
     }
 
-    const { runTursoEngineMigration } = await import("../src/services/turso/engine-migrator.js");
+    const { runTursoEngineMigration } = await import("../src/storage/turso/engine-migrator.js");
     await runTursoEngineMigration();
 
     expect(existsSync(join(baseDir, ".tursodb-engine-v1"))).toBe(true);

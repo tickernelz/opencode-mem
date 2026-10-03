@@ -5,7 +5,7 @@ import {
   isTrackedInternalCaptureSession,
   trackInternalCaptureSession,
   untrackInternalCaptureSession,
-} from "../src/services/ai/internal-capture-sessions.js";
+} from "../src/ai/internal-capture-sessions.js";
 
 describe("internal capture session tracking", () => {
   it("tracks and untracks session ids with grace", async () => {

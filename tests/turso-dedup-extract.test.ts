@@ -20,10 +20,10 @@ describe("turso dedup vector_extract", () => {
     CONFIG.deduplicationEnabled = true;
     CONFIG.deduplicationSimilarityThreshold = 0.9;
 
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
-    const { deduplicationService } = await import("../src/services/deduplication-service.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
+    const { deduplicationService } = await import("../src/memory/deduplication-service.js");
 
     const scopeHash = "f1f2f3f4f5f67890";
     const containerTag = `opencode_project_${scopeHash}`;

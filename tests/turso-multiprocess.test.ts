@@ -14,7 +14,7 @@ describe("turso multiprocess_wal", () => {
 
   it("buildConnectOptions enables encryption and multiprocess_wal on Unix only", async () => {
     const { buildConnectOptions, tursoExperimentalFeatures, supportsTursoMultiprocessWal } =
-      await import("../src/services/turso/connection-manager.js");
+      await import("../src/storage/turso/connection-manager.js");
     expect(tursoExperimentalFeatures("linux")).toEqual(["encryption", "multiprocess_wal"]);
     expect(tursoExperimentalFeatures("darwin")).toEqual(["encryption", "multiprocess_wal"]);
     expect(tursoExperimentalFeatures("win32")).toEqual(["encryption"]);
@@ -30,7 +30,7 @@ describe("turso multiprocess_wal", () => {
 
   it("wrapTursoOpenError explains multi-process lock failures", async () => {
     const { wrapTursoOpenError, isTursoMultiProcessLockError } =
-      await import("../src/services/turso/connection-manager.js");
+      await import("../src/storage/turso/connection-manager.js");
     const locked = new Error(
       "failed to open database /tmp/x.db: Locking error: Failed locking file. File is locked by another process"
     );
@@ -47,7 +47,7 @@ describe("turso multiprocess_wal", () => {
       const { CONFIG } = await import("../src/config.js");
       CONFIG.storagePath = baseDir;
       CONFIG.databaseEncryptionEnabled = false;
-      const { buildConnectOptions } = await import("../src/services/turso/connection-manager.js");
+      const { buildConnectOptions } = await import("../src/storage/turso/connection-manager.js");
 
       const dbPath = join(baseDir, "shared.db");
       const opts = buildConnectOptions();
@@ -109,7 +109,7 @@ describe("sqlite sidecars include -tshm", () => {
   it("rename/copy/remove move -wal -shm and -tshm together", async () => {
     baseDir = mkdtempSync(join(tmpdir(), "turso-tshm-"));
     const { copySqliteDatabase, renameSqliteDatabase, removeSqliteDatabase } =
-      await import("../src/services/turso/sqlite-handle-release.js");
+      await import("../src/storage/turso/sqlite-handle-release.js");
 
     const src = join(baseDir, "src.db");
     const dst = join(baseDir, "dst.db");

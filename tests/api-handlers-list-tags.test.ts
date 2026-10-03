@@ -18,13 +18,13 @@ describe("handleListTags scope coverage", () => {
     CONFIG.storagePath = baseDir;
     CONFIG.embeddingDimensions = 768;
 
-    const { closeTursoAndInvalidateCaches } = await import("../src/services/turso/lifecycle.js");
+    const { closeTursoAndInvalidateCaches } = await import("../src/storage/turso/lifecycle.js");
     await closeTursoAndInvalidateCaches();
 
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
-    const { handleListTags } = await import("../src/services/api-handlers.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
+    const { handleListTags } = await import("../src/runtime/http/api-handlers.js");
 
     const vector = new Float32Array(768);
     vector[0] = 1;

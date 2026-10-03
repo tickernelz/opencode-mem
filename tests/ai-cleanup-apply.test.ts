@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { mergeCleanupIntoProfile } from "../src/services/api-handlers.js";
-import { rebuildProfileUsing } from "../src/services/user-profile/ai-cleanup.js";
-import type { UserProfileData } from "../src/services/user-profile/types.js";
+import { mergeCleanupIntoProfile } from "../src/runtime/http/api-handlers.js";
+import { rebuildProfileUsing } from "../src/user-profile/ai-cleanup.js";
+import type { UserProfileData } from "../src/user-profile/types.js";
 
 function pref(description: string, category = "style") {
   return {

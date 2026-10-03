@@ -18,17 +18,16 @@ describe("api memory shard scope", () => {
     CONFIG.storagePath = baseDir;
     CONFIG.embeddingDimensions = 768;
 
-    const { closeTursoAndInvalidateCaches } = await import("../src/services/turso/lifecycle.js");
+    const { closeTursoAndInvalidateCaches } = await import("../src/storage/turso/lifecycle.js");
     await closeTursoAndInvalidateCaches();
 
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
     const { handleStats, handlePinMemory, handleSearch } =
-      await import("../src/services/api-handlers.js");
-    const { embeddingService } = await import("../src/services/embedding.js");
-    const { userPromptManager } =
-      await import("../src/services/user-prompt/user-prompt-manager.js");
+      await import("../src/runtime/http/api-handlers.js");
+    const { embeddingService } = await import("../src/memory/embedding.js");
+    const { userPromptManager } = await import("../src/memory/user-prompt/user-prompt-manager.js");
 
     const vector = new Float32Array(768);
     vector[0] = 1;

@@ -39,8 +39,7 @@ delete CONFIG.opencodeModel;
 delete CONFIG.memoryModel;
 delete CONFIG.memoryApiUrl;
 
-const { UserProfileManager } =
-  await import("../../src/services/user-profile/user-profile-manager.js");
+const { UserProfileManager } = await import("../../src/user-profile/user-profile-manager.js");
 const coldEmbed = { isWarmedUp: false } as any;
 
 const mgr = new UserProfileManager();

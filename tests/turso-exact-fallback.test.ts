@@ -18,9 +18,9 @@ describe("turso exact cosine search", () => {
     CONFIG.storagePath = baseDir;
     CONFIG.embeddingDimensions = 8;
 
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
 
     const scopeHash = "e1e2e3e4e5f67890";
     const containerTag = `opencode_project_${scopeHash}`;

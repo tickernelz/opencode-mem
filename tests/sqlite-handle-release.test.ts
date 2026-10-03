@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { withSqliteFileLockRetry } from "../src/services/turso/sqlite-handle-release.js";
+import { withSqliteFileLockRetry } from "../src/storage/turso/sqlite-handle-release.js";
 import { cleanupTursoTestDirectory } from "./turso-test-utils.js";
 
 function errno(code: string): NodeJS.ErrnoException {

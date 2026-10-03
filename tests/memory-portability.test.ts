@@ -16,7 +16,7 @@ describe("memory export/import portability", () => {
   });
 
   async function stubEmbedding() {
-    const { embeddingService } = await import("../src/services/embedding.js");
+    const { embeddingService } = await import("../src/memory/embedding.js");
     const service = embeddingService as any;
     const original = {
       warmup: service.warmup,
@@ -42,10 +42,10 @@ describe("memory export/import portability", () => {
     CONFIG.embeddingDimensions = 2;
     CONFIG.containerTagPrefix = "opencode";
 
-    const { getProjectTagInfo } = await import("../src/services/tags.js");
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const { getProjectTagInfo } = await import("../src/memory/tags.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
 
     const tag = getProjectTagInfo(projectDir);
     const hash = tag.tag.split("_").pop()!;
@@ -77,7 +77,7 @@ describe("memory export/import portability", () => {
     const outputPath = join(baseDir, "memories.json");
 
     const { memoryPortabilityService } =
-      await import("../src/services/memory-portability-service.js");
+      await import("../src/memory/memory-portability-service.js");
     const exported = await memoryPortabilityService.exportMemories({
       currentDirectory: projectDir,
       outputPath,
@@ -105,10 +105,10 @@ describe("memory export/import portability", () => {
     expect(importResult.success).toBe(true);
     expect(importResult.imported).toBe(1);
 
-    const { getProjectTagInfo } = await import("../src/services/tags.js");
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const { getProjectTagInfo } = await import("../src/memory/tags.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
     const otherTag = getProjectTagInfo(otherDir);
     const otherHash = otherTag.tag.split("_").pop()!;
     const shards = await tursoShardManager.getAllShards("project", otherHash);
@@ -132,7 +132,7 @@ describe("memory export/import portability", () => {
     await setupProject();
     const outputPath = join(baseDir, "memories.json");
     const { memoryPortabilityService } =
-      await import("../src/services/memory-portability-service.js");
+      await import("../src/memory/memory-portability-service.js");
     await memoryPortabilityService.exportMemories({
       currentDirectory: projectDir,
       outputPath,
@@ -169,7 +169,7 @@ describe("memory export/import portability", () => {
     );
 
     const { memoryPortabilityService } =
-      await import("../src/services/memory-portability-service.js");
+      await import("../src/memory/memory-portability-service.js");
     const result = await memoryPortabilityService.importMemories({
       currentDirectory: projectDir,
       inputPath: badPath,
@@ -233,7 +233,7 @@ describe("memory export/import portability", () => {
     );
 
     const { memoryPortabilityService } =
-      await import("../src/services/memory-portability-service.js");
+      await import("../src/memory/memory-portability-service.js");
     const result = await memoryPortabilityService.importMemories({
       currentDirectory: largeTarget,
       inputPath,
@@ -241,10 +241,10 @@ describe("memory export/import portability", () => {
     expect(result.success).toBe(true);
     expect(result.imported).toBe(501);
 
-    const { getProjectTagInfo } = await import("../src/services/tags.js");
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const { getProjectTagInfo } = await import("../src/memory/tags.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
     const hash = getProjectTagInfo(largeTarget).tag.split("_").pop()!;
     const shard = (await tursoShardManager.getAllShards("project", hash))[0]!;
     expect(

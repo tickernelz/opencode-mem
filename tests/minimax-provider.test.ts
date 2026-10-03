@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { MiniMaxProvider } from "../src/services/ai/providers/minimax.js";
-import { AIProviderFactory } from "../src/services/ai/ai-provider-factory.js";
-import type { ChatCompletionTool } from "../src/services/ai/tools/tool-schema.js";
+import { MiniMaxProvider } from "../src/ai/providers/minimax.js";
+import { AIProviderFactory } from "../src/ai/ai-provider-factory.js";
+import type { ChatCompletionTool } from "../src/ai/tools/tool-schema.js";
 
 const toolSchema: ChatCompletionTool = {
   type: "function",

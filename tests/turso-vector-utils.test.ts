@@ -5,7 +5,7 @@ import {
   formatTagsForEmbedding,
   parseSessionIdFromMetadata,
   tokenizeQueryText,
-} from "../src/services/turso/vector-utils.js";
+} from "../src/storage/turso/vector-utils.js";
 
 describe("turso vector utils", () => {
   it("clamps cosine distance float artifacts into [0, 1] similarity", () => {

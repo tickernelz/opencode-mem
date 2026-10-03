@@ -4,7 +4,7 @@ import {
   filterInjectedParts,
   getDefaultInjectionMarkers,
   isInjectedPart,
-} from "../src/services/injected-prompt-filter.js";
+} from "../src/memory/injected-prompt-filter.js";
 import { normalizeInjectionMarkers } from "../src/config.js";
 
 // Verbatim samples taken from a real OpenCode session store, where 490 of 801

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { getProjectName } from "../src/services/tags.js";
+import { getProjectName } from "../src/memory/tags.js";
 import { win32, posix, join } from "node:path";
 
 describe("Windows Path Handling", () => {

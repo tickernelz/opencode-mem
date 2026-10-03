@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { tursoConnectionManager } from "../src/services/turso/connection-manager.js";
+import { tursoConnectionManager } from "../src/storage/turso/connection-manager.js";
 
 let tmpDir: string;
 
@@ -10,8 +10,7 @@ async function makeManager() {
   const { CONFIG } = await import("../src/config.js");
   CONFIG.storagePath = tmpDir;
   CONFIG.userProfileEmbeddingMinDescriptionLength = 5;
-  const { UserProfileManager } =
-    await import("../src/services/user-profile/user-profile-manager.js");
+  const { UserProfileManager } = await import("../src/user-profile/user-profile-manager.js");
   return { mgr: new UserProfileManager(), CONFIG };
 }
 

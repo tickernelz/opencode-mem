@@ -3,7 +3,7 @@ import {
   assertWebServerNetworkAuth,
   authorizeApiRequest,
   isLoopbackHost,
-} from "../src/services/web-api-auth.js";
+} from "../src/runtime/http/web-api-auth.js";
 
 describe("web api auth", () => {
   it("detects loopback hosts", () => {

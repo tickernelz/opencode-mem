@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 
 const root = join(import.meta.dirname, "..");
 const { isVersionNewer, isAutoUpdatableSpec, updateRemoveDir, checkAutoUpdate, startAutoUpdate } =
-  await import(join(root, "src/services/auto-update.ts"));
+  await import(join(root, "src/infra/auto-update.ts"));
 
 assert.equal(isVersionNewer("2.27.0", "2.26.0"), true);
 assert.equal(isAutoUpdatableSpec("latest"), true);

@@ -25,10 +25,10 @@ describe("shard inventory and source resolution", () => {
     CONFIG.embeddingDimensions = 2;
     CONFIG.containerTagPrefix = "opencode";
 
-    const { getProjectTagInfo } = await import("../src/services/tags.js");
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const { getProjectTagInfo } = await import("../src/memory/tags.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
 
     const oldTag = getProjectTagInfo(oldProjectDir);
     const oldHash = oldTag.tag.split("_").pop()!;
@@ -56,7 +56,7 @@ describe("shard inventory and source resolution", () => {
     const { rmSync } = await import("node:fs");
     rmSync(oldProjectDir, { recursive: true, force: true });
 
-    const { shardInventoryService } = await import("../src/services/shard-inventory-service.js");
+    const { shardInventoryService } = await import("../src/storage/shard-inventory-service.js");
     const result = await shardInventoryService.listShards(newProjectDir);
 
     expect(result.success).toBe(true);
@@ -69,7 +69,7 @@ describe("shard inventory and source resolution", () => {
 
   it("resolves migration source by stored project path and by fromHash", async () => {
     const { oldHash } = await setup();
-    const { shardInventoryService } = await import("../src/services/shard-inventory-service.js");
+    const { shardInventoryService } = await import("../src/storage/shard-inventory-service.js");
 
     const byPath = await shardInventoryService.resolveMigrationSource(newProjectDir, {
       fromPath: oldProjectDir,
@@ -105,7 +105,7 @@ describe("shard inventory and source resolution", () => {
 
   it("rejects ambiguous and invalid fromHash values", async () => {
     await setup();
-    const { shardInventoryService } = await import("../src/services/shard-inventory-service.js");
+    const { shardInventoryService } = await import("../src/storage/shard-inventory-service.js");
 
     const invalid = await shardInventoryService.resolveMigrationSource(newProjectDir, {
       fromHash: "not-a-hash",

@@ -34,23 +34,18 @@ async function waitFile(path, timeoutMs = 30_000) {
   if (!existsSync(path)) throw new Error(`worker: handshake file never appeared: ${path}`);
 }
 
-const learningUrl = new URL("../../src/services/user-memory-learning.js", import.meta.url).href;
+const learningUrl = new URL("../../src/memory/user-memory-learning.js", import.meta.url).href;
 const configUrl = new URL("../../src/config.js", import.meta.url).href;
-const tagsUrl = new URL("../../src/services/tags.js", import.meta.url).href;
-const loggerUrl = new URL("../../src/services/logger.js", import.meta.url).href;
+const tagsUrl = new URL("../../src/memory/tags.js", import.meta.url).href;
+const loggerUrl = new URL("../../src/infra/logger.js", import.meta.url).href;
 const promptManagerUrl = new URL(
-  "../../src/services/user-prompt/user-prompt-manager.js",
+  "../../src/memory/user-prompt/user-prompt-manager.js",
   import.meta.url
 ).href;
-const profileManagerUrl = new URL(
-  "../../src/services/user-profile/user-profile-manager.js",
-  import.meta.url
-).href;
-const providerLoaderUrl = new URL(
-  "../../src/services/ai/opencode-provider-loader.js",
-  import.meta.url
-).href;
-const llmClientUrl = new URL("../../src/services/ai/profile-llm-client.js", import.meta.url).href;
+const profileManagerUrl = new URL("../../src/user-profile/user-profile-manager.js", import.meta.url)
+  .href;
+const providerLoaderUrl = new URL("../../src/ai/opencode-provider-loader.js", import.meta.url).href;
+const llmClientUrl = new URL("../../src/ai/profile-llm-client.js", import.meta.url).href;
 
 const promptCount = cfg.promptCount ?? 10;
 const prompts = Array.from({ length: promptCount }, (_, i) => ({

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  stripProfileEmbeddings,
-  toPublicProfileData,
-} from "../src/services/user-profile/profile-utils.js";
+import { stripProfileEmbeddings, toPublicProfileData } from "../src/user-profile/profile-utils.js";
 
 function sampleProfile() {
   return {

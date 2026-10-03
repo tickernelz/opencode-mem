@@ -1,10 +1,10 @@
 import { rmSync } from "node:fs";
-import { RETRYABLE_FILE_LOCK_CODES } from "../src/services/turso/sqlite-handle-release.js";
+import { RETRYABLE_FILE_LOCK_CODES } from "../src/storage/turso/sqlite-handle-release.js";
 
 export async function cleanupTursoTestDirectory(baseDir?: string): Promise<void> {
   const [{ closeTursoAndInvalidateCaches }, { withSqliteFileLockRetry }] = await Promise.all([
-    import("../src/services/turso/lifecycle.js"),
-    import("../src/services/turso/sqlite-handle-release.js"),
+    import("../src/storage/turso/lifecycle.js"),
+    import("../src/storage/turso/sqlite-handle-release.js"),
   ]);
 
   await closeTursoAndInvalidateCaches();

@@ -50,14 +50,14 @@ describe("turso legacy migrator dimension preflight", () => {
     CONFIG.storagePath = baseDir;
     CONFIG.embeddingDimensions = 768;
 
-    const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
+    const { runLegacyTursoMigration } = await import("../src/storage/turso/legacy-migrator.js");
     await runLegacyTursoMigration();
 
     expect(existsSync(dbPath)).toBe(true);
     expect(existsSync(`${dbPath}.legacy.bak`)).toBe(true);
     expect(existsSync(join(baseDir, ".turso-migrated"))).toBe(true);
 
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
     const migratedDb = await tursoConnectionManager.getConnection(dbPath);
     const dimensions = await migratedDb.get(
       `SELECT value FROM shard_metadata WHERE key = 'embedding_dimensions'`
@@ -67,7 +67,7 @@ describe("turso legacy migrator dimension preflight", () => {
     const count = await migratedDb.get(`SELECT COUNT(*) AS count FROM memories`);
     expect(Number(count?.count)).toBe(1);
 
-    const { migrationService } = await import("../src/services/migration-service.js");
+    const { migrationService } = await import("../src/storage/migration-service.js");
     const mismatch = await migrationService.detectDimensionMismatch();
     expect(mismatch.needsMigration).toBe(true);
     expect(mismatch.shardMismatches).toHaveLength(1);

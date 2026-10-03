@@ -46,7 +46,7 @@ describe("OpenCode plugin loader bundle boundary", () => {
 
   it("resolves the provider module from a single-file bundled lazy loader", async () => {
     const result = await Bun.build({
-      entrypoints: ["./dist/services/ai/opencode-provider-loader.js"],
+      entrypoints: ["./dist/ai/opencode-provider-loader.js"],
       target: "bun",
       packages: "bundle",
     });

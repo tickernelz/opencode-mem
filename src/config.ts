@@ -1,10 +1,10 @@
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { stripJsoncComments } from "./services/jsonc.js";
-import { resolveSecretValue } from "./services/secret-resolver.js";
-import { isPlaceholderApiKey } from "./services/ai/api-key-placeholder.js";
-import { getDefaultInjectionMarkers } from "./services/injected-prompt-filter.js";
+import { stripJsoncComments } from "./infra/jsonc.js";
+import { resolveSecretValue } from "./infra/secret-resolver.js";
+import { isPlaceholderApiKey } from "./ai/api-key-placeholder.js";
+import { getDefaultInjectionMarkers } from "./memory/injected-prompt-filter.js";
 
 const CONFIG_DIR = join(homedir(), ".config", "opencode");
 const DATA_DIR = join(homedir(), ".opencode-mem");
@@ -67,6 +67,12 @@ interface OpenCodeMemConfig {
   webServerAuthPassword?: string;
   webServerAuthUsername?: string;
   webServerApiToken?: string;
+  /**
+   * When true (default), OpenCode attaches to a healthy shared `serve` runtime
+   * instead of owning Turso/embeddings itself. Beats multi-process lock fights
+   * when Cursor/Claude/Codex MCP are also connected.
+   */
+  preferSharedRuntime?: boolean;
   maxVectorsPerShard?: number;
   autoCleanupEnabled?: boolean;
   autoCleanupRetentionDays?: number;
@@ -195,6 +201,7 @@ const DEFAULTS: Required<
   webServerEnabled: true,
   webServerPort: 4747,
   webServerHost: "127.0.0.1",
+  preferSharedRuntime: true,
   maxVectorsPerShard: 50000,
   autoCleanupEnabled: true,
   autoCleanupRetentionDays: 30,
@@ -817,6 +824,7 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     webServerApiToken: fileConfig.webServerApiToken
       ? resolveSecretValue(fileConfig.webServerApiToken)
       : undefined,
+    preferSharedRuntime: fileConfig.preferSharedRuntime ?? DEFAULTS.preferSharedRuntime,
     maxVectorsPerShard: fileConfig.maxVectorsPerShard ?? DEFAULTS.maxVectorsPerShard,
     autoCleanupEnabled: fileConfig.autoCleanupEnabled ?? DEFAULTS.autoCleanupEnabled,
     autoCleanupRetentionDays: normalizeAutoCleanupRetentionDays(
@@ -983,6 +991,18 @@ export function initConfig(directory: string): void {
   delete projectOverrides.autoCleanupRetentionDays;
   const merged: OpenCodeMemConfig = { ...globalConfig, ...projectOverrides };
   CONFIG = buildConfig(merged);
+
+  // Agent-neutral env overrides (no rename required).
+  const storageEnv = process.env.OPENCODE_MEM_STORAGE_PATH?.trim();
+  if (storageEnv) {
+    CONFIG.storagePath = expandPath(storageEnv);
+  }
+  const sharedEnv = process.env.OPENCODE_MEM_PREFER_SHARED_RUNTIME?.trim().toLowerCase();
+  if (sharedEnv === "0" || sharedEnv === "false" || sharedEnv === "no") {
+    CONFIG.preferSharedRuntime = false;
+  } else if (sharedEnv === "1" || sharedEnv === "true" || sharedEnv === "yes") {
+    CONFIG.preferSharedRuntime = true;
+  }
 }
 
 export function isConfigured(): boolean {

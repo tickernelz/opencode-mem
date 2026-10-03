@@ -40,17 +40,17 @@ describe("shard path migration", () => {
     CONFIG.containerTagPrefix = "opencode";
     CONFIG.maxVectorsPerShard = 1000;
 
-    return import("../src/services/tags.js").then((m) => m.getProjectTagInfo);
+    return import("../src/memory/tags.js").then((m) => m.getProjectTagInfo);
   }
 
   async function seedShard(
     projectDir: string,
     memories: Array<{ id: string; content: string; shardIndex?: number }>
   ) {
-    const { getProjectTagInfo } = await import("../src/services/tags.js");
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const { getProjectTagInfo } = await import("../src/memory/tags.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
 
     const tag = getProjectTagInfo(projectDir);
     const hash = tag.tag.split("_").pop()!;
@@ -102,8 +102,7 @@ describe("shard path migration", () => {
       { id: "mem_one", content: "decision one" },
       { id: "mem_two", content: "decision two", shardIndex: 1 },
     ]);
-    const { userPromptManager } =
-      await import("../src/services/user-prompt/user-prompt-manager.js");
+    const { userPromptManager } = await import("../src/memory/user-prompt/user-prompt-manager.js");
     const promptId = await userPromptManager.savePrompt(
       "session-1",
       "message-1",
@@ -120,7 +119,7 @@ describe("shard path migration", () => {
     expect(newHash).not.toBe(oldHash);
 
     const { shardPathMigrationService } =
-      await import("../src/services/shard-path-migration-service.js");
+      await import("../src/storage/shard-path-migration-service.js");
     const result = await shardPathMigrationService.migrate({
       currentDirectory: newProjectDir,
       fromPath: oldProjectDir,
@@ -131,9 +130,9 @@ describe("shard path migration", () => {
     expect(result.migratedShards).toBe(2);
     expect(result.migratedMemories).toBe(2);
 
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
 
     const oldShards = await tursoShardManager.getAllShards("project", oldHash);
     const newShards = await tursoShardManager.getAllShards("project", newHash);
@@ -159,7 +158,7 @@ describe("shard path migration", () => {
       20
     );
     // list on first shard alone may be partial; check via inventory instead
-    const { shardInventoryService } = await import("../src/services/shard-inventory-service.js");
+    const { shardInventoryService } = await import("../src/storage/shard-inventory-service.js");
     const inventory = await shardInventoryService.listShards(newProjectDir);
     const current = inventory.shards.find((shard) => shard.scopeHash === newHash);
     expect(current?.memoryCount).toBe(2);
@@ -176,7 +175,7 @@ describe("shard path migration", () => {
     await seedShard(newProjectDir, [{ id: "mem_new", content: "new memory" }]);
 
     const { shardPathMigrationService } =
-      await import("../src/services/shard-path-migration-service.js");
+      await import("../src/storage/shard-path-migration-service.js");
     const result = await shardPathMigrationService.migrate({
       currentDirectory: newProjectDir,
       fromPath: oldProjectDir,
@@ -186,9 +185,9 @@ describe("shard path migration", () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain("already has");
 
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
 
     const oldShards = await tursoShardManager.getAllShards("project", oldHash);
     expect(oldShards).toHaveLength(1);
@@ -207,16 +206,16 @@ describe("shard path migration", () => {
 
   migrationTest("archives an empty target shard and completes migration", async () => {
     await createProjects();
-    const { getProjectTagInfo } = await import("../src/services/tags.js");
+    const { getProjectTagInfo } = await import("../src/memory/tags.js");
     await seedShard(oldProjectDir, [{ id: "mem_old", content: "old memory" }]);
 
     const target = getProjectTagInfo(newProjectDir);
     const newHash = target.tag.split("_").pop()!;
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
     await tursoShardManager.createShard("project", newHash, 0);
 
     const { shardPathMigrationService } =
-      await import("../src/services/shard-path-migration-service.js");
+      await import("../src/storage/shard-path-migration-service.js");
     const result = await shardPathMigrationService.migrate({
       currentDirectory: newProjectDir,
       fromPath: oldProjectDir,
@@ -227,8 +226,8 @@ describe("shard path migration", () => {
     expect(result.migratedMemories).toBe(1);
     const newShards = await tursoShardManager.getAllShards("project", newHash);
     expect(newShards).toHaveLength(1);
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
     const rows = await tursoVectorSearch.getAllMemories(
       await tursoConnectionManager.getConnection(newShards[0]!.dbPath)
     );
@@ -243,7 +242,7 @@ describe("shard path migration", () => {
     ]);
 
     const { shardPathMigrationService } =
-      await import("../src/services/shard-path-migration-service.js");
+      await import("../src/storage/shard-path-migration-service.js");
     const result = await shardPathMigrationService.migrate({
       currentDirectory: newProjectDir,
       fromPath: oldProjectDir,
@@ -255,7 +254,7 @@ describe("shard path migration", () => {
     expect(result.dryRun).toBe(true);
     expect(result.migratedMemories).toBe(1);
 
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
     const oldShards = await tursoShardManager.getAllShards("project", oldHash);
     expect(oldShards).toHaveLength(1);
     expect(existsSync(oldShards[0]!.dbPath)).toBe(true);
@@ -268,7 +267,7 @@ describe("shard path migration", () => {
     ]);
 
     const { shardPathMigrationService } =
-      await import("../src/services/shard-path-migration-service.js");
+      await import("../src/storage/shard-path-migration-service.js");
     const refused = await shardPathMigrationService.migrate({
       currentDirectory: newProjectDir,
       fromHash: oldHash,
@@ -296,7 +295,7 @@ describe("shard path migration", () => {
       ]);
       rmSync(oldProjectDir, { recursive: true, force: true });
 
-      const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+      const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
       const manager = tursoShardManager as any;
       const originalReassign = manager.reassignShardScope.bind(manager);
       let forwardCalls = 0;
@@ -312,7 +311,7 @@ describe("shard path migration", () => {
 
       try {
         const { shardPathMigrationService } =
-          await import("../src/services/shard-path-migration-service.js");
+          await import("../src/storage/shard-path-migration-service.js");
         const result = await shardPathMigrationService.migrate({
           currentDirectory: newProjectDir,
           fromHash: oldHash,
@@ -325,13 +324,12 @@ describe("shard path migration", () => {
 
       const oldShards = await tursoShardManager.getAllShards("project", oldHash);
       expect(oldShards).toHaveLength(2);
-      const { getProjectTagInfo } = await import("../src/services/tags.js");
+      const { getProjectTagInfo } = await import("../src/memory/tags.js");
       const newHash = getProjectTagInfo(newProjectDir).tag.split("_").pop()!;
       expect(await tursoShardManager.getAllShards("project", newHash)).toHaveLength(0);
 
-      const { tursoConnectionManager } =
-        await import("../src/services/turso/connection-manager.js");
-      const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+      const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+      const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
       for (const shard of oldShards) {
         expect(existsSync(shard.dbPath)).toBe(true);
         const rows = await tursoVectorSearch.getAllMemories(
@@ -353,10 +351,10 @@ describe("shard path migration", () => {
     const { hash: oldHash } = await seedShard(oldProjectDir, [
       { id: "mem_disk_only", content: "disk-only memory" },
     ]);
-    const { ensureTursoReady } = await import("../src/services/turso/ready.js");
+    const { ensureTursoReady } = await import("../src/storage/turso/ready.js");
     await ensureTursoReady();
     const { CONFIG } = await import("../src/config.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
     const metadataDb = await tursoConnectionManager.getConnection(
       join(CONFIG.storagePath, "metadata.db")
     );
@@ -365,7 +363,7 @@ describe("shard path migration", () => {
     ]);
     rmSync(oldProjectDir, { recursive: true, force: true });
 
-    const { shardInventoryService } = await import("../src/services/shard-inventory-service.js");
+    const { shardInventoryService } = await import("../src/storage/shard-inventory-service.js");
     const inventory = await shardInventoryService.listShards(newProjectDir);
     expect(
       inventory.shards
@@ -374,7 +372,7 @@ describe("shard path migration", () => {
     ).toBe(true);
 
     const { shardPathMigrationService } =
-      await import("../src/services/shard-path-migration-service.js");
+      await import("../src/storage/shard-path-migration-service.js");
     const result = await shardPathMigrationService.migrate({
       currentDirectory: newProjectDir,
       fromHash: oldHash,
@@ -389,8 +387,8 @@ describe("shard path migration", () => {
       { id: "mem_crash", content: "recover me" },
     ]);
     const { CONFIG } = await import("../src/config.js");
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
     const oldShard = (await tursoShardManager.getAllShards("project", oldHash))[0]!;
     const target = getProjectTagInfo(newProjectDir);
     const newHash = target.tag.split("_").pop()!;
@@ -426,7 +424,7 @@ describe("shard path migration", () => {
       "utf-8"
     );
 
-    const { resetTursoReady, ensureTursoReady } = await import("../src/services/turso/ready.js");
+    const { resetTursoReady, ensureTursoReady } = await import("../src/storage/turso/ready.js");
     resetTursoReady();
     await ensureTursoReady();
 
@@ -442,7 +440,7 @@ describe("shard path migration", () => {
     async () => {
       await createProjects();
       const { userPromptManager } =
-        await import("../src/services/user-prompt/user-prompt-manager.js");
+        await import("../src/memory/user-prompt/user-prompt-manager.js");
       const promptId = await userPromptManager.savePrompt(
         "windows-session",
         "windows-message",

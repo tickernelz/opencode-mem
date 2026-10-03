@@ -12,20 +12,20 @@ afterEach(() => {
 });
 
 const indexUrl = new URL("../src/index.js", import.meta.url).href;
-const clientUrl = new URL("../src/services/client.js", import.meta.url).href;
+const clientUrl = new URL("../src/memory/client.js", import.meta.url).href;
 const configUrl = new URL("../src/config.js", import.meta.url).href;
-const tagsUrl = new URL("../src/services/tags.js", import.meta.url).href;
-const contextUrl = new URL("../src/services/context.js", import.meta.url).href;
-const privacyUrl = new URL("../src/services/privacy.js", import.meta.url).href;
-const autoCaptureUrl = new URL("../src/services/auto-capture.js", import.meta.url).href;
-const learningUrl = new URL("../src/services/user-memory-learning.js", import.meta.url).href;
+const tagsUrl = new URL("../src/memory/tags.js", import.meta.url).href;
+const contextUrl = new URL("../src/memory/context.js", import.meta.url).href;
+const privacyUrl = new URL("../src/infra/privacy.js", import.meta.url).href;
+const autoCaptureUrl = new URL("../src/memory/auto-capture.js", import.meta.url).href;
+const learningUrl = new URL("../src/memory/user-memory-learning.js", import.meta.url).href;
 const promptManagerUrl = new URL(
-  "../src/services/user-prompt/user-prompt-manager.js",
+  "../src/memory/user-prompt/user-prompt-manager.js",
   import.meta.url
 ).href;
-const webServerUrl = new URL("../src/services/web-server.js", import.meta.url).href;
-const loggerUrl = new URL("../src/services/logger.js", import.meta.url).href;
-const languageUrl = new URL("../src/services/language-detector.js", import.meta.url).href;
+const webServerUrl = new URL("../src/runtime/http/web-server.js", import.meta.url).href;
+const loggerUrl = new URL("../src/infra/logger.js", import.meta.url).href;
+const languageUrl = new URL("../src/infra/language-detector.js", import.meta.url).href;
 
 function runTool(args: Record<string, unknown>) {
   const dir = mkdtempSync(join(tmpdir(), "opencode-mem-portability-tool-"));

@@ -4,13 +4,13 @@ import { join } from "node:path";
 import { platform, tmpdir } from "node:os";
 import { connect } from "@tursodatabase/database";
 import { cleanupTursoTestDirectory } from "./turso-test-utils.js";
-import { TursoDb } from "../src/services/turso/turso-db.js";
+import { TursoDb } from "../src/storage/turso/turso-db.js";
 import {
   ensureDatabaseEncryptionKeyFile,
   generateDatabaseEncryptionKeyFile,
   isValidDatabaseEncryptionHexKey,
   resolveOrCreateDatabaseEncryptionKey,
-} from "../src/services/turso/encryption-key.js";
+} from "../src/storage/turso/encryption-key.js";
 
 describe("encryption at rest", () => {
   let baseDir: string;

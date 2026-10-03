@@ -22,7 +22,7 @@ import {
   getPinnedOnnxruntimePackageRoot,
   installOnnxruntimeResolveShim,
   prepareOnnxruntimeForTransformers,
-} from "../src/services/onnxruntime-resolve.js";
+} from "../src/infra/onnxruntime-resolve.js";
 import pkg from "../package.json";
 
 const requireFromHere = createRequire(import.meta.url);
@@ -213,7 +213,7 @@ describe("onnxruntime resolve shim (#184 / #210)", () => {
       writeFileSync(join(fixture, "package.json"), JSON.stringify({ type: "module" }));
 
       const resolveModuleUrl = pathToFileURL(
-        join(repoRoot, "src/services/onnxruntime-resolve.ts")
+        join(repoRoot, "src/infra/onnxruntime-resolve.ts")
       ).href;
       const harness = join(fixture, "harness.mjs");
       writeFileSync(

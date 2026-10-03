@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractTextFromPromptResult } from "../src/services/user-profile/ai-cleanup.js";
+import { extractTextFromPromptResult } from "../src/user-profile/ai-cleanup.js";
 
 const tempDirs: string[] = [];
 
@@ -62,13 +62,11 @@ describe("extractTextFromPromptResult", () => {
   });
 });
 
-const aiCleanupUrl = new URL("../src/services/user-profile/ai-cleanup.js", import.meta.url).href;
+const aiCleanupUrl = new URL("../src/user-profile/ai-cleanup.js", import.meta.url).href;
 const configUrl = new URL("../src/config.js", import.meta.url).href;
-const loggerUrl = new URL("../src/services/logger.js", import.meta.url).href;
-const opencodeProviderLoaderUrl = new URL(
-  "../src/services/ai/opencode-provider-loader.js",
-  import.meta.url
-).href;
+const loggerUrl = new URL("../src/infra/logger.js", import.meta.url).href;
+const opencodeProviderLoaderUrl = new URL("../src/ai/opencode-provider-loader.js", import.meta.url)
+  .href;
 
 function runCleanupScenario(opts: {
   promptThrows?: boolean;

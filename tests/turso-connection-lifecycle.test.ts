@@ -17,9 +17,8 @@ describe("turso connection lifecycle", () => {
     const { CONFIG } = await import("../src/config.js");
     CONFIG.storagePath = baseDir;
 
-    const { userPromptManager } =
-      await import("../src/services/user-prompt/user-prompt-manager.js");
-    const { closeTursoAndInvalidateCaches } = await import("../src/services/turso/lifecycle.js");
+    const { userPromptManager } = await import("../src/memory/user-prompt/user-prompt-manager.js");
+    const { closeTursoAndInvalidateCaches } = await import("../src/storage/turso/lifecycle.js");
 
     const id = await userPromptManager.savePrompt("sess-1", "msg-1", "/tmp/project", "hello");
     expect(id).toBeTruthy();
@@ -34,7 +33,7 @@ describe("turso connection lifecycle", () => {
     baseDir = mkdtempSync(join(tmpdir(), "turso-lifecycle-race-"));
     const { CONFIG } = await import("../src/config.js");
     CONFIG.storagePath = baseDir;
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
     const dbPath = join(baseDir, "race.db");
 
     const opening = tursoConnectionManager.getConnection(dbPath);

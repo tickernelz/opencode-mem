@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
-import { resolveSecretValue } from "../src/services/secret-resolver.js";
+import { resolveSecretValue } from "../src/infra/secret-resolver.js";
 
 /**
  * `checkFilePermissions` warns when a `file://` secret is readable by anyone

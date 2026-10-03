@@ -11,13 +11,13 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connect } from "@tursodatabase/database";
-import { TursoDb } from "../src/services/turso/turso-db.js";
+import { TursoDb } from "../src/storage/turso/turso-db.js";
 import {
   PROFILE_LEARNING_COORDINATION_DB,
   getProfileLearningBootId,
   getProfileLearningStarttime,
-} from "../src/services/user-profile/learning-lock.js";
-import { tursoExperimentalFeatures } from "../src/services/turso/connection-manager.js";
+} from "../src/user-profile/learning-lock.js";
+import { tursoExperimentalFeatures } from "../src/storage/turso/connection-manager.js";
 
 const tempDirs: string[] = [];
 

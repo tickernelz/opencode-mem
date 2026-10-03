@@ -1,0 +1,36 @@
+/**
+ * Public CLI install API.
+ * Implementation lives in `./install/` (catalog, formats, hosts).
+ */
+export {
+  HOST_ALIASES,
+  HOST_NEXT_STEPS,
+  IDE_ALIASES,
+  IDE_NEXT_STEPS,
+  INSTALL_HOST_PLATFORM_SOURCES,
+  SUPPORTED_HOSTS,
+  SUPPORTED_IDES,
+  detectInstalledHosts,
+  detectInstalledIdes,
+  installHost,
+  installHostPriming,
+  installIde,
+  installIdePriming,
+  isHostConfigured,
+  isIdeConfigured,
+  mergeCodexToml,
+  mergeTomlTableSection,
+  parseHostList,
+  parseIdeList,
+  pinLaunchDirectory,
+  resolveHostAlias,
+  resolveIdeAlias,
+  resolveMcpLaunch,
+  resolveUserHome,
+  runInstall,
+  withoutLaunchDirectory,
+  type InstallHost,
+  type InstallIde,
+  type InstallResult,
+  type McpLaunchSpec,
+} from "./install/index.js";

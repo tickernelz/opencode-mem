@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { createServer } from "node:http";
-import { WebServer, nextFallbackPort } from "../src/services/web-server.js";
+import { WebServer, nextFallbackPort } from "../src/runtime/http/web-server.js";
 
 describe("web server health check", () => {
   it("authenticates the stats request when an API token is configured", async () => {

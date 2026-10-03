@@ -28,7 +28,7 @@ mock.module(moduleUrl("config"), () => ({
   initConfig() {},
   isConfigured: () => configured,
 }));
-mock.module(moduleUrl("services/client"), () => ({
+mock.module(moduleUrl("memory/client"), () => ({
   memoryClient: {
     warmup: async () => {},
     close: async () => {},
@@ -39,28 +39,28 @@ mock.module(moduleUrl("services/client"), () => ({
     },
   },
 }));
-mock.module(moduleUrl("services/tags"), () => ({
+mock.module(moduleUrl("memory/tags"), () => ({
   getTags: () => ({
     project: { tag: "fixture-project" },
     user: { userEmail: "fixture-user" },
   }),
 }));
-mock.module(moduleUrl("services/context"), () => ({
+mock.module(moduleUrl("memory/context"), () => ({
   formatContextForPrompt: async (_user, data) =>
     "<memory_context>" + data.results.map((m) => m.memory).join("|") + "</memory_context>",
 }));
-mock.module(moduleUrl("services/user-prompt/user-prompt-manager"), () => ({
+mock.module(moduleUrl("memory/user-prompt/user-prompt-manager"), () => ({
   userPromptManager: {
     savePrompt: async (...args) => captures.push(args),
     setPromptModel: async () => {},
   },
 }));
-mock.module(moduleUrl("services/logger"), () => ({ log() {} }));
-mock.module(moduleUrl("services/web-server"), () => ({
+mock.module(moduleUrl("infra/logger"), () => ({ log() {} }));
+mock.module(moduleUrl("runtime/http/web-server"), () => ({
   startWebServer: async () => null,
   WebServer: class {},
 }));
-mock.module(moduleUrl("services/auto-update"), () => ({ startAutoUpdate() {} }));
+mock.module(moduleUrl("infra/auto-update"), () => ({ startAutoUpdate() {} }));
 const { OpenCodeMemPlugin } = await import(moduleUrl("index"));
 const { registerV2Adapter } = await import(moduleUrl("v2/adapter"));
 const client = {

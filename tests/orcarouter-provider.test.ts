@@ -3,9 +3,9 @@ import {
   OrcaRouterProvider,
   ORCAROUTER_API_URL,
   ORCAROUTER_DEFAULT_MODEL,
-} from "../src/services/ai/providers/orcarouter.js";
-import { AIProviderFactory } from "../src/services/ai/ai-provider-factory.js";
-import type { ChatCompletionTool } from "../src/services/ai/tools/tool-schema.js";
+} from "../src/ai/providers/orcarouter.js";
+import { AIProviderFactory } from "../src/ai/ai-provider-factory.js";
+import type { ChatCompletionTool } from "../src/ai/tools/tool-schema.js";
 
 const toolSchema: ChatCompletionTool = {
   type: "function",

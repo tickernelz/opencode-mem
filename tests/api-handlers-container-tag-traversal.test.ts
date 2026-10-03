@@ -4,18 +4,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const tempDirs: string[] = [];
-const apiHandlersUrl = new URL("../src/services/api-handlers.js", import.meta.url).href;
-const embeddingUrl = new URL("../src/services/embedding.js", import.meta.url).href;
-const connectionManagerUrl = new URL("../src/services/turso/connection-manager.js", import.meta.url)
+const apiHandlersUrl = new URL("../src/runtime/http/api-handlers.js", import.meta.url).href;
+const embeddingUrl = new URL("../src/memory/embedding.js", import.meta.url).href;
+const connectionManagerUrl = new URL("../src/storage/turso/connection-manager.js", import.meta.url)
   .href;
-const shardManagerUrl = new URL("../src/services/turso/shard-manager.js", import.meta.url).href;
-const vectorSearchUrl = new URL("../src/services/turso/vector-search.js", import.meta.url).href;
-const readyUrl = new URL("../src/services/turso/ready.js", import.meta.url).href;
+const shardManagerUrl = new URL("../src/storage/turso/shard-manager.js", import.meta.url).href;
+const vectorSearchUrl = new URL("../src/storage/turso/vector-search.js", import.meta.url).href;
+const readyUrl = new URL("../src/storage/turso/ready.js", import.meta.url).href;
 const userPromptManagerUrl = new URL(
-  "../src/services/user-prompt/user-prompt-manager.js",
+  "../src/memory/user-prompt/user-prompt-manager.js",
   import.meta.url
 ).href;
-const loggerUrl = new URL("../src/services/logger.js", import.meta.url).href;
+const loggerUrl = new URL("../src/infra/logger.js", import.meta.url).href;
 
 function runScenario(scriptBody: string) {
   const dir = mkdtempSync(join(tmpdir(), "opencode-mem-container-tag-"));

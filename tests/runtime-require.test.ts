@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
-import { createRuntimeRequire, type RuntimeImportMeta } from "../src/services/runtime-require.js";
+import { createRuntimeRequire, type RuntimeImportMeta } from "../src/infra/runtime-require.js";
 
 describe("createRuntimeRequire (#210 compiled host)", () => {
   it("falls back to Bun import.meta.require when no file anchor exists", () => {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { OpenAIChatCompletionProvider } from "../src/services/ai/providers/openai-chat-completion.js";
-import type { AIMessage } from "../src/services/ai/session/session-types.js";
-import type { ChatCompletionTool } from "../src/services/ai/tools/tool-schema.js";
+import { OpenAIChatCompletionProvider } from "../src/ai/providers/openai-chat-completion.js";
+import type { AIMessage } from "../src/ai/session/session-types.js";
+import type { ChatCompletionTool } from "../src/ai/tools/tool-schema.js";
 
 const toolSchema: ChatCompletionTool = {
   type: "function",

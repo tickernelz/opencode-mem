@@ -15,7 +15,7 @@ import {
   collectReleasedSqliteHandles,
   renameSqliteDatabase,
   withSqliteFileLockRetry,
-} from "../src/services/turso/sqlite-handle-release.js";
+} from "../src/storage/turso/sqlite-handle-release.js";
 
 describe("turso ready gate", () => {
   let baseDir: string;
@@ -131,7 +131,7 @@ describe("turso ready gate", () => {
   }
 
   async function assertMigratedShard(dbPath: string): Promise<void> {
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
     const db = await tursoConnectionManager.getConnection(dbPath);
     const rows = await db.all(`SELECT *, vector_extract(vector) AS extracted,
       CASE WHEN tags_vector IS NULL THEN NULL ELSE vector_extract(tags_vector) END AS extracted_tags
@@ -164,7 +164,7 @@ describe("turso ready gate", () => {
       { key: "embedding_dimensions", value: "1024" },
       { key: "embedding_model", value: "voyage-4-lite" },
     ]);
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
     const shards = await tursoShardManager.getAllShards("project", "");
     expect(shards).toHaveLength(1);
     expect(shards[0]?.scopeHash).toBe(scopeHash);
@@ -179,7 +179,7 @@ describe("turso ready gate", () => {
     const { CONFIG } = await import("../src/config.js");
     CONFIG.storagePath = join(baseDir, "new-store");
 
-    const { ensureTursoReady } = await import("../src/services/turso/ready.js");
+    const { ensureTursoReady } = await import("../src/storage/turso/ready.js");
     await ensureTursoReady();
     await ensureTursoReady();
 
@@ -190,7 +190,7 @@ describe("turso ready gate", () => {
     it(`migrates indexed libSQL shards through startup (legacy marker: ${completedLegacyMigration})`, async () => {
       await withStorage();
       const dbPath = await createIndexedShard(completedLegacyMigration);
-      const { ensureTursoReady } = await import("../src/services/turso/ready.js");
+      const { ensureTursoReady } = await import("../src/storage/turso/ready.js");
       await ensureTursoReady();
       await assertMigratedShard(dbPath);
       const backups = () =>
@@ -199,7 +199,7 @@ describe("turso ready gate", () => {
         );
       expect(backups()).toHaveLength(1);
       const marker = readFileSync(join(baseDir, ".tursodb-engine-v1"), "utf-8");
-      const { closeTursoAndInvalidateCaches } = await import("../src/services/turso/lifecycle.js");
+      const { closeTursoAndInvalidateCaches } = await import("../src/storage/turso/lifecycle.js");
       await closeTursoAndInvalidateCaches();
       await ensureTursoReady();
       await assertMigratedShard(dbPath);
@@ -223,7 +223,7 @@ describe("turso ready gate", () => {
         backupPath: `${dbPath}.pre-reembed-fixture.bak`,
       })
     );
-    const { ensureTursoReady } = await import("../src/services/turso/ready.js");
+    const { ensureTursoReady } = await import("../src/storage/turso/ready.js");
     await ensureTursoReady();
     await assertMigratedShard(dbPath);
     expect(existsSync(stagedPath)).toBe(false);
@@ -239,7 +239,7 @@ describe("turso ready gate", () => {
       "utf-8"
     );
 
-    const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
+    const { runLegacyTursoMigration } = await import("../src/storage/turso/legacy-migrator.js");
     await expect(runLegacyTursoMigration()).rejects.toThrow(/locked by another process/);
   });
 });

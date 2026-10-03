@@ -8,7 +8,7 @@ import {
   isVersionNewer,
   startAutoUpdate,
   updateRemoveDir,
-} from "../src/services/auto-update.js";
+} from "../src/infra/auto-update.js";
 
 describe("auto-update helpers", () => {
   it("isVersionNewer compares semver versions", () => {

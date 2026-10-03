@@ -3,9 +3,9 @@ import {
   AtlasCloudProvider,
   ATLAS_CLOUD_API_URL,
   ATLAS_CLOUD_DEFAULT_MODEL,
-} from "../src/services/ai/providers/atlas-cloud.js";
-import { AIProviderFactory } from "../src/services/ai/ai-provider-factory.js";
-import type { ChatCompletionTool } from "../src/services/ai/tools/tool-schema.js";
+} from "../src/ai/providers/atlas-cloud.js";
+import { AIProviderFactory } from "../src/ai/ai-provider-factory.js";
+import type { ChatCompletionTool } from "../src/ai/tools/tool-schema.js";
 
 const toolSchema: ChatCompletionTool = {
   type: "function",

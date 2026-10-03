@@ -10,7 +10,7 @@ import {
   isInternalCaptureSessionTitle,
   isStructuredSummaryPromptMessage,
 } from "../src/index.js";
-import { getHostClientConfig } from "../src/services/ai/opencode-host-config.js";
+import { getHostClientConfig } from "../src/ai/opencode-host-config.js";
 import {
   createV2Client,
   generateStructuredOutput,
@@ -19,7 +19,7 @@ import {
   STRUCTURED_OUTPUT_AGENT,
   STRUCTURED_OUTPUT_MAX_STEPS,
   STRUCTURED_OUTPUT_TOOLS,
-} from "../src/services/ai/opencode-provider.js";
+} from "../src/ai/opencode-provider.js";
 import { z } from "zod";
 
 function sdkService(config: Record<string, unknown>): Record<string, unknown> {

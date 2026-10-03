@@ -17,7 +17,7 @@ describe("turso connection manager", () => {
     CONFIG.storagePath = baseDir;
     const dbPath = join(baseDir, "single.db");
 
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
 
     const [a, b, c] = await Promise.all([
       tursoConnectionManager.getConnection(dbPath),
@@ -84,7 +84,7 @@ describe("turso connection manager", () => {
         },
       } as any;
     };
-    const { TursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { TursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
     const manager = new TursoConnectionManager(connectFactory);
 
     try {
@@ -122,7 +122,7 @@ describe("turso connection manager", () => {
     CONFIG.storagePath = baseDir;
     const dbPath = join(baseDir, "fk.db");
 
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
     const db = await tursoConnectionManager.getConnection(dbPath);
     const row = await db.get(`PRAGMA foreign_keys`);
     expect(Number((row as { foreign_keys?: number } | null)?.foreign_keys)).toBe(1);
@@ -162,7 +162,7 @@ describe("turso connection manager", () => {
       } as any;
     };
 
-    const { TursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { TursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
     const manager = new TursoConnectionManager(connectFactory);
     try {
       await manager.getConnection(dbPath);
@@ -183,7 +183,7 @@ describe("turso connection manager", () => {
     const { CONFIG } = await import("../src/config.js");
     CONFIG.storagePath = baseDir;
 
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
     await expect(tursoConnectionManager.getConnection("/tmp/outside.db")).rejects.toThrow(
       /outside storagePath/
     );

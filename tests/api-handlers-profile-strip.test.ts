@@ -4,15 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const tempDirs: string[] = [];
-const apiHandlersUrl = new URL("../src/services/api-handlers.js", import.meta.url).href;
+const apiHandlersUrl = new URL("../src/runtime/http/api-handlers.js", import.meta.url).href;
 const userProfileManagerUrl = new URL(
-  "../src/services/user-profile/user-profile-manager.js",
+  "../src/user-profile/user-profile-manager.js",
   import.meta.url
 ).href;
-const tagsUrl = new URL("../src/services/tags.js", import.meta.url).href;
-const loggerUrl = new URL("../src/services/logger.js", import.meta.url).href;
+const tagsUrl = new URL("../src/memory/tags.js", import.meta.url).href;
+const loggerUrl = new URL("../src/infra/logger.js", import.meta.url).href;
 const userPromptManagerUrl = new URL(
-  "../src/services/user-prompt/user-prompt-manager.js",
+  "../src/memory/user-prompt/user-prompt-manager.js",
   import.meta.url
 ).href;
 

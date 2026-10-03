@@ -1,5 +1,5 @@
 import type { Context } from "@opencode/plugin/promise/plugin";
-import { log } from "../services/logger.js";
+import { log } from "../infra/logger.js";
 import { eventBelongsToLocation, legacyToolResult, toLegacyEvent } from "./legacy-client.js";
 
 interface MemoryContextHooks {

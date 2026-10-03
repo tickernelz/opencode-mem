@@ -19,10 +19,9 @@ describe("turso vector search", () => {
     CONFIG.storagePath = baseDir;
 
     try {
-      const { tursoConnectionManager } =
-        await import("../src/services/turso/connection-manager.js");
-      const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-      const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+      const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+      const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+      const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
 
       const dims = CONFIG.embeddingDimensions;
       const vector = new Float32Array(dims);
@@ -119,7 +118,7 @@ describe("turso vector search", () => {
         return [];
       },
     };
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
     const search = tursoVectorSearch as unknown as {
       exactScanKind(
         database: typeof db,
@@ -151,10 +150,9 @@ describe("turso vector search", () => {
     CONFIG.storagePath = baseDir;
 
     try {
-      const { tursoConnectionManager } =
-        await import("../src/services/turso/connection-manager.js");
-      const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-      const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+      const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+      const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+      const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
 
       const dims = CONFIG.embeddingDimensions;
       const scopeHash = "a1b2c3d4e5f67890";
@@ -216,10 +214,9 @@ describe("turso vector search", () => {
     CONFIG.embeddingDimensions = 8;
 
     try {
-      const { tursoConnectionManager } =
-        await import("../src/services/turso/connection-manager.js");
-      const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-      const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+      const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+      const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+      const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
 
       const scopeHash = "b2c3d4e5f6789012";
       const containerTag = `opencode_project_${scopeHash}`;

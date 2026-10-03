@@ -5,8 +5,8 @@ import {
   createUserProfileToolSchema,
   shouldRunAutomaticProfileCleanup,
   USER_PROFILE_LLM_CONFIDENCE_MAX,
-} from "../src/services/user-memory-learning.js";
-import { UserProfileValidator } from "../src/services/ai/validators/user-profile-validator.js";
+} from "../src/memory/user-memory-learning.js";
+import { UserProfileValidator } from "../src/ai/validators/user-profile-validator.js";
 
 describe("user-profile-learning confidence schema (#231)", () => {
   const schema = createUserProfileAnalysisSchema(z);

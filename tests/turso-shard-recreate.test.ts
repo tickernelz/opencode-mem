@@ -20,9 +20,9 @@ describe("turso invalid shard protection", () => {
     CONFIG.storagePath = baseDir;
     CONFIG.embeddingDimensions = 768;
 
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
 
     const shard = await tursoShardManager.createShard("project", TEST_SCOPE_HASH, 0);
     const db = await tursoConnectionManager.getConnection(shard.dbPath);
@@ -58,9 +58,9 @@ describe("turso invalid shard protection", () => {
     CONFIG.storagePath = baseDir;
     CONFIG.embeddingDimensions = 768;
 
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
 
     const shard = await tursoShardManager.createShard("project", TEST_SCOPE_HASH, 0);
     const db = await tursoConnectionManager.getConnection(shard.dbPath);

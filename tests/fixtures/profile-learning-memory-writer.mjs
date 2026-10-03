@@ -45,8 +45,8 @@ function fixedVector(text) {
 }
 
 // Only the external embedding boundary is mocked. The service object shape
-// mirrors src/services/embedding.ts so client.ts keeps using its real logic.
-mock.module(new URL("../../src/services/embedding.js", import.meta.url).href, () => ({
+// mirrors src/memory/embedding.ts so client.ts keeps using its real logic.
+mock.module(new URL("../../src/memory/embedding.js", import.meta.url).href, () => ({
   embeddingService: {
     embedWithTimeout: async (text) => fixedVector(text ?? ""),
     warmup: async () => {},
@@ -71,7 +71,7 @@ mock.module(configUrl, () => ({
   isConfigured: () => true,
 }));
 
-const loggerUrl = new URL("../../src/services/logger.js", import.meta.url).href;
+const loggerUrl = new URL("../../src/infra/logger.js", import.meta.url).href;
 mock.module(loggerUrl, () => ({ log: () => {} }));
 
 const counts = { add: 0, readback: 0, search: 0, list: 0 };
@@ -87,7 +87,7 @@ async function waitFile(path, timeoutMs = 30_000) {
 
 try {
   const { memoryClient } = await import(
-    new URL("../../src/services/client.js", import.meta.url).href
+    new URL("../../src/memory/client.js", import.meta.url).href
   );
 
   // Block until the parent confirms the winner is provably holding the

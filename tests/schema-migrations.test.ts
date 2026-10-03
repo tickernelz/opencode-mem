@@ -8,8 +8,8 @@ import {
   applySchemaMigrations,
   USER_PROMPTS_MIGRATIONS,
   ensureUserPromptColumns,
-} from "../src/services/turso/schema-migrations.js";
-import { TursoDb } from "../src/services/turso/turso-db.js";
+} from "../src/storage/turso/schema-migrations.js";
+import { TursoDb } from "../src/storage/turso/turso-db.js";
 
 describe("schema migrations", () => {
   let baseDir: string;
@@ -48,7 +48,7 @@ describe("schema migrations", () => {
     const native = await connect(dbPath);
     const db = new TursoDb(native);
 
-    const { memoryShardMigrations } = await import("../src/services/turso/schema-migrations.js");
+    const { memoryShardMigrations } = await import("../src/storage/turso/schema-migrations.js");
     const migrations = memoryShardMigrations(8);
     await applySchemaMigrations(db, [migrations[0]!], {
       dbPath,

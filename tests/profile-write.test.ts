@@ -1,13 +1,13 @@
 /**
  * Tests for explicit user preference writes via UserProfileManager.
- * Exercises the write path added to src/index.ts `profile` mode
+ * Exercises the write path added to src/hosts/opencode/plugin.ts `profile` mode
  * by testing the underlying manager directly (no live plugin context needed).
  */
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { tursoConnectionManager } from "../src/services/turso/connection-manager.js";
+import { tursoConnectionManager } from "../src/storage/turso/connection-manager.js";
 
 // We patch CONFIG.storagePath before importing the manager so the DB lands in tmp.
 let tmpDir: string;
@@ -18,8 +18,7 @@ async function makeManager() {
   CONFIG.storagePath = tmpDir;
   // Bun may cache the imported module, so this helper does not try to reload it.
   // Instead, each test creates a new UserProfileManager instance after updating CONFIG.storagePath.
-  const { UserProfileManager } =
-    await import("../src/services/user-profile/user-profile-manager.js");
+  const { UserProfileManager } = await import("../src/user-profile/user-profile-manager.js");
   return new UserProfileManager();
 }
 

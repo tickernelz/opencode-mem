@@ -5,7 +5,7 @@ import {
   isValidScopeHash,
   resolveMemoryScope,
   tryExtractScopeFromContainerTag,
-} from "../src/services/memory-scope.js";
+} from "../src/memory/memory-scope.js";
 
 const PROJECT_HASH = "a1b2c3d4e5f67890";
 const USER_HASH = "b1b2c3d4e5f67890";

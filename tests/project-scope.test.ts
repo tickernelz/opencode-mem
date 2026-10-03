@@ -17,7 +17,7 @@ import {
   getGitTopLevel,
   getProjectTagInfo,
   getTags,
-} from "../src/services/tags.js";
+} from "../src/memory/tags.js";
 
 const createdDirs: string[] = [];
 

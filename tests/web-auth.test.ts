@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { userInfo } from "node:os";
-import { WEB_AUTH_REALM, WebAuth } from "../src/services/web-auth.js";
+import { WEB_AUTH_REALM, WebAuth } from "../src/runtime/http/web-auth.js";
 
 function basicHeader(user: string, pass: string): string {
   const encoded = Buffer.from(`${user}:${pass}`, "utf8").toString("base64");

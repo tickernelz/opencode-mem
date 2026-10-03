@@ -46,8 +46,7 @@ describe("turso auxiliary database upgrades", () => {
 
     const { CONFIG } = await import("../src/config.js");
     CONFIG.storagePath = baseDir;
-    const { userPromptManager } =
-      await import("../src/services/user-prompt/user-prompt-manager.js");
+    const { userPromptManager } = await import("../src/memory/user-prompt/user-prompt-manager.js");
     userPromptManager.reset();
 
     const prompt = await userPromptManager.getPromptById("prompt_legacy");

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { connect } from "@tursodatabase/database";
 import { cleanupTursoTestDirectory } from "./turso-test-utils.js";
-import { TursoDb } from "../src/services/turso/turso-db.js";
+import { TursoDb } from "../src/storage/turso/turso-db.js";
 
 const MIGRATION_TEST_TIMEOUT = 20000;
 const migrationTest = (name: string, fn: () => void | Promise<void>) =>
@@ -17,7 +17,7 @@ describe("turso encryption migrator", () => {
   afterEach(async () => {
     restoreConfig?.();
     restoreConfig = undefined;
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
     tursoShardManager.reset();
     await cleanupTursoTestDirectory(baseDir);
   });
@@ -126,7 +126,7 @@ describe("turso encryption migrator", () => {
     await createPlaintextShard("project_a1b2c3d4e5f67890_shard_0.db");
 
     const { runDatabaseEncryptionMigration } =
-      await import("../src/services/turso/encryption-migrator.js");
+      await import("../src/storage/turso/encryption-migrator.js");
     await runDatabaseEncryptionMigration();
     expect(existsSync(join(baseDir, ".tursodb-encrypted-v1"))).toBe(false);
 
@@ -141,12 +141,12 @@ describe("turso encryption migrator", () => {
     const dbPath = await createPlaintextShard("project_a1b2c3d4e5f67890_shard_0.db", true);
 
     const { resolveOrCreateDatabaseEncryptionKey } =
-      await import("../src/services/turso/encryption-key.js");
+      await import("../src/storage/turso/encryption-key.js");
     const hexkey = resolveOrCreateDatabaseEncryptionKey();
     expect(hexkey).toBeTruthy();
 
     const { runDatabaseEncryptionMigration } =
-      await import("../src/services/turso/encryption-migrator.js");
+      await import("../src/storage/turso/encryption-migrator.js");
     await runDatabaseEncryptionMigration();
 
     const marker = join(baseDir, ".tursodb-encrypted-v1");
@@ -188,11 +188,11 @@ describe("turso encryption migrator", () => {
     await withStorage(true);
     const dbPath = await createPlaintextShard("project_a1b2c3d4e5f67890_shard_0.db");
     const { resolveOrCreateDatabaseEncryptionKey } =
-      await import("../src/services/turso/encryption-key.js");
+      await import("../src/storage/turso/encryption-key.js");
     const hexkey = resolveOrCreateDatabaseEncryptionKey()!;
 
     const { runDatabaseEncryptionMigration } =
-      await import("../src/services/turso/encryption-migrator.js");
+      await import("../src/storage/turso/encryption-migrator.js");
     await runDatabaseEncryptionMigration();
     const before = readdirSync(baseDir).filter((n) => n.includes(".pre-encrypt-")).length;
 
@@ -212,7 +212,7 @@ describe("turso encryption migrator", () => {
     await withStorage(false);
     await createPlaintextShard("project_a1b2c3d4e5f67890_shard_0.db", true);
 
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
     await tursoShardManager.getAllShards("project", "");
 
     const { CONFIG } = await import("../src/config.js");
@@ -220,11 +220,11 @@ describe("turso encryption migrator", () => {
     CONFIG.databaseEncryptionKey = `file://${join(baseDir, "config", "opencode-mem-db.key")}`;
 
     const { resolveOrCreateDatabaseEncryptionKey } =
-      await import("../src/services/turso/encryption-key.js");
+      await import("../src/storage/turso/encryption-key.js");
     resolveOrCreateDatabaseEncryptionKey();
 
     const { runDatabaseEncryptionMigration } =
-      await import("../src/services/turso/encryption-migrator.js");
+      await import("../src/storage/turso/encryption-migrator.js");
     await runDatabaseEncryptionMigration();
 
     // Must not throw with a stale closed metadata handle.

@@ -17,13 +17,12 @@ type ScenarioInput = {
 
 const tempDirs: string[] = [];
 const indexUrl = new URL("../src/index.js", import.meta.url).href;
-const clientUrl = new URL("../src/services/client.js", import.meta.url).href;
+const clientUrl = new URL("../src/memory/client.js", import.meta.url).href;
 const userProfileManagerUrl = new URL(
-  "../src/services/user-profile/user-profile-manager.js",
+  "../src/user-profile/user-profile-manager.js",
   import.meta.url
 ).href;
-const learningLockUrl = new URL("../src/services/user-profile/learning-lock.js", import.meta.url)
-  .href;
+const learningLockUrl = new URL("../src/user-profile/learning-lock.js", import.meta.url).href;
 
 function runScenario(input: ScenarioInput) {
   const dir = mkdtempSync(join(tmpdir(), "opencode-mem-profile-runtime-"));
@@ -122,7 +121,7 @@ mock.module(${JSON.stringify(learningLockUrl)}, () => ({
 
 ${
   input.mockGitConfigUnavailable
-    ? `mock.module("${new URL("../src/services/tags.js", import.meta.url).href}", () => ({
+    ? `mock.module("${new URL("../src/memory/tags.js", import.meta.url).href}", () => ({
   getTags: () => ({
     user: {
       tag: "opencode_user_unknown",

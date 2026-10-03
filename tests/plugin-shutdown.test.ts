@@ -1,15 +1,17 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 
+const pluginSourceUrl = new URL("../src/hosts/opencode/plugin.ts", import.meta.url);
+
 describe("plugin shutdown", () => {
   it("does not force host process exit from signal handlers", () => {
-    const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf-8");
+    const source = readFileSync(pluginSourceUrl, "utf-8");
 
     expect(source).not.toContain("process.exit(");
   });
 
   it("clears pending idle auto-capture work during cleanup", () => {
-    const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf-8");
+    const source = readFileSync(pluginSourceUrl, "utf-8");
 
     // Per-session debounce timers must all be cleared on cleanup, and the
     // plugin lifetime signal must abort queued-but-unstarted capture jobs.

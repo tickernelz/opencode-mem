@@ -37,24 +37,24 @@ function fail(name, error) {
 
 const { CONFIG } = await import(join(root, "src/config.ts"));
 const { resetTursoReady, ensureTursoReady } = await import(
-  join(root, "src/services/turso/ready.ts")
+  join(root, "src/storage/turso/ready.ts")
 );
-const { tursoShardManager } = await import(join(root, "src/services/turso/shard-manager.ts"));
+const { tursoShardManager } = await import(join(root, "src/storage/turso/shard-manager.ts"));
 const { tursoConnectionManager, resolveDatabaseEncryption } = await import(
-  join(root, "src/services/turso/connection-manager.ts")
+  join(root, "src/storage/turso/connection-manager.ts")
 );
-const { tursoVectorSearch } = await import(join(root, "src/services/turso/vector-search.ts"));
+const { tursoVectorSearch } = await import(join(root, "src/storage/turso/vector-search.ts"));
 const { runTursoEngineMigration } = await import(
-  join(root, "src/services/turso/engine-migrator.ts")
+  join(root, "src/storage/turso/engine-migrator.ts")
 );
 const { runDatabaseEncryptionMigration } = await import(
-  join(root, "src/services/turso/encryption-migrator.ts")
+  join(root, "src/storage/turso/encryption-migrator.ts")
 );
 const {
   generateDatabaseEncryptionKeyFile,
   isValidDatabaseEncryptionHexKey,
   resolveOrCreateDatabaseEncryptionKey,
-} = await import(join(root, "src/services/turso/encryption-key.ts"));
+} = await import(join(root, "src/storage/turso/encryption-key.ts"));
 const {
   applySchemaMigrations,
   USER_PROMPTS_MIGRATIONS,
@@ -63,20 +63,16 @@ const {
   METADATA_DB_MIGRATIONS,
   ensureUserPromptColumns,
   memoryShardMigrations,
-} = await import(join(root, "src/services/turso/schema-migrations.ts"));
-const { TursoDb } = await import(join(root, "src/services/turso/turso-db.ts"));
+} = await import(join(root, "src/storage/turso/schema-migrations.ts"));
+const { TursoDb } = await import(join(root, "src/storage/turso/turso-db.ts"));
 const { renameSqliteDatabase, copySqliteDatabase, removeSqliteDatabase } = await import(
-  join(root, "src/services/turso/sqlite-handle-release.ts")
+  join(root, "src/storage/turso/sqlite-handle-release.ts")
 );
 const { userPromptManager } = await import(
-  join(root, "src/services/user-prompt/user-prompt-manager.ts")
+  join(root, "src/memory/user-prompt/user-prompt-manager.ts")
 );
-const { userProfileManager } = await import(
-  join(root, "src/services/user-profile/user-profile-manager.ts")
-);
-const { aiSessionManager } = await import(
-  join(root, "src/services/ai/session/ai-session-manager.ts")
-);
+const { userProfileManager } = await import(join(root, "src/user-profile/user-profile-manager.ts"));
+const { aiSessionManager } = await import(join(root, "src/ai/session/ai-session-manager.ts"));
 
 const SCOPE = "a1b2c3d4e5f67890";
 const SCOPE2 = "b2c3d4e5f6789012";

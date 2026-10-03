@@ -7,10 +7,7 @@
  * with HOME/XDG redirected to an isolated sandbox (no real auth/memory).
  */
 import { createLegacyClient } from "../../src/v2/legacy-client.js";
-import {
-  setConnectedProviders,
-  isProviderConnected,
-} from "../../src/services/ai/opencode-provider.js";
+import { setConnectedProviders, isProviderConnected } from "../../src/ai/opencode-provider.js";
 
 const ctx = {
   location: { directory: "/workspace/project", project: { directory: "/workspace/project" } },

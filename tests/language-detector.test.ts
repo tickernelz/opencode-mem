@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { detectLanguage, getLanguageName } from "../src/services/language-detector.js";
+import { detectLanguage, getLanguageName } from "../src/infra/language-detector.js";
 
 describe("detectLanguage", () => {
   it("should detect Chinese as zh", () => {

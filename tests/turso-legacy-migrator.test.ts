@@ -83,7 +83,7 @@ describe("turso legacy migrator", () => {
     CONFIG.databaseEncryptionEnabled = false;
     CONFIG.databaseEncryptionKey = undefined;
 
-    const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
+    const { runLegacyTursoMigration } = await import("../src/storage/turso/legacy-migrator.js");
     await runLegacyTursoMigration();
 
     const sidecarPath = join(projectsDir, `project_${scopeHash}_shard_0.db.turso-migrate.json`);
@@ -99,7 +99,7 @@ describe("turso legacy migrator", () => {
     const marker = JSON.parse(readFileSync(markerPath, "utf-8"));
     expect(marker.shards?.length).toBe(1);
 
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
     const registered = await tursoShardManager.getAllShards("project", "");
     expect(registered).toHaveLength(1);
     expect(registered[0]?.scopeHash).toBe(scopeHash);
@@ -128,8 +128,8 @@ describe("turso legacy migrator", () => {
     CONFIG.databaseEncryptionEnabled = false;
     CONFIG.databaseEncryptionKey = undefined;
 
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
 
     const backupPath = `${dbPath}.legacy.bak`;
 
@@ -145,7 +145,7 @@ describe("turso legacy migrator", () => {
       "utf-8"
     );
 
-    const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
+    const { runLegacyTursoMigration } = await import("../src/storage/turso/legacy-migrator.js");
     await runLegacyTursoMigration();
 
     const migratedDb = await tursoConnectionManager.getConnection(dbPath);
@@ -186,7 +186,7 @@ describe("turso legacy migrator", () => {
       CONFIG.storagePath = baseDir;
       CONFIG.embeddingDimensions = 768;
 
-      const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
+      const { runLegacyTursoMigration } = await import("../src/storage/turso/legacy-migrator.js");
       await runLegacyTursoMigration();
 
       const sidecarPath = join(projectsDir, "project_marker_shard_0.db.turso-migrate.json");
@@ -232,7 +232,7 @@ describe("turso legacy migrator", () => {
     CONFIG.databaseEncryptionEnabled = false;
     CONFIG.databaseEncryptionKey = undefined;
 
-    const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
+    const { runLegacyTursoMigration } = await import("../src/storage/turso/legacy-migrator.js");
     await expect(runLegacyTursoMigration()).rejects.toThrow(/unreadable vectors/);
 
     expect(existsSync(join(baseDir, ".turso-migrated"))).toBe(false);
@@ -277,10 +277,10 @@ describe("turso legacy migrator", () => {
     CONFIG.databaseEncryptionEnabled = false;
     CONFIG.databaseEncryptionKey = undefined;
 
-    const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
+    const { runLegacyTursoMigration } = await import("../src/storage/turso/legacy-migrator.js");
     await runLegacyTursoMigration();
 
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
     const db = await tursoConnectionManager.getConnection(dbPath);
     const indexRow = await db.get(
       `SELECT name FROM sqlite_master WHERE type='index' AND name='memories_vec_idx'`
@@ -306,10 +306,9 @@ describe("turso legacy migrator", () => {
       CONFIG.storagePath = baseDir;
       CONFIG.embeddingDimensions = 768;
 
-      const { tursoConnectionManager } =
-        await import("../src/services/turso/connection-manager.js");
-      const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-      const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+      const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+      const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+      const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
 
       const shard = await tursoShardManager.createShard("project", scopeHash, 0);
       const db = await tursoConnectionManager.getConnection(shard.dbPath);
@@ -334,7 +333,7 @@ describe("turso legacy migrator", () => {
         rmSync(sidecarPath);
       }
 
-      const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
+      const { runLegacyTursoMigration } = await import("../src/storage/turso/legacy-migrator.js");
       await runLegacyTursoMigration();
 
       expect(existsSync(`${shard.dbPath}.legacy.bak`)).toBe(true);
@@ -359,14 +358,13 @@ describe("turso legacy migrator", () => {
       CONFIG.storagePath = baseDir;
       CONFIG.embeddingDimensions = 4;
 
-      const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-      const { tursoConnectionManager } =
-        await import("../src/services/turso/connection-manager.js");
+      const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+      const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
       const shard = await tursoShardManager.createShard("project", scopeHash, 0);
       const metadataDb = await tursoConnectionManager.getConnection(join(baseDir, "metadata.db"));
       await metadataDb.run(`UPDATE shards SET is_active = 0 WHERE id = ?`, [shard.id]);
 
-      const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
+      const { runLegacyTursoMigration } = await import("../src/storage/turso/legacy-migrator.js");
       await runLegacyTursoMigration();
 
       const active = await tursoShardManager.getActiveShard("project", scopeHash);

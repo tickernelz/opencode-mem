@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { tursoConnectionManager } from "../src/services/turso/connection-manager.js";
+import { tursoConnectionManager } from "../src/storage/turso/connection-manager.js";
 
 // Cross-process cold-buffer safety: two real, independent UserProfileManager
 // instances over one shared storagePath simulate peer learning processes. All
@@ -35,8 +35,7 @@ async function makeManager(dir: string = tmpDir) {
   delete CONFIG.memoryApiUrl;
   CONFIG.storagePath = dir;
   CONFIG.userProfileEmbeddingMinDescriptionLength = 5;
-  const { UserProfileManager } =
-    await import("../src/services/user-profile/user-profile-manager.js");
+  const { UserProfileManager } = await import("../src/user-profile/user-profile-manager.js");
   return new UserProfileManager();
 }
 
@@ -149,8 +148,7 @@ describe("cold buffer cross-process safety", () => {
 
     // Constructing a manager over a corrupt cache must not crash (plugin
     // import path stays fail-safe)...
-    const { UserProfileManager } =
-      await import("../src/services/user-profile/user-profile-manager.js");
+    const { UserProfileManager } = await import("../src/user-profile/user-profile-manager.js");
     expect(() => new UserProfileManager()).not.toThrow();
 
     // ...but a merge round must refuse to treat unknown data as empty.

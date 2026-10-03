@@ -82,22 +82,22 @@ const fireIdleTimerFor = async (sid, captureApi) => {
 };
 
 // ---- shared external boundaries (real boundaries, fake content) ----
-mock.module(${JSON.stringify(u("src/services/client.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/client.js"))}, () => ({
   memoryClient: { warmup: async () => {}, isReady: async () => true, close() {} },
 }));
-mock.module(${JSON.stringify(u("src/services/context.js"))}, () => ({ formatContextForPrompt: () => "" }));
-mock.module(${JSON.stringify(u("src/services/privacy.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/context.js"))}, () => ({ formatContextForPrompt: () => "" }));
+mock.module(${JSON.stringify(u("src/infra/privacy.js"))}, () => ({
   stripPrivateContent: (v) => v, isFullyPrivate: () => false,
 }));
-mock.module(${JSON.stringify(u("src/services/logger.js"))}, () => ({ log: () => {} }));
-mock.module(${JSON.stringify(u("src/services/language-detector.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/infra/logger.js"))}, () => ({ log: () => {} }));
+mock.module(${JSON.stringify(u("src/infra/language-detector.js"))}, () => ({
   detectLanguage: () => "en", getLanguageName: () => "English",
 }));
-mock.module(${JSON.stringify(u("src/services/turso/ready.js"))}, () => ({ ensureTursoReady: async () => {} }));
-mock.module(${JSON.stringify(u("src/services/web-server.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/storage/turso/ready.js"))}, () => ({ ensureTursoReady: async () => {} }));
+mock.module(${JSON.stringify(u("src/runtime/http/web-server.js"))}, () => ({
   startWebServer: async () => null, WebServer: class {},
 }));
-mock.module(${JSON.stringify(u("src/services/cleanup-service.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/cleanup-service.js"))}, () => ({
   cleanupService: { shouldRunCleanup: async () => false, runCleanup: async () => {} },
 }));
 
@@ -136,11 +136,11 @@ mock.module(${JSON.stringify(u("src/config.js"))}, () => ({
   },
   initConfig: () => {}, isConfigured: () => true,
 }));
-mock.module(${JSON.stringify(u("src/services/tags.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/tags.js"))}, () => ({
   getTags: () => ({ project: { tag: "opencode_project_test", displayName: "T", userName: "U", userEmail: "u@example.com", projectPath: "/w", projectName: "w" } }),
 }));
 const captureSIDs = [];
-mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/user-prompt/user-prompt-manager.js"))}, () => ({
   userPromptManager: {
     savePrompt() {},
     async getUncapturedPromptsForSession(sid) { captureSIDs.push(sid + ":query"); return []; },
@@ -278,7 +278,7 @@ const prompts = [
 ];
 const counts = { query: {}, claim: {}, llm: {}, capture: {} };
 const bump = (m, k) => { m[k] = (m[k] ?? 0) + 1; };
-mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/user-prompt/user-prompt-manager.js"))}, () => ({
   userPromptManager: {
     async getUncapturedPromptsForSession(sid) { bump(counts.query, sid); return prompts.filter((p) => p.sessionId === sid && !p.captured && !p.claimed); },
     async claimPrompt(id) { const p = prompts.find((x) => x.id === id); if (!p || p.captured || p.claimed) return false; p.claimed = true; bump(counts.claim, p.sessionId); return true; },
@@ -289,14 +289,14 @@ mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"
     async deletePrompt(id) { const p = prompts.find((x) => x.id === id); if (p) { p.captured = true; p.claimed = false; } },
   },
 }));
-mock.module(${JSON.stringify(u("src/services/client.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/client.js"))}, () => ({
   memoryClient: {
     listMemories: async () => ({ success: true, memories: [] }),
     addMemory: async (_c, _t, metadata) => { bump(counts.capture, metadata.sessionID); return { success: true, id: "mem-" + metadata.promptId }; },
     close() {},
   },
 }));
-mock.module(${JSON.stringify(u("src/services/tags.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/tags.js"))}, () => ({
   getTags: () => ({ project: { tag: "opencode_project_test", displayName: "T", userName: "U", userEmail: "u@example.com", projectPath: "/w", projectName: "w" } }),
 }));
 
@@ -309,7 +309,7 @@ const gateA = new Promise((res) => { releaseA = res; });
 let llmEnteredResolve;
 const llmEntered = new Promise((res) => { llmEnteredResolve = res; });
 const llmOrder = [];
-mock.module(${JSON.stringify(u("src/services/ai/opencode-provider-loader.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/ai/opencode-provider-loader.js"))}, () => ({
   loadOpencodeProvider: async () => ({
     isProviderConnected: () => true,
     getV2Client: () => ({}),
@@ -339,7 +339,7 @@ const ctxFor = (sid) => ({
   },
 });
 
-const { performAutoCapture } = await import(${JSON.stringify(u("src/services/auto-capture.js"))});
+const { performAutoCapture } = await import(${JSON.stringify(u("src/memory/auto-capture.js"))});
 
 // 1) A starts; its LLM call parks on the gate.
 const aPromise = performAutoCapture(ctxFor("sess-A"), "sess-A", "/w");
@@ -402,7 +402,7 @@ const prompts = [
 ];
 const counts = { query: {}, llm: {} };
 const bump = (m, k) => { m[k] = (m[k] ?? 0) + 1; };
-mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/user-prompt/user-prompt-manager.js"))}, () => ({
   userPromptManager: {
     async getUncapturedPromptsForSession(sid) { bump(counts.query, sid); return prompts.filter((p) => p.sessionId === sid && !p.captured && !p.claimed); },
     async claimPrompt(id) { const p = prompts.find((x) => x.id === id); if (!p || p.captured || p.claimed) return false; p.claimed = true; return true; },
@@ -413,17 +413,17 @@ mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"
     async deletePrompt(id) { const p = prompts.find((x) => x.id === id); if (p) { p.captured = true; p.claimed = false; } },
   },
 }));
-mock.module(${JSON.stringify(u("src/services/client.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/client.js"))}, () => ({
   memoryClient: {
     listMemories: async () => ({ success: true, memories: [] }),
     addMemory: async () => ({ success: true, id: "m" }),
     close() {},
   },
 }));
-mock.module(${JSON.stringify(u("src/services/tags.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/tags.js"))}, () => ({
   getTags: () => ({ project: { tag: "t", displayName: "T", userName: "U", userEmail: "u@e.com", projectPath: "/w", projectName: "w" } }),
 }));
-mock.module(${JSON.stringify(u("src/services/ai/opencode-provider-loader.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/ai/opencode-provider-loader.js"))}, () => ({
   loadOpencodeProvider: async () => ({
     isProviderConnected: () => true,
     getV2Client: () => ({}),
@@ -444,7 +444,7 @@ const ctx = {
   },
 };
 
-const { performAutoCapture } = await import(${JSON.stringify(u("src/services/auto-capture.js"))});
+const { performAutoCapture } = await import(${JSON.stringify(u("src/memory/auto-capture.js"))});
 // two overlapping invokes for the SAME session (burst idles pre-debounce)
 const [r1, r2] = await Promise.all([
   performAutoCapture(ctx, "sess-X", "/w"),
@@ -477,7 +477,7 @@ const prompts = [
   { id: "pB", sessionId: "sess-B", messageId: "msg-B1", projectPath: "/w", content: "Will pass", createdAt: 2, captured: false, claimed: false, capture_attempts: 0 },
 ];
 const captured = [];
-mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/user-prompt/user-prompt-manager.js"))}, () => ({
   userPromptManager: {
     async getUncapturedPromptsForSession(sid) { return prompts.filter((p) => p.sessionId === sid && !p.captured && !p.claimed); },
     async claimPrompt(id) { const p = prompts.find((x) => x.id === id); if (!p || p.captured || p.claimed) return false; p.claimed = true; return true; },
@@ -489,17 +489,17 @@ mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"
     async getUncapturedPrompts() { return []; },
   },
 }));
-mock.module(${JSON.stringify(u("src/services/client.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/client.js"))}, () => ({
   memoryClient: {
     listMemories: async () => ({ success: true, memories: [] }),
     addMemory: async (_c, _t, metadata) => { captured.push(metadata.sessionID); return { success: true, id: "m" }; },
     close() {},
   },
 }));
-mock.module(${JSON.stringify(u("src/services/tags.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/tags.js"))}, () => ({
   getTags: () => ({ project: { tag: "t", displayName: "T", userName: "U", userEmail: "u@e.com", projectPath: "/w", projectName: "w" } }),
 }));
-mock.module(${JSON.stringify(u("src/services/ai/opencode-provider-loader.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/ai/opencode-provider-loader.js"))}, () => ({
   loadOpencodeProvider: async () => ({
     isProviderConnected: () => true,
     getV2Client: () => ({}),
@@ -526,7 +526,7 @@ const ctxFor = (sid) => ({
   },
 });
 
-const { performAutoCapture } = await import(${JSON.stringify(u("src/services/auto-capture.js"))});
+const { performAutoCapture } = await import(${JSON.stringify(u("src/memory/auto-capture.js"))});
 
 // A runs first and its whole capturePrompt path swallows errors internally
 // (old semantics), so it resolves; B behind it must still run to completion.
@@ -537,7 +537,7 @@ await Promise.all([aPromise, bPromise]);
 // A prompt-manager query that THROWS (e.g. DB failure) must reject its own
 // caller's promise — errors are not swallowed by the queue — while the next
 // job still runs.
-mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/user-prompt/user-prompt-manager.js"))}, () => ({
   userPromptManager: {
     async getUncapturedPromptsForSession(sid) { if (sid === "sess-C") throw new Error("db down"); return []; },
     async claimPrompt() { return true; },
@@ -582,7 +582,7 @@ const prompts = [
 ];
 const counts = { query: {}, claim: {}, llm: {}, capture: {} };
 const bump = (m, k) => { m[k] = (m[k] ?? 0) + 1; };
-mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/user-prompt/user-prompt-manager.js"))}, () => ({
   userPromptManager: {
     async getUncapturedPromptsForSession(sid) { bump(counts.query, sid); return prompts.filter((p) => p.sessionId === sid && !p.captured && !p.claimed); },
     async claimPrompt(id) { const p = prompts.find((x) => x.id === id); if (!p || p.captured || p.claimed) return false; p.claimed = true; bump(counts.claim, p.sessionId); return true; },
@@ -593,19 +593,19 @@ mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"
     async deletePrompt(id) { const p = prompts.find((x) => x.id === id); if (p) { p.captured = true; p.claimed = false; } },
   },
 }));
-mock.module(${JSON.stringify(u("src/services/client.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/client.js"))}, () => ({
   memoryClient: {
     listMemories: async () => ({ success: true, memories: [] }),
     addMemory: async (_c, _t, metadata) => { bump(counts.capture, metadata.sessionID); return { success: true, id: "m" }; },
     close() {},
   },
 }));
-mock.module(${JSON.stringify(u("src/services/tags.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/memory/tags.js"))}, () => ({
   getTags: () => ({ project: { tag: "t", displayName: "T", userName: "U", userEmail: "u@e.com", projectPath: "/w", projectName: "w" } }),
 }));
 let releaseA;
 const gateA = new Promise((res) => { releaseA = res; });
-mock.module(${JSON.stringify(u("src/services/ai/opencode-provider-loader.js"))}, () => ({
+mock.module(${JSON.stringify(u("src/ai/opencode-provider-loader.js"))}, () => ({
   loadOpencodeProvider: async () => ({
     isProviderConnected: () => true,
     getV2Client: () => ({}),
@@ -634,7 +634,7 @@ const ctxFor = (sid) => ({
   },
 });
 
-const { performAutoCapture } = await import(${JSON.stringify(u("src/services/auto-capture.js"))});
+const { performAutoCapture } = await import(${JSON.stringify(u("src/memory/auto-capture.js"))});
 
 // A in flight (parked on the LLM gate); B queued behind it; plugin disposes.
 const aPromise = performAutoCapture(ctxFor("sess-A"), "sess-A", "/w");

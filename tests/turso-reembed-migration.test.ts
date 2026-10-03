@@ -24,9 +24,9 @@ describe("turso re-embed migration safety", () => {
     CONFIG.databaseEncryptionEnabled = false;
     CONFIG.databaseEncryptionKey = undefined;
 
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
-    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
+    const { tursoVectorSearch } = await import("../src/storage/turso/vector-search.js");
 
     const shard = await tursoShardManager.createShard("project", SCOPE_HASH, 0);
     const db = await tursoConnectionManager.getConnection(shard.dbPath);
@@ -52,7 +52,7 @@ describe("turso re-embed migration safety", () => {
   }
 
   async function stubEmbedding(failOn?: string) {
-    const { embeddingService } = await import("../src/services/embedding.js");
+    const { embeddingService } = await import("../src/memory/embedding.js");
     const service = embeddingService as any;
     const original = {
       warmup: service.warmup,
@@ -74,7 +74,7 @@ describe("turso re-embed migration safety", () => {
     const { CONFIG } = await import("../src/config.js");
     CONFIG.embeddingDimensions = 4;
 
-    const { migrationService } = await import("../src/services/migration-service.js");
+    const { migrationService } = await import("../src/storage/migration-service.js");
     const result = await migrationService.migrateToNewModel("re-embed");
 
     expect(result.success).toBe(true);
@@ -84,7 +84,7 @@ describe("turso re-embed migration safety", () => {
       readdirSync(join(baseDir, "projects")).some((name) => name.includes(".pre-reembed-"))
     ).toBe(true);
 
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
     const db = await tursoConnectionManager.getConnection(shard.dbPath);
     const rows = await db.all(
       `SELECT *, vector_extract(vector) AS vector_json FROM memories ORDER BY id`
@@ -106,7 +106,7 @@ describe("turso re-embed migration safety", () => {
     const { CONFIG } = await import("../src/config.js");
     CONFIG.embeddingDimensions = 4;
 
-    const { migrationService } = await import("../src/services/migration-service.js");
+    const { migrationService } = await import("../src/storage/migration-service.js");
     const result = await migrationService.migrateToNewModel("re-embed");
 
     expect(result.success).toBe(false);
@@ -115,7 +115,7 @@ describe("turso re-embed migration safety", () => {
       readdirSync(join(baseDir, "projects")).some((name) => name.includes(".pre-reembed-"))
     ).toBe(false);
 
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
     const db = await tursoConnectionManager.getConnection(shard.dbPath);
     const count = await db.get(`SELECT COUNT(*) AS count FROM memories`);
     expect(Number(count?.count)).toBe(2);
@@ -130,7 +130,7 @@ describe("turso re-embed migration safety", () => {
     const { CONFIG } = await import("../src/config.js");
     CONFIG.embeddingDimensions = 4;
 
-    const { migrationService } = await import("../src/services/migration-service.js");
+    const { migrationService } = await import("../src/storage/migration-service.js");
     const result = await migrationService.migrateToNewModel("fresh-start");
 
     expect(result.success).toBe(true);
@@ -141,19 +141,19 @@ describe("turso re-embed migration safety", () => {
     );
     expect(files).not.toContain(shard.dbPath.split("/").at(-1));
 
-    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+    const { tursoShardManager } = await import("../src/storage/turso/shard-manager.js");
     expect(await tursoShardManager.getAllShards("project", SCOPE_HASH)).toHaveLength(0);
   });
 
   it("recovers a crash between source backup and replacement rename", async () => {
     const shard = await createSourceShard();
-    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { tursoConnectionManager } = await import("../src/storage/turso/connection-manager.js");
     await tursoConnectionManager.closeConnection(shard.dbPath);
 
     const stagedPath = `${shard.dbPath}.reembed-crash.tmp`;
     const backupPath = `${shard.dbPath}.pre-reembed-crash.bak`;
     const statePath = `${shard.dbPath}.reembed-swap.json`;
-    const { renameSqliteDatabase } = await import("../src/services/turso/sqlite-handle-release.js");
+    const { renameSqliteDatabase } = await import("../src/storage/turso/sqlite-handle-release.js");
     // Duplicate current DB as staged replacement, then move original to backup.
     copyFileSync(shard.dbPath, stagedPath);
     for (const suffix of ["-wal", "-shm"]) {
@@ -168,7 +168,7 @@ describe("turso re-embed migration safety", () => {
       "utf-8"
     );
 
-    const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
+    const { runLegacyTursoMigration } = await import("../src/storage/turso/legacy-migrator.js");
     await runLegacyTursoMigration();
 
     expect(existsSync(shard.dbPath)).toBe(true);

@@ -18,7 +18,7 @@ describe("memory tool warmup gate", () => {
     baseDir = mkdtempSync(join(tmpdir(), "memory-tool-warmup-"));
     scriptPath = join(baseDir, "run.mjs");
 
-    const clientUrl = pathToFileURL(join(import.meta.dirname, "../src/services/client.ts")).href;
+    const clientUrl = pathToFileURL(join(import.meta.dirname, "../src/memory/client.ts")).href;
 
     const script = `
 import { mock } from "bun:test";

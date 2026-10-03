@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { EventEmitter } from "node:events";
-import { attachNodeDisconnectHandlers } from "../src/services/web-server.js";
+import { attachNodeDisconnectHandlers } from "../src/runtime/http/web-server.js";
 import {
   EXTERNAL_PROFILE_CLEANUP_TIMEOUT_MS,
   NODE_HTTP_IDLE_TIMEOUT_MS,
   OPENCODE_PROFILE_CLEANUP_TIMEOUT_MS,
-} from "../src/services/request-timeouts.js";
+} from "../src/runtime/http/request-timeouts.js";
 
 class RequestStub extends EventEmitter {
   aborted = false;
