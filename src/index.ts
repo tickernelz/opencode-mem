@@ -24,7 +24,9 @@ import { getHostClientConfig } from "./services/ai/opencode-host-config.js";
 import { loadOpencodeProvider } from "./services/ai/opencode-provider-loader.js";
 import {
   isInternalStructuredSession,
+  noteStructuredOutputStep,
   STRUCTURED_OUTPUT_AGENT,
+  STRUCTURED_OUTPUT_MAX_STEPS,
   STRUCTURED_OUTPUT_TOOLS,
 } from "./services/ai/opencode-provider.js";
 
@@ -224,8 +226,8 @@ export function applyStructuredOutputAgentConfig(cfg: { agent?: Record<string, u
       description: "Internal least-privilege agent for opencode-mem structured output",
       mode: "subagent",
       // OpenCode reads `steps` at runtime; SDK AgentConfig also documents maxSteps.
-      steps: 2,
-      maxSteps: 2,
+      steps: STRUCTURED_OUTPUT_MAX_STEPS,
+      maxSteps: STRUCTURED_OUTPUT_MAX_STEPS,
       tools: STRUCTURED_OUTPUT_TOOLS,
       permission: {
         "*": "deny",
@@ -1064,6 +1066,33 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
     event: async (input: { event: { type: string; properties?: any } }) => {
       const event = input.event;
+
+      // Client-side step watchdog for internal structured-output sessions (#278).
+      // OpenCode's agent.steps soft-cap does not hard-stop json_schema loops when
+      // forced StructuredOutput keeps failing (e.g. opencode-claude-auth).
+      if (event.type === "message.part.updated") {
+        const part = event.properties?.part;
+        if (part?.type === "step-start" && typeof part.sessionID === "string") {
+          const { shouldAbort, steps } = noteStructuredOutputStep(part.sessionID);
+          if (shouldAbort) {
+            log("Aborting structured-output session after step budget", {
+              sessionID: part.sessionID,
+              steps,
+              maxSteps: STRUCTURED_OUTPUT_MAX_STEPS,
+            });
+            try {
+              await ctx.client.session.abort({ path: { id: part.sessionID } });
+            } catch (error) {
+              log("structured-output step abort failed", {
+                sessionID: part.sessionID,
+                error: String(error),
+              });
+            }
+          }
+        }
+        return;
+      }
+
       if (event.type === "session.idle") {
         if (!isConfigured() || !CONFIG.autoCaptureEnabled) return;
         const sessionID = event.properties?.sessionID;

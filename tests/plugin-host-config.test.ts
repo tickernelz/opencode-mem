@@ -17,6 +17,7 @@ import {
   resetHostFetch,
   setHostFetch,
   STRUCTURED_OUTPUT_AGENT,
+  STRUCTURED_OUTPUT_MAX_STEPS,
   STRUCTURED_OUTPUT_TOOLS,
 } from "../src/services/ai/opencode-provider.js";
 import { z } from "zod";
@@ -182,8 +183,8 @@ describe("structured-output agent config (issue #189)", () => {
     expect(cfg.agent?.[STRUCTURED_OUTPUT_AGENT]).toEqual({
       description: "Internal least-privilege agent for opencode-mem structured output",
       mode: "subagent",
-      steps: 2,
-      maxSteps: 2,
+      steps: STRUCTURED_OUTPUT_MAX_STEPS,
+      maxSteps: STRUCTURED_OUTPUT_MAX_STEPS,
       tools: STRUCTURED_OUTPUT_TOOLS,
       permission: {
         "*": "deny",

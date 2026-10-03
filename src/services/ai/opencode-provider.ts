@@ -44,6 +44,17 @@ export const STRUCTURED_OUTPUT_AGENT = "opencode-mem-structured";
 /** Hard ceiling for a single internal structured-output prompt. */
 export const STRUCTURED_OUTPUT_TIMEOUT_MS = 90_000;
 
+/**
+ * Soft agent step budget. OpenCode only injects a last-step warning for
+ * `format: json_schema` and can keep looping when forced tool calls fail
+ * (seen with opencode-claude-auth in #278). We also abort client-side after
+ * this many `step-start` parts.
+ */
+export const STRUCTURED_OUTPUT_MAX_STEPS = 2;
+
+/** Cap OpenCode schema retries so a bad provider cannot spin forever. */
+export const STRUCTURED_OUTPUT_DEFAULT_RETRY_COUNT = 1;
+
 let _structuredOutputTimeoutMs = STRUCTURED_OUTPUT_TIMEOUT_MS;
 
 /** Test helper: override the structured-output prompt timeout. Pass undefined to reset. */
@@ -69,6 +80,8 @@ export const STRUCTURED_OUTPUT_METADATA = {
 };
 
 const _internalSessions = new Set<string>();
+const _structuredStepCounts = new Map<string, number>();
+const _structuredStepAbortErrors = new Map<string, Error>();
 
 let _connectedProviders: Set<string> = new Set();
 let _v2Client: OpencodeClient | undefined;
@@ -121,14 +134,69 @@ export function isInternalStructuredSession(sessionID: string): boolean {
 /** Test helper: clear tracked internal session IDs. */
 export function resetInternalStructuredSessions(): void {
   _internalSessions.clear();
+  _structuredStepCounts.clear();
+  _structuredStepAbortErrors.clear();
 }
 
 function markInternalSession(sessionID: string): void {
   _internalSessions.add(sessionID);
+  _structuredStepCounts.set(sessionID, 0);
+  _structuredStepAbortErrors.delete(sessionID);
 }
 
 function unmarkInternalSession(sessionID: string): void {
   _internalSessions.delete(sessionID);
+  _structuredStepCounts.delete(sessionID);
+}
+
+/**
+ * Record a `step-start` on an internal structured-output session.
+ * Returns whether the client should abort (step budget exceeded).
+ */
+export function noteStructuredOutputStep(sessionID: string): {
+  tracked: boolean;
+  steps: number;
+  shouldAbort: boolean;
+} {
+  if (!_internalSessions.has(sessionID)) {
+    return { tracked: false, steps: 0, shouldAbort: false };
+  }
+  const steps = (_structuredStepCounts.get(sessionID) ?? 0) + 1;
+  _structuredStepCounts.set(sessionID, steps);
+  if (steps <= STRUCTURED_OUTPUT_MAX_STEPS) {
+    return { tracked: true, steps, shouldAbort: false };
+  }
+  _structuredStepAbortErrors.set(
+    sessionID,
+    new Error(
+      `opencode-mem: structured-output aborted after ${steps} steps ` +
+        `(agent maxSteps=${STRUCTURED_OUTPUT_MAX_STEPS} may be ignored while format:json_schema forces tool calls; ` +
+        `try a model that supports OpenCode structured output, or configure memoryModel + memoryApiUrl fallback — ` +
+        `opencode-claude-auth loops are a common trigger)`
+    )
+  );
+  return { tracked: true, steps, shouldAbort: true };
+}
+
+/** Consume a step-budget abort error if the prompt failed after we aborted. */
+export function takeStructuredOutputStepAbortError(sessionID: string): Error | undefined {
+  const error = _structuredStepAbortErrors.get(sessionID);
+  _structuredStepAbortErrors.delete(sessionID);
+  return error;
+}
+
+function structuredOutputTimeoutError(timeoutMs: number): Error {
+  return new Error(
+    `opencode-mem: structured-output timed out after ${timeoutMs}ms ` +
+      `(provider may be looping on forced StructuredOutput; ` +
+      `try a known json_schema-capable model or memoryModel + memoryApiUrl fallback)`
+  );
+}
+
+function preferStepAbortError(sessionID: string, error: unknown): never {
+  const stepError = takeStructuredOutputStepAbortError(sessionID);
+  if (stepError) throw stepError;
+  throw error;
 }
 
 function sessionCreateBody(): Record<string, unknown> {
@@ -159,7 +227,9 @@ function sessionPromptFields(args: {
     format: {
       type: "json_schema",
       schema: args.jsonSchema,
-      ...(args.retryCount !== undefined ? { retryCount: args.retryCount } : {}),
+      // Bound schema retries so Claude-auth / incompatible providers fail
+      // closed instead of spinning until the 90s timeout (#278).
+      retryCount: args.retryCount ?? STRUCTURED_OUTPUT_DEFAULT_RETRY_COUNT,
     },
   };
 }
@@ -300,6 +370,9 @@ export async function generateStructuredOutput<T>(opts: StructuredOutputOptions<
     }
 
     return schema.parse(structuredOutput);
+  } catch (error) {
+    preferStepAbortError(sessionID, error);
+    throw error;
   } finally {
     unmarkInternalSession(sessionID);
     // Best-effort: leaving a transient session behind is cosmetic, not
@@ -394,6 +467,9 @@ async function generateViaSdkClient<T>(
       );
     }
     return args.schema.parse(structuredOutput);
+  } catch (error) {
+    preferStepAbortError(sessionID, error);
+    throw error;
   } finally {
     unmarkInternalSession(sessionID);
     try {
@@ -417,7 +493,7 @@ async function withStructuredOutputTimeout<T>(
   const timeoutMs = _structuredOutputTimeoutMs;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
-      reject(new Error(`opencode-mem: structured-output timed out after ${timeoutMs}ms`));
+      reject(structuredOutputTimeoutError(timeoutMs));
     }, timeoutMs);
   });
 
