@@ -188,6 +188,9 @@ describe("structured-output agent config (issue #189)", () => {
         "*": "deny",
         StructuredOutput: "allow",
       },
+      options: {
+        thinking: { type: "disabled" },
+      },
     });
   });
 });

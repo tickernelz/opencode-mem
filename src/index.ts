@@ -231,6 +231,12 @@ export function applyStructuredOutputAgentConfig(cfg: { agent?: Record<string, u
         "*": "deny",
         StructuredOutput: "allow",
       },
+      // OpenCode maps format:json_schema to tool_choice:"required". Thinking-enabled
+      // models (e.g. DeepSeek V4) reject that combo — disable thinking for this
+      // internal agent so auto-capture / profile learning can force StructuredOutput (#253).
+      options: {
+        thinking: { type: "disabled" },
+      },
     },
   };
 }

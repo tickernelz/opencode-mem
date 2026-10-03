@@ -447,6 +447,7 @@ Troubleshooting:
 - If a proxy or custom provider returns plain text instead of structured/tool output, choose another model/provider or use one of the manual provider modes above.
 - For models that reject `temperature`, add `"memoryTemperature": false` when using manual API configuration.
 - For models that reject forced tool calls (`tool_choice: "required"`, e.g. some thinking modes), add `"forceToolChoice": false` when using `openai-chat` / `orcarouter` / `atlas-cloud`.
+- For `opencodeProvider` / `opencodeModel` (e.g. DeepSeek V4 thinking), OpenCode still sends forced `tool_choice` for structured output. opencode-mem disables thinking on the internal `opencode-mem-structured` agent so auto-capture and profile learning can complete. Your interactive chat agent is unchanged. If capture still fails with a thinking/`tool_choice` error, pick a non-thinking model for `opencodeModel` or configure a complete manual fallback (`memoryModel` + `memoryApiUrl`).
 - **Unsupported platforms:** Intel Mac (`darwin/x64`) is not supported — `@tursodatabase/database` and fixed `onnxruntime-node` releases (pinned `1.30.0`) ship no x64 native binding. Use Apple Silicon, Linux, or Windows, or a remote embedding endpoint via `embeddingApiUrl` + `embeddingApiKey`. MLX is not supported.
 
 ## Public Subpath Exports
