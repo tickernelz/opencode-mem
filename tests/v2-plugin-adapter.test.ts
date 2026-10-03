@@ -2,6 +2,69 @@ import { describe, expect, it } from "bun:test";
 import { registerV2Adapter } from "../src/v2/adapter.js";
 
 describe("OpenCode v2 plugin adapter", () => {
+  it("invalidates the compacted session's cache only for events at this location", async () => {
+    const hooks = new Map<string, (event: any) => Promise<void>>();
+    let nextEvent!: (event: any) => void;
+    let handled!: () => void;
+    let revision = 1;
+    const ctx = {
+      location: { directory: "/workspace/project" },
+      tool: { transform: async () => {} },
+      session: {
+        hook: async (name: string, callback: (event: any) => Promise<void>) => {
+          hooks.set(name, callback);
+        },
+      },
+      event: {
+        async *subscribe({ signal }: { signal: AbortSignal }) {
+          while (!signal.aborted) {
+            const event = await new Promise<any>((resolve) => {
+              nextEvent = resolve;
+              signal.addEventListener("abort", () => resolve(null), { once: true });
+            });
+            if (event) yield event;
+            handled();
+          }
+        },
+      },
+    } as any;
+    const cleanup = await registerV2Adapter(ctx, {
+      tool: { memory: { description: "memory" } },
+      memoryContext: {
+        enabled: () => true,
+        refreshOnPrompt: () => false,
+        capturePrompt: async () => true,
+        load: async (sessionID: string) => sessionID + "-" + revision,
+      },
+      event: async () => {},
+    });
+    async function context(sessionID: string) {
+      const event = { sessionID, model: {}, system: [] as any[] };
+      await hooks.get("context")!(event);
+      return event.system.map((part) => part.text);
+    }
+    async function compact(directory: string) {
+      const completed = new Promise<void>((resolve) => {
+        handled = resolve;
+      });
+      nextEvent({
+        type: "session.compaction.ended",
+        location: { directory },
+        data: { sessionID: "ses-1" },
+      });
+      await completed;
+    }
+    expect(await context("ses-1")).toEqual(["ses-1-1"]);
+    expect(await context("ses-2")).toEqual(["ses-2-1"]);
+    revision++;
+    await compact("/other/project");
+    expect(await context("ses-1")).toEqual(["ses-1-1"]);
+    await compact("/workspace/project");
+    expect(await context("ses-1")).toEqual(["ses-1-2"]);
+    expect(await context("ses-2")).toEqual(["ses-2-1"]);
+    await cleanup();
+  });
+
   it("registers the tool and bridges prompt, context, model, events, and cleanup", async () => {
     const hooks = new Map<string, (event: any) => Promise<void>>();
     let tool: any;

@@ -490,9 +490,95 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     await cleanupPlugin();
   };
 
+  // Capture remains tied to authored prompts. V2 can rebuild request context
+  // independently when its in-memory session cache is lost on host/plugin reload.
+  const capturePrompt = async (
+    sessionID: string,
+    messageID: string,
+    parts: Part[]
+  ): Promise<boolean> => {
+    if (!isConfigured() || !CONFIG.chatMessage.enabled) return false;
+
+    const textParts = parts.filter(
+      (p): p is Part & { type: "text"; text: string } => p.type === "text"
+    );
+
+    if (textParts.length === 0) return false;
+
+    // Host- and plugin-injected blocks reach this hook through the same
+    // parts array as real user input. Recording them would train both
+    // auto-capture and profile learning on another plugin's boilerplate.
+    const authoredParts = CONFIG.chatMessage.filterInjectedPrompts
+      ? filterInjectedParts(textParts, CONFIG.chatMessage.injectionMarkers)
+      : textParts;
+
+    if (authoredParts.length === 0) return false;
+    const userMessage = authoredParts.map((p) => p.text).join("\n");
+    if (!userMessage.trim()) return false;
+
+    if (isStructuredSummaryPromptMessage(userMessage) || isInternalStructuredSession(sessionID)) {
+      return false;
+    }
+
+    await userPromptManager.savePrompt(sessionID, messageID, directory, userMessage);
+    return true;
+  };
+
+  const loadMemoryContext = async (sessionID: string): Promise<string> => {
+    const listResult = await memoryClient.listMemories(
+      tags.project.tag,
+      CONFIG.chatMessage.maxMemories
+    );
+
+    let memories = listResult.success ? listResult.memories : [];
+
+    if (CONFIG.chatMessage.excludeCurrentSession) {
+      memories = memories.filter((m: any) => m.metadata?.sessionID !== sessionID);
+    }
+
+    if (CONFIG.chatMessage.maxAgeDays) {
+      const cutoffDate = Date.now() - CONFIG.chatMessage.maxAgeDays * 86400000;
+      memories = memories.filter((m: any) => new Date(m.createdAt).getTime() > cutoffDate);
+    }
+
+    if (memories.length === 0) return "";
+
+    const projectMemories = {
+      results: memories.map((m: any) => ({
+        similarity: 1.0,
+        memory: m.summary,
+      })),
+      total: memories.length,
+      timing: 0,
+    };
+
+    const userId = tags.user.userEmail || null;
+    return formatContextForPrompt(userId, projectMemories);
+  };
+
   return {
     // V1 ignores this extra hook; the V2 adapter uses it during plugin reload.
     dispose: disposePlugin,
+    // Internal V2 bridge; V1 still injects synthetic parts through chat.message.
+    memoryContext: {
+      enabled: () => isConfigured() && CONFIG.chatMessage.enabled,
+      refreshOnPrompt: () => CONFIG.chatMessage.injectOn === "always",
+      capturePrompt: async (
+        input: { sessionID: string },
+        output: { message: { id: string }; parts: Part[] }
+      ) => capturePrompt(input.sessionID, output.message.id, output.parts),
+      load: async (sessionID: string) => {
+        if (
+          !isConfigured() ||
+          !CONFIG.chatMessage.enabled ||
+          isInternalStructuredSession(sessionID) ||
+          (await isInternalCaptureSession(ctx.client, sessionID))
+        ) {
+          return "";
+        }
+        return loadMemoryContext(sessionID);
+      },
+    },
     config: async (cfg) => {
       applyStructuredOutputAgentConfig(cfg);
     },
@@ -501,36 +587,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       if (!isConfigured() || !CONFIG.chatMessage.enabled) return;
 
       try {
-        const textParts = output.parts.filter(
-          (p): p is Part & { type: "text"; text: string } => p.type === "text"
-        );
-
-        if (textParts.length === 0) return;
-
-        // Host- and plugin-injected blocks reach this hook through the same
-        // parts array as real user input. Recording them would train both
-        // auto-capture and profile learning on another plugin's boilerplate.
-        const authoredParts = CONFIG.chatMessage.filterInjectedPrompts
-          ? filterInjectedParts(textParts, CONFIG.chatMessage.injectionMarkers)
-          : textParts;
-
-        if (authoredParts.length === 0) return;
-        const userMessage = authoredParts.map((p) => p.text).join("\n");
-        if (!userMessage.trim()) return;
-
-        if (
-          isStructuredSummaryPromptMessage(userMessage) ||
-          isInternalStructuredSession(input.sessionID)
-        ) {
-          return;
-        }
-
-        await userPromptManager.savePrompt(
-          input.sessionID,
-          output.message.id,
-          directory,
-          userMessage
-        );
+        if (!(await capturePrompt(input.sessionID, output.message.id, output.parts))) return;
 
         const messagesResponse = await ctx.client.session.messages({
           path: { id: input.sessionID },
@@ -558,35 +615,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
         if (!shouldInject) return;
 
-        const listResult = await memoryClient.listMemories(
-          tags.project.tag,
-          CONFIG.chatMessage.maxMemories
-        );
-
-        let memories = listResult.success ? listResult.memories : [];
-
-        if (CONFIG.chatMessage.excludeCurrentSession) {
-          memories = memories.filter((m: any) => m.metadata?.sessionID !== input.sessionID);
-        }
-
-        if (CONFIG.chatMessage.maxAgeDays) {
-          const cutoffDate = Date.now() - CONFIG.chatMessage.maxAgeDays * 86400000;
-          memories = memories.filter((m: any) => new Date(m.createdAt).getTime() > cutoffDate);
-        }
-
-        if (memories.length === 0) return;
-
-        const projectMemories = {
-          results: memories.map((m: any) => ({
-            similarity: 1.0,
-            memory: m.summary,
-          })),
-          total: memories.length,
-          timing: 0,
-        };
-
-        const userId = tags.user.userEmail || null;
-        const memoryContext = await formatContextForPrompt(userId, projectMemories);
+        const memoryContext = await loadMemoryContext(input.sessionID);
 
         if (memoryContext) {
           const contextPart: Part = {

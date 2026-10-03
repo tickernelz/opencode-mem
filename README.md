@@ -75,6 +75,21 @@ For OpenCode v1, add the default entrypoint to your configuration at
 
 With `@latest` (or a semver range) and `autoUpdate: true` in `opencode-mem.jsonc` (default), the plugin clears OpenCode's cached install when a newer npm release is available and asks you to restart. Pinned versions like `opencode-mem@2.26.0` are never auto-updated.
 
+### Automatic memory context on OpenCode v2
+
+The v2 plugin supplies automatic memory context through the model's system context.
+These blocks are not added to the authored user prompt or stored in the chat transcript.
+With `chatMessage.injectOn: "first"` (the default), the session's initial context is
+retained across user turns and model steps. With `"always"`, it is refreshed on each
+authored user turn.
+
+After a host or plugin restart, a resumed session rebuilds its context from the
+current memory store on its next model request, even if no new user prompt arrives.
+The rebuilt context may differ from the original as memories and the profile evolve.
+Restoration does not capture a synthetic user prompt or store a second copy of the
+memory text in OpenCode plugin storage. Compaction invalidates the cached automatic
+context; the existing compaction-memory restoration also continues to run.
+
 ### Using a local checkout
 
 To run the plugin from a local source checkout instead of the npm release, `bun install && bun run build` in the checkout, then point the `plugins` list at the checkout directory:
