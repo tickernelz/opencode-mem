@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   applyStructuredOutputAgentConfig,
+  applyStructuredOutputChatParams,
   configureOpencodeHostTransport,
   INTERNAL_CAPTURE_SESSION_TITLE,
   isInternalCaptureSessionTitle,
@@ -192,5 +193,41 @@ describe("structured-output agent config (issue #189)", () => {
         thinking: { type: "disabled" },
       },
     });
+  });
+});
+
+describe("structured-output chat.params thinking disable (issue #253)", () => {
+  it("forces thinking disabled after variant merge for the structured agent", () => {
+    const output = {
+      options: {
+        reasoningEffort: "high",
+        thinking: { type: "enabled" },
+      },
+    };
+
+    applyStructuredOutputChatParams({ agent: STRUCTURED_OUTPUT_AGENT }, output);
+
+    expect(output.options).toEqual({
+      reasoningEffort: "high",
+      thinking: { type: "disabled" },
+    });
+  });
+
+  it("does not mutate options for ordinary agents", () => {
+    const output = {
+      options: {
+        reasoningEffort: "high",
+      },
+    };
+
+    applyStructuredOutputChatParams({ agent: "build" }, output);
+
+    expect(output.options).toEqual({ reasoningEffort: "high" });
+  });
+
+  it("ignores missing output", () => {
+    expect(() =>
+      applyStructuredOutputChatParams({ agent: STRUCTURED_OUTPUT_AGENT }, undefined)
+    ).not.toThrow();
   });
 });

@@ -241,6 +241,22 @@ export function applyStructuredOutputAgentConfig(cfg: { agent?: Record<string, u
   };
 }
 
+/**
+ * Force-disable thinking on structured-output chat.params after OpenCode merges
+ * model/agent/variant options. A user reasoning variant merges last and can
+ * otherwise re-enable thinking (#253).
+ */
+export function applyStructuredOutputChatParams(
+  input: { agent?: unknown },
+  output: { options?: Record<string, unknown> } | undefined
+): void {
+  if (!output || input.agent !== STRUCTURED_OUTPUT_AGENT) return;
+  output.options = {
+    ...(output.options ?? {}),
+    thinking: { type: "disabled" },
+  };
+}
+
 export async function configureOpencodeHostTransport(ctx: {
   readonly client: unknown;
   readonly serverUrl?: string | URL;
@@ -651,7 +667,9 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       }
     },
 
-    "chat.params": async (input) => {
+    "chat.params": async (input, output) => {
+      applyStructuredOutputChatParams(input, output);
+
       if (!isConfigured() || CONFIG.opencodeModel !== "inherit") return;
 
       try {
