@@ -13,6 +13,7 @@ import {
   setHostFetch,
   setStructuredOutputTimeoutMsForTests,
   setV2Client,
+  shouldUseOpencodeTextJson,
   STRUCTURED_OUTPUT_AGENT,
   STRUCTURED_OUTPUT_DEFAULT_RETRY_COUNT,
   STRUCTURED_OUTPUT_MAX_STEPS,
@@ -221,6 +222,55 @@ describe("generateStructuredOutput", () => {
     expect(deleteCall).toBeDefined();
     expect(deleteCall!.url.endsWith("/session/ses_test_1")).toBe(true);
     expect(isInternalStructuredSession("ses_test_1")).toBe(false);
+  });
+
+  it("uses text-JSON (no format:json_schema) for anthropic / claude-auth (#278)", async () => {
+    mock = installFetchMock((call) => {
+      if (call.method === "POST" && call.url.endsWith("/session")) {
+        return { body: { id: "ses_anthropic_text" } };
+      }
+      if (call.method === "POST" && call.url.includes("/session/ses_anthropic_text/message")) {
+        return {
+          body: {
+            info: {},
+            parts: [
+              {
+                type: "text",
+                text: '```json\n{"topic":"claude-auth","count":2}\n```',
+              },
+            ],
+          },
+        };
+      }
+      if (call.method === "DELETE") {
+        return { body: true };
+      }
+      throw new Error(`unexpected fetch: ${call.method} ${call.url}`);
+    });
+
+    const client = createV2Client("http://127.0.0.1:9999");
+    const result = await generateStructuredOutput({
+      client,
+      providerID: "anthropic",
+      modelID: "claude-haiku-4-5-20251001",
+      systemPrompt: "system",
+      userPrompt: "user",
+      schema,
+    });
+
+    expect(result).toEqual({ topic: "claude-auth", count: 2 });
+    expect(shouldUseOpencodeTextJson("anthropic")).toBe(true);
+    expect(shouldUseOpencodeTextJson("github-copilot")).toBe(false);
+
+    const promptCall = mock.calls.find((c) =>
+      c.url.includes("/session/ses_anthropic_text/message")
+    );
+    expect(promptCall).toBeDefined();
+    const promptBody = promptCall!.body as Record<string, unknown>;
+    expect(promptBody.format).toBeUndefined();
+    expect(promptBody.tools).toEqual({ "*": false });
+    expect(promptBody.noReply).toBe(false);
+    expect(String(promptBody.system)).toContain("JSON Schema");
   });
 
   it("rejects with full info.error details when opencode reports an assistant error", async () => {
