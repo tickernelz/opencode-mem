@@ -22,7 +22,7 @@
     "@resvg/resvg-js": "^2.6.2",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tailwindcss/vite": "^4.3.3",
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.4",
     "bits-ui": "^2.19.4",
     "clsx": "^2.1.1",
     "prettier-plugin-svelte": "^4.1.1",
