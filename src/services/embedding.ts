@@ -1,5 +1,6 @@
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   formatOnnxruntimeInitError,
@@ -12,6 +13,48 @@ const requireFromHere = createRuntimeRequire(import.meta);
 const TIMEOUT_MS = 30000;
 const GLOBAL_EMBEDDING_KEY = Symbol.for("opencode-mem.embedding.instance");
 const MAX_CACHE_SIZE = 100;
+
+// ONNX weight variants in descending precision, mirroring transformers.js
+// DEFAULT_DTYPE_SUFFIX_MAPPING (utils/dtypes.js). fp32 has no filename suffix.
+const ONNX_DTYPE_VARIANTS = [
+  ["fp32", ""],
+  ["fp16", "_fp16"],
+  ["q8", "_quantized"],
+  ["int8", "_int8"],
+  ["q4", "_q4"],
+] as const;
+
+/**
+ * Read the dtype the model repo declares under `transformers.js_config.dtype`.
+ * Repos published for the transformers.js ecosystem carry that block; plain
+ * PyTorch/HF repos do not, and a top-level `dtype` (e.g. "bfloat16") belongs to
+ * PyTorch — not to transformers.js. Outranks detectCachedDtype() so an explicit
+ * declaration is never overridden by whatever happens to sit on disk. An absent
+ * or malformed config.json returns undefined and falls through to the next tier.
+ */
+function readDeclaredDtype(model: string): string | undefined {
+  try {
+    const parsed = JSON.parse(readFileSync(join(CONFIG.storagePath, ".cache", model, "config.json"), "utf-8"));
+    const declared = parsed?.["transformers.js_config"]?.dtype;
+    return typeof declared === "string" && declared.trim() ? declared : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Resolve the dtype whose ONNX weights are already cached, so a quantized-only
+ * repo is not asked for `model.onnx` (fp32). Returns undefined when nothing is
+ * cached yet — transformers.js then falls back to its own defaults, which read
+ * `transformers.js_config.dtype` from config.json and finally the device default.
+ */
+function detectCachedDtype(model: string): string | undefined {
+  const onnxDir = join(CONFIG.storagePath, ".cache", model, "onnx");
+  const hit = ONNX_DTYPE_VARIANTS.find(([, suffix]) =>
+    existsSync(join(onnxDir, `model${suffix}.onnx`))
+  );
+  return hit?.[0];
+}
 
 export type EmbeddingTask = "document" | "query";
 
@@ -164,7 +207,9 @@ export class EmbeddingService {
 
       // Local model path
       const { pipeline } = await ensureTransformersLoaded();
+      const dtype = readDeclaredDtype(CONFIG.embeddingModel) ?? detectCachedDtype(CONFIG.embeddingModel);
       this.pipe = await pipeline("feature-extraction", CONFIG.embeddingModel, {
+        ...(dtype ? { dtype } : {}),
         progress_callback: progressCallback,
       });
       this.isWarmedUp = true;
