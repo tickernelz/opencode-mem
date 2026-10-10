@@ -4,5 +4,9 @@
 *.jpg binary
 *.jpeg binary
 *.gif binary
+*.svg binary
 *.woff binary
 *.woff2 binary
+bun.lock linguist-generated
+web/bun.lock linguist-generated
+README.*.md linguist-documentation
