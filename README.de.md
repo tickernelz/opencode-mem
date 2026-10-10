@@ -7,7 +7,7 @@
 
 ![OpenCode Memory Banner](.github/pics/banner.png)
 
-[🇬🇧](./README.md) | **🇩🇪** | [🇨🇳](./README.zh.md) | [🇸🇦](./README.ar.md) | [🇹🇷](./README.tr.md) | [🇳🇱](./README.nl.md)
+Sprachen: [🇬🇧](./README.md) | **🇩🇪** | [🇨🇳](./README.zh.md) | [🇸🇦](./README.ar.md) | [🇹🇷](./README.tr.md) | [🇳🇱](./README.nl.md)
 
 Ein persistentes Speichersystem für KI-Coding-Agenten, das langfristige Kontextbeibehaltung über Sitzungen hinweg mittels lokaler Vektordatenbank-Technologie ermöglicht.
 

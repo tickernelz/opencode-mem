@@ -7,7 +7,7 @@
 
 ![OpenCode Memory Banner](.github/pics/banner.png)
 
-[🇬🇧](./README.md) | [🇩🇪](./README.de.md) | [🇨🇳](./README.zh.md) | [🇸🇦](./README.ar.md) | **🇹🇷** | [🇳🇱](./README.nl.md)
+Diller: [🇬🇧](./README.md) | [🇩🇪](./README.de.md) | [🇨🇳](./README.zh.md) | [🇸🇦](./README.ar.md) | **🇹🇷** | [🇳🇱](./README.nl.md)
 
 Yerel vektör veritabanı teknolojisi kullanarak oturumlar arasında uzun vadeli bağlam saklamayı sağlayan, yapay zeka kodlama ajanları için kalıcı bir bellek sistemi.
 
