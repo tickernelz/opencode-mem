@@ -7,7 +7,7 @@
 
 ![OpenCode Memory Banner](.github/pics/banner.png)
 
-[English](./README.md) | [Deutsch](./README.de.md) | [中文](./README.zh.md) | [العربية](./README.ar.md) | [Türkçe](./README.tr.md) | **Nederlands**
+[🇬🇧](./README.md) | [🇩🇪](./README.de.md) | [🇨🇳](./README.zh.md) | [🇸🇦](./README.ar.md) | [🇹🇷](./README.tr.md) | **🇳🇱**
 
 Een persistent geheugensysteem voor AI-codingagents dat langetermijncontextbehoud over sessies mogelijk maakt met lokale vectordatabasetechnologie.
 

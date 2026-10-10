@@ -7,7 +7,7 @@
 
 ![OpenCode Memory Banner](.github/pics/banner.png)
 
-[English](./README.md) | [Deutsch](./README.de.md) | [中文](./README.zh.md) | **العربية** | [Türkçe](./README.tr.md) | [Nederlands](./README.nl.md)
+[🇬🇧](./README.md) | [🇩🇪](./README.de.md) | [🇨🇳](./README.zh.md) | **🇸🇦** | [🇹🇷](./README.tr.md) | [🇳🇱](./README.nl.md)
 
 نظام ذاكرة دائم لوكلاء البرمجة بالذكاء الاصطناعي يتيح الاحتفاظ بالسياق طويل الأمد عبر الجلسات باستخدام تقنية قاعدة بيانات متجهات محلية.
 
