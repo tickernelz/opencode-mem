@@ -65,8 +65,9 @@
       label={i18n.t("label-skill-description")}
       value={draft.description}
     >
-      <Input
+      <Textarea
         id="skill-description"
+        rows={4}
         bind:value={draft.description}
         placeholder={i18n.t("placeholder-skill-description")}
       />
