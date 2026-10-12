@@ -186,7 +186,7 @@ export const translations = {
     "placeholder-skill-content": "## What I do\n\n- …",
     "skill-edit": "Edit",
     "skill-preview": "Preview",
-    "skill-empty": "No skills yet. Create a reusable procedure the agent can load.",
+    "skill-empty": "No skills found",
     "skill-disabled": "Disabled",
     "confirm-delete-skill": "Delete skill “{id}”?",
     "toast-skill-save-success": "Skill saved",
