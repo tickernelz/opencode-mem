@@ -17,9 +17,10 @@ via a Vite middleware (see [`vite-plugins/opencode-mem-sim.ts`](./vite-plugins/o
 Normal `bun run dev` still proxies to `:4747`.
 
 Covered: health, tags, stats, memories (paginated + tag filter), search, user
-profile, changelog, migration detect (no-op), AI cleanup preview. Mutating
+profile, changelog, migration detect (no-op), AI cleanup preview, skills (CRUD
+in-memory from [`sim/skills.json`](./sim/skills.json)). Other mutating
 `POST`/`PUT`/`DELETE` calls return stub success so toast paths stay testable —
-nothing is persisted.
+nothing is written back to disk.
 
 GitHub Markdown cannot paint CSS, but it **can** show colors via small SVG
 swatches (see [`docs/swatches/`](./docs/swatches/)).

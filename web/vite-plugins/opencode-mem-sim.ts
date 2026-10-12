@@ -15,8 +15,33 @@ type MemoryItem = {
 
 type MemoriesFile = { items: MemoryItem[] };
 
+type SkillItem = {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  autoinvoke: boolean;
+  enabled: boolean;
+  containerTag: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type SkillsFile = { items: SkillItem[] };
+
 function readJson<T>(filePath: string): T {
   return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
+}
+
+function readBody(req: Connect.IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    req.on("end", () => resolve(body));
+    req.on("error", reject);
+  });
 }
 
 function sendJson(res: Connect.ServerResponse, status: number, body: unknown) {
@@ -87,9 +112,16 @@ export function opencodeMemSimPlugin(simRoot: string): Plugin {
       let memories: MemoryItem[] = readJson<MemoriesFile>(
         path.join(simRoot, "memories.json")
       ).items.map((item) => ({ ...item }));
+      let skills: SkillItem[] = readJson<SkillsFile>(path.join(simRoot, "skills.json")).items.map(
+        (item) => ({ ...item })
+      );
 
       function findMemory(id: string) {
         return memories.find((item) => item.id === id);
+      }
+
+      function findSkill(id: string) {
+        return skills.find((item) => item.id === id);
       }
 
       function memoryCount() {
@@ -239,6 +271,111 @@ export function opencodeMemSimPlugin(simRoot: string): Plugin {
 
           if (pathname === "/api/user-profile/ai-cleanup" && method === "POST") {
             sendJson(res, 200, readJson(path.join(simRoot, "ai-cleanup.json")));
+            return;
+          }
+
+          if (pathname === "/api/skills" && method === "GET") {
+            const enabledOnly = url.searchParams.get("enabledOnly") === "true";
+            const items = enabledOnly ? skills.filter((skill) => skill.enabled) : skills;
+            sendJson(res, 200, { success: true, data: { items } });
+            return;
+          }
+
+          if (pathname === "/api/skills" && method === "POST") {
+            void readBody(req).then((raw) => {
+              try {
+                const parsed = raw ? (JSON.parse(raw) as Partial<SkillItem> & { id?: string }) : {};
+                const id = String(parsed.id || "").trim();
+                const name = String(parsed.name || "").trim();
+                const content = String(parsed.content || "");
+                if (!id || !name || !content.trim()) {
+                  sendJson(res, 400, {
+                    success: false,
+                    error: "id, name, and content are required",
+                  });
+                  return;
+                }
+                if (findSkill(id)) {
+                  sendJson(res, 400, { success: false, error: `Skill already exists: ${id}` });
+                  return;
+                }
+                const now = new Date().toISOString();
+                const skill: SkillItem = {
+                  id,
+                  name,
+                  description: String(parsed.description || "").trim(),
+                  content,
+                  autoinvoke: parsed.autoinvoke !== false,
+                  enabled: parsed.enabled !== false,
+                  containerTag:
+                    parsed.containerTag === undefined ? null : (parsed.containerTag ?? null),
+                  createdAt: now,
+                  updatedAt: now,
+                };
+                skills = [skill, ...skills];
+                sendJson(res, 200, { success: true, data: skill });
+              } catch (error) {
+                sendJson(res, 400, {
+                  success: false,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
+            });
+            return;
+          }
+
+          const skillIdMatch = pathname.match(/^\/api\/skills\/([^/]+)$/);
+          if (skillIdMatch && method === "GET") {
+            const skill = findSkill(decodeURIComponent(skillIdMatch[1]));
+            if (!skill) {
+              sendJson(res, 404, { success: false, error: "Skill not found" });
+              return;
+            }
+            sendJson(res, 200, { success: true, data: skill });
+            return;
+          }
+
+          if (skillIdMatch && method === "PUT") {
+            const id = decodeURIComponent(skillIdMatch[1]);
+            const skill = findSkill(id);
+            if (!skill) {
+              sendJson(res, 404, { success: false, error: "Skill not found" });
+              return;
+            }
+            void readBody(req).then((raw) => {
+              try {
+                const parsed = raw ? (JSON.parse(raw) as Partial<SkillItem>) : {};
+                if (typeof parsed.name === "string") skill.name = parsed.name.trim();
+                if (typeof parsed.description === "string") {
+                  skill.description = parsed.description.trim();
+                }
+                if (typeof parsed.content === "string") skill.content = parsed.content;
+                if (typeof parsed.autoinvoke === "boolean") skill.autoinvoke = parsed.autoinvoke;
+                if (typeof parsed.enabled === "boolean") skill.enabled = parsed.enabled;
+                if (parsed.containerTag !== undefined) {
+                  skill.containerTag = parsed.containerTag;
+                }
+                skill.updatedAt = new Date().toISOString();
+                sendJson(res, 200, { success: true, data: skill });
+              } catch (error) {
+                sendJson(res, 400, {
+                  success: false,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
+            });
+            return;
+          }
+
+          if (skillIdMatch && method === "DELETE") {
+            const id = decodeURIComponent(skillIdMatch[1]);
+            const before = skills.length;
+            skills = skills.filter((skill) => skill.id !== id);
+            if (skills.length === before) {
+              sendJson(res, 404, { success: false, error: "Skill not found" });
+              return;
+            }
+            sendJson(res, 200, { success: true, data: { deleted: true } });
             return;
           }
 

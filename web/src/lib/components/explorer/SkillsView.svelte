@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Pencil from "@lucide/svelte/icons/pencil";
+  import PenLine from "@lucide/svelte/icons/pen-line";
   import ScrollText from "@lucide/svelte/icons/scroll-text";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import type { SkillItem } from "$lib/stores/skills.svelte";
@@ -48,7 +48,7 @@
       {#each filtered as skill (skill.id)}
         <div class={cn(SURFACE_CARD, CARD_PAD, STACK_TIGHT)}>
           <div class={cn("flex items-center", GAP)}>
-            <div class={cn("flex min-w-0 flex-1 items-center", GAP_TIGHT)}>
+            <div class={cn("flex min-w-0 flex-1 items-center", GAP)}>
               <h3 class={cn(CARD_TITLE, "min-w-0 truncate")}>{skill.name}</h3>
               {#if !skill.enabled}
                 <Badge variant="secondary" class="shrink-0">{i18n.t("skill-disabled")}</Badge>
@@ -57,19 +57,21 @@
                 <Badge variant="outline" class="shrink-0 text-[10px]">auto</Badge>
               {/if}
             </div>
-            <div class={cn("flex shrink-0 items-center", GAP_TIGHT)}>
+            <div class="flex shrink-0 items-center gap-1">
               <Button
                 variant="ghost"
-                size="icon-sm"
-                aria-label={i18n.t("skill-edit")}
+                size="icon-xs"
+                title={i18n.t("btn-edit")}
+                aria-label={i18n.t("btn-edit")}
                 onclick={() => onEdit?.(skill)}
               >
-                <Pencil class={ICON_SM} aria-hidden="true" />
+                <PenLine class={ICON_SM} aria-hidden="true" />
               </Button>
               <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={i18n.t("confirm-delete-title")}
+                variant="destructive"
+                size="icon-xs"
+                title={i18n.t("btn-delete")}
+                aria-label={i18n.t("btn-delete")}
                 onclick={() => onDelete?.(skill.id)}
               >
                 <Trash2 class={ICON_SM} aria-hidden="true" />
@@ -77,9 +79,11 @@
             </div>
           </div>
           {#if skill.description}
-            <p class="text-sm text-muted-foreground">{skill.description}</p>
+            <p class="text-sm">{skill.description}</p>
           {/if}
-          <p class="text-xs text-muted-foreground">{formatDate(skill.updatedAt)}</p>
+          <div class={cn("flex items-center text-xs text-muted-foreground", GAP_TIGHT)}>
+            <span>{formatDate(skill.updatedAt)}</span>
+          </div>
         </div>
       {/each}
     </div>
