@@ -173,10 +173,10 @@ Rule of thumb: lasting always-on project instructions → `AGENTS.md`; growing w
 
 #### Shared Skills (V2)
 
-- Create/edit skills in the web explorer (**Skills** tab): Markdown editor with live preview.
+- Create/edit skills in the web explorer (**Skills** tab at `/skill-library`).
 - Persisted in `skills.db` under the plugin storage path (not as memory vectors).
 - On OpenCode **V2**, the plugin registers enabled skills via `ctx.skill.transform` so the agent can load them with the native `skill` tool.
-- Optional HTTP catalog for other OpenCode instances: add your web base URL to config, e.g. `"skills": ["http://127.0.0.1:4747/skills/"]` (serves `/skills/index.json` and `/skills/<id>/<id>.md`).
+- Optional HTTP catalog for other OpenCode instances: `"skills": ["http://127.0.0.1:4747/skills/"]` (serves `/skills/index.json` and `/skills/<id>/<id>.md` — separate from the UI path).
 - REST: `GET/POST /api/skills`, `GET/PUT/DELETE /api/skills/:id`.
 
 ### Intelligent prompt-based memory extraction
