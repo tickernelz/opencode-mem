@@ -174,7 +174,7 @@
       aria-label={skillsLabel}
       onclick={(e) => onNavClick(e, ROUTES.skills)}
     >
-      <Sparkles class={cn(ICON, "shrink-0")} aria-hidden="true" />
+      <ScrollText class={cn(ICON, "shrink-0")} aria-hidden="true" />
       {#if !iconOnly}
         <span class="truncate text-start">{skillsLabel}</span>
       {/if}

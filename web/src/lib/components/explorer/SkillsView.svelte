@@ -71,7 +71,7 @@
       <EmptyState>{i18n.t("loading-init")}</EmptyState>
     {:else if skills.length === 0}
       <div class={cn("flex flex-col items-center py-10 text-muted-foreground", GAP)}>
-        <Sparkles class="size-8" aria-hidden="true" />
+        <ScrollText class="size-8" aria-hidden="true" />
         <p class="text-sm">{i18n.t("skill-empty")}</p>
       </div>
     {:else if filtered.length === 0}
