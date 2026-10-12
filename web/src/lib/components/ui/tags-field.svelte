@@ -106,7 +106,7 @@
       {#if !disabled}
         <button
           type="button"
-          class="relative inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-ring before:absolute before:inset-[-6px] before:content-['']"
+          class="relative inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-ring before:absolute before:-inset-1.5 before:content-['']"
           aria-label={`Remove ${tag}`}
           onclick={() => removeTag(tag)}
         >
@@ -129,7 +129,7 @@
       />
       {#if available.length > 0}
         <div
-          class="absolute start-0 top-[calc(100%+0.25rem)] z-50 max-h-40 min-w-36 overflow-y-auto rounded-lg border border-border bg-popover py-1 text-popover-foreground shadow-lg [scrollbar-width:thin]"
+          class="absolute inset-s-0 top-[calc(100%+0.25rem)] z-50 max-h-40 min-w-36 overflow-y-auto rounded-lg border border-border bg-popover py-1 text-popover-foreground shadow-lg scrollbar-thin"
           role="listbox"
           aria-label={addLabel}
         >

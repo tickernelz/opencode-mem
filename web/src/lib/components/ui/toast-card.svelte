@@ -37,7 +37,7 @@
 <div
   role={assertive ? "alert" : "status"}
   aria-live={assertive ? "assertive" : "polite"}
-  class="overflow-hidden rounded-xl border border-border bg-card shadow-[0_12px_40px_rgb(0_0_0_/_0.45)]"
+  class="overflow-hidden rounded-xl border border-border bg-card shadow-[0_12px_40px_rgb(0_0_0/0.45)]"
 >
   <div
     class={cn(

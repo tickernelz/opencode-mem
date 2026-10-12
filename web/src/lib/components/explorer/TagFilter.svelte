@@ -107,7 +107,7 @@
 
   {#if open}
     <div
-      class="absolute start-0 top-[calc(100%+0.35rem)] z-50 w-64 origin-top-left overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg outline-none"
+      class="absolute inset-s-0 top-[calc(100%+0.35rem)] z-50 w-64 origin-top-left overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg outline-none"
       role="menu"
       tabindex="-1"
       aria-label={filterLabel}
@@ -121,7 +121,7 @@
           aria-label={searchPlaceholder}
         />
         <div class="bg-border -mx-2 my-1 h-px" aria-hidden="true"></div>
-        <div class="relative h-64 overflow-y-auto [scrollbar-width:thin]">
+        <div class="relative h-64 overflow-y-auto scrollbar-thin">
           <button
             type="button"
             role="menuitemcheckbox"
@@ -134,7 +134,7 @@
           >
             <span
               class={cn(
-                "inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] border shadow-xs",
+                "inline-flex size-4 shrink-0 items-center justify-center rounded-lg border shadow-xs",
                 !active
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-input bg-transparent"
@@ -162,7 +162,7 @@
             >
               <span
                 class={cn(
-                  "inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] border shadow-xs",
+                  "inline-flex size-4 shrink-0 items-center justify-center rounded-lg border shadow-xs",
                   on
                     ? "border-primary bg-primary text-primary-foreground"
                     : "border-input bg-transparent"

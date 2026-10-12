@@ -96,7 +96,7 @@
 
 <aside
   class={cn(
-    "inset-y-0 start-0 z-50 flex h-svh shrink-0 flex-col overflow-hidden border-e border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200 motion-reduce:transition-none",
+    "inset-y-0 inset-s-0 z-50 flex h-svh shrink-0 flex-col overflow-hidden border-e border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200 motion-reduce:transition-none",
     "fixed top-0 translate-x-0!",
     collapsed ? "md:w-16" : "md:w-64",
     "w-64",

@@ -40,11 +40,7 @@
 <div class={cn("relative min-w-0 w-full", className)}>
   <input
     {id}
-    class={cn(
-      FIELD_INPUT,
-      "placeholder:text-muted-foreground",
-      showClear ? "pr-[4.5rem]" : "pr-11"
-    )}
+    class={cn(FIELD_INPUT, "placeholder:text-muted-foreground", showClear ? "pr-18" : "pr-11")}
     bind:value
     {placeholder}
     aria-label={placeholder}

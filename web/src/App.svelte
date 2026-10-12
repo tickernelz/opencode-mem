@@ -167,9 +167,9 @@
   <div class="flex min-w-0 flex-1 flex-col">
     <header
       class={cn(
-        "fixed top-0 end-0 z-30 flex h-14 items-center border-b transition-[background-color,border-color,backdrop-filter,inset-inline-start] duration-200",
-        "start-0",
-        sidebarCollapsed ? "md:start-16" : "md:start-64",
+        "fixed top-0 inset-e-0 z-30 flex h-14 items-center border-b transition-[background-color,border-color,backdrop-filter,inset-inline-start] duration-200",
+        "inset-s-0",
+        sidebarCollapsed ? "md:inset-s-16" : "md:inset-s-64",
         headerScrolled
           ? "border-border/40 bg-background/55 backdrop-blur-xl"
           : "border-border bg-background/95 backdrop-blur-md"

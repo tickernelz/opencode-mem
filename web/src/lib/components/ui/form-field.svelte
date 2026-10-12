@@ -64,13 +64,13 @@
     <label
       for={id}
       class={cn(
-        "pointer-events-none absolute start-2.5 z-10 max-w-[calc(100%-1.25rem)] truncate rounded-none leading-none transition-[top,transform,font-size,color,background-color,padding] duration-150",
+        "pointer-events-none absolute inset-s-2.5 z-10 max-w-[calc(100%-1.25rem)] truncate rounded-none leading-none transition-[top,transform,font-size,color,background-color,padding] duration-150",
         controlled
           ? floated
-            ? "top-0 -translate-y-1/2 bg-[var(--floating-label-bg,var(--card))] px-1 text-xs font-medium text-foreground-bright"
+            ? "top-0 -translate-y-1/2 bg-(--floating-label-bg,var(--card)) px-1 text-xs font-medium text-foreground-bright"
             : "top-1/2 -translate-y-1/2 bg-transparent px-0 text-sm font-normal text-muted-foreground"
           : [
-              "top-0 -translate-y-1/2 bg-[var(--floating-label-bg,var(--card))] px-1 text-xs font-medium text-foreground-bright",
+              "top-0 -translate-y-1/2 bg-(--floating-label-bg,var(--card)) px-1 text-xs font-medium text-foreground-bright",
               "group-has-[input:placeholder-shown:not(:focus)]/field:top-1/2",
               "group-has-[input:placeholder-shown:not(:focus)]/field:bg-transparent",
               "group-has-[input:placeholder-shown:not(:focus)]/field:px-0",

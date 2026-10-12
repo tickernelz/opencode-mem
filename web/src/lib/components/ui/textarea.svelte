@@ -7,14 +7,23 @@
   let { class: className, value = $bindable(), placeholder = " ", ...rest }: Props = $props();
 </script>
 
-<textarea
+<!--
+  Border + radius live on a clipping wrapper so native resize/scrollbars
+  cannot square off corners (Chrome/WebKit).
+-->
+<div
   data-slot="textarea"
   class={cn(
-    "border-input placeholder:text-transparent flex field-sizing-content min-h-20 w-full rounded-xl border bg-card px-2.5 py-2.5 text-sm shadow-xs transition-[color,box-shadow] outline-none disabled:cursor-not-allowed disabled:opacity-50",
-    "focus-visible:border-primary focus-visible:ring-0",
-    "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+    "border-input flex w-full overflow-hidden rounded-xl border bg-card shadow-xs transition-[color,box-shadow]",
+    "focus-within:border-primary",
+    "has-aria-invalid:border-destructive has-aria-invalid:ring-destructive/20 dark:has-aria-invalid:ring-destructive/40",
+    "has-disabled:opacity-50",
     className
   )}
-  {placeholder}
-  bind:value
-  {...rest}></textarea>
+>
+  <textarea
+    class="field-sizing-content min-h-20 w-full resize-y border-0 bg-transparent px-2.5 py-2.5 text-sm outline-none placeholder:text-transparent disabled:cursor-not-allowed"
+    {placeholder}
+    bind:value
+    {...rest}></textarea>
+</div>

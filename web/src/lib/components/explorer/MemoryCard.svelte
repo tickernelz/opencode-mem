@@ -182,7 +182,9 @@
         <span>·</span>
         <span>{formatDate(prompt.createdAt)}</span>
       </div>
-      <p class="text-sm whitespace-pre-wrap break-words text-muted-foreground">{prompt.content}</p>
+      <p class="text-sm whitespace-pre-wrap wrap-break-word text-muted-foreground">
+        {prompt.content}
+      </p>
     </div>
 
     {@render dateMeta(pairDates, memory.id)}
@@ -201,7 +203,7 @@
       <MessageCircle class={ICON_SM} />
       <span>{formatDate(item.createdAt)}</span>
     </div>
-    <p class="text-sm whitespace-pre-wrap break-words">{item.content}</p>
+    <p class="text-sm whitespace-pre-wrap wrap-break-word">{item.content}</p>
     {#if promptIsLinked}
       {@render linkedHint("down", i18n.t("text-generated-above"))}
     {/if}

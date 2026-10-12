@@ -45,7 +45,7 @@
     role="region"
     aria-label="Notifications"
     aria-relevant="additions"
-    class="pointer-events-none fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-50 sm:left-auto sm:w-[22rem]"
+    class="pointer-events-none fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-50 sm:left-auto sm:w-88"
   >
     <div
       role="group"

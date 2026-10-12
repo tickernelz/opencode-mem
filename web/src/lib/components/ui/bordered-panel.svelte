@@ -1,6 +1,7 @@
 <script lang="ts">
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import type { Snippet } from "svelte";
+  import { untrack } from "svelte";
   import { GAP, ICON_SM, PANEL } from "$lib/ui/styles";
   import { cn } from "$lib/utils";
 
@@ -26,7 +27,8 @@
     children,
   }: Props = $props();
 
-  let open = $state(defaultOpen);
+  // Initial open only — toggles stay local and must not re-sync from the prop.
+  let open = $state(untrack(() => defaultOpen));
 
   function toggle() {
     if (!collapsible) return;
