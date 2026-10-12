@@ -2,6 +2,7 @@ import { toast } from "$lib/toast/toast.svelte";
 import { fetchAPI, toastApiResult } from "$lib/api";
 import { t } from "$lib/i18n";
 import { askConfirm } from "$lib/confirm.svelte";
+import { allocateSkillId } from "$lib/skill-id";
 
 export type SkillItem = {
   id: string;
@@ -16,7 +17,6 @@ export type SkillItem = {
 };
 
 export type SkillDraft = {
-  id: string;
   name: string;
   description: string;
   content: string;
@@ -26,7 +26,6 @@ export type SkillDraft = {
 
 function emptyDraft(): SkillDraft {
   return {
-    id: "",
     name: "",
     description: "",
     content: "",
@@ -74,7 +73,6 @@ export function createSkillsStore() {
   function openEdit(skill: SkillItem) {
     editingId = skill.id;
     draft = {
-      id: skill.id,
       name: skill.name,
       description: skill.description,
       content: skill.content,
@@ -85,35 +83,38 @@ export function createSkillsStore() {
   }
 
   async function saveSkill() {
-    const payload = {
-      id: draft.id.trim(),
-      name: draft.name.trim(),
-      description: draft.description.trim(),
-      content: draft.content,
-      autoinvoke: draft.autoinvoke,
-      enabled: draft.enabled,
-    };
-    if (!payload.name || !payload.content.trim() || (!editingId && !payload.id)) {
+    const name = draft.name.trim();
+    const description = draft.description.trim();
+    const content = draft.content;
+    if (!name || !content.trim()) {
       toast.error(t("toast-skill-save-failed"));
       return;
     }
+
+    const body = {
+      name,
+      description,
+      content,
+      autoinvoke: draft.autoinvoke,
+      enabled: draft.enabled,
+    };
 
     const result = editingId
       ? await fetchAPI<SkillItem>(`/api/skills/${encodeURIComponent(editingId)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: payload.name,
-            description: payload.description,
-            content: payload.content,
-            autoinvoke: payload.autoinvoke,
-            enabled: payload.enabled,
-          }),
+          body: JSON.stringify(body),
         })
       : await fetchAPI<SkillItem>("/api/skills", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            ...body,
+            id: allocateSkillId(
+              name,
+              skills.map((s) => s.id)
+            ),
+          }),
         });
 
     await toastApiResult(result, {
@@ -127,9 +128,10 @@ export function createSkillsStore() {
   }
 
   async function deleteSkill(id: string) {
+    const skill = skills.find((s) => s.id === id);
     const ok = await askConfirm({
       title: t("confirm-delete-title"),
-      detail: t("confirm-delete-skill", { id }),
+      detail: t("confirm-delete-skill", { name: skill?.name ?? id }),
       confirmLabel: t("btn-delete-selected"),
       cancelLabel: t("btn-cancel"),
       tone: "danger",

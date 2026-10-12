@@ -50,7 +50,6 @@
           <div class={cn("flex items-center", GAP)}>
             <div class={cn("flex min-w-0 flex-1 items-center", GAP_TIGHT)}>
               <h3 class={cn(CARD_TITLE, "min-w-0 truncate")}>{skill.name}</h3>
-              <Badge variant="outline" class="shrink-0 font-mono text-[10px]">{skill.id}</Badge>
               {#if !skill.enabled}
                 <Badge variant="secondary" class="shrink-0">{i18n.t("skill-disabled")}</Badge>
               {/if}

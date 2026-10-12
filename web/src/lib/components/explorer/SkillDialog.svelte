@@ -7,7 +7,7 @@
   import Checkbox from "$lib/components/ui/checkbox.svelte";
   import Textarea from "$lib/components/ui/textarea.svelte";
   import { useI18n } from "$lib/i18n/context.svelte";
-  import { GAP_LOOSE, STACK_FORM } from "$lib/ui/styles";
+  import { STACK_FORM } from "$lib/ui/styles";
 
   type Props = {
     open?: boolean;
@@ -51,30 +51,25 @@
       submit();
     }}
   >
-    <div class="grid sm:grid-cols-2 {GAP_LOOSE}">
-      <FormField id="skill-id" label={i18n.t("label-skill-id")} value={draft.id}>
-        <Input
-          id="skill-id"
-          bind:value={draft.id}
-          disabled={editing}
-          required={!editing}
-          pattern="[a-z0-9]+(-[a-z0-9]+)*"
-          maxlength={64}
-        />
-      </FormField>
-      <FormField id="skill-name" label={i18n.t("label-skill-name")} value={draft.name}>
-        <Input id="skill-name" bind:value={draft.name} required />
-      </FormField>
-    </div>
-
-    <p class="text-xs text-muted-foreground">{i18n.t("hint-skill-id")}</p>
+    <FormField id="skill-name" label={i18n.t("label-skill-name")} value={draft.name}>
+      <Input
+        id="skill-name"
+        bind:value={draft.name}
+        required
+        placeholder={i18n.t("placeholder-skill-name")}
+      />
+    </FormField>
 
     <FormField
       id="skill-description"
       label={i18n.t("label-skill-description")}
       value={draft.description}
     >
-      <Input id="skill-description" bind:value={draft.description} />
+      <Input
+        id="skill-description"
+        bind:value={draft.description}
+        placeholder={i18n.t("placeholder-skill-description")}
+      />
     </FormField>
 
     <div class="flex flex-wrap gap-4">
@@ -89,7 +84,13 @@
     </div>
 
     <FormField id="skill-content" label={i18n.t("label-skill-content")} value={draft.content}>
-      <Textarea id="skill-content" rows={10} required bind:value={draft.content} />
+      <Textarea
+        id="skill-content"
+        rows={10}
+        required
+        bind:value={draft.content}
+        placeholder={i18n.t("placeholder-skill-content")}
+      />
     </FormField>
   </form>
 
