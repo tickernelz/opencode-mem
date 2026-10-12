@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { tursoConnectionManager } from "../turso/connection-manager.js";
 import type { TursoDb } from "../turso/turso-db.js";
 import { CONFIG } from "../../config.js";
@@ -79,9 +80,34 @@ export class SkillsManager {
     return this.db;
   }
 
-  /** Absolute synthetic SKILL.md path for OpenCode Skill.Info.path */
+  /** Absolute SKILL.md path for OpenCode Skill.Info.path */
   skillPath(id: string): string {
     return join(this.dbPath.replace(/skills\.db$/, "skills-content"), id, "SKILL.md");
+  }
+
+  /** OpenCode-compatible SKILL.md (frontmatter + body). */
+  formatMarkdown(skill: SkillRecord): string {
+    return [
+      "---",
+      `name: ${JSON.stringify(skill.name)}`,
+      `description: ${JSON.stringify(skill.description)}`,
+      "metadata:",
+      `  opencode/autoinvoke: ${skill.autoinvoke ? '"true"' : '"false"'}`,
+      "---",
+      "",
+      skill.content,
+    ].join("\n");
+  }
+
+  private async writeSkillFile(skill: SkillRecord): Promise<void> {
+    const filePath = this.skillPath(skill.id);
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, this.formatMarkdown(skill), "utf8");
+  }
+
+  private async removeSkillFile(id: string): Promise<void> {
+    const dir = dirname(this.skillPath(id));
+    await rm(dir, { recursive: true, force: true });
   }
 
   async list(options?: {
@@ -156,6 +182,7 @@ export class SkillsManager {
 
     const created = await this.get(id);
     if (!created) throw new Error("Failed to create skill");
+    if (created.enabled) await this.writeSkillFile(created);
     notifySkillsChanged();
     return created;
   }
@@ -190,6 +217,11 @@ export class SkillsManager {
 
     const updated = await this.get(id);
     if (!updated) throw new Error("Failed to update skill");
+    if (updated.enabled) {
+      await this.writeSkillFile(updated);
+    } else {
+      await this.removeSkillFile(id);
+    }
     notifySkillsChanged();
     return updated;
   }
@@ -199,6 +231,7 @@ export class SkillsManager {
     if (!existing) return false;
     const db = await this.getDb();
     await db.run(`DELETE FROM skills WHERE id = ?`, [id]);
+    await this.removeSkillFile(id);
     notifySkillsChanged();
     return true;
   }
@@ -221,17 +254,7 @@ export class SkillsManager {
   async toCatalogMarkdown(id: string): Promise<string | null> {
     const skill = await this.get(id);
     if (!skill || !skill.enabled) return null;
-    const frontmatter = [
-      "---",
-      `name: ${JSON.stringify(skill.name)}`,
-      `description: ${JSON.stringify(skill.description)}`,
-      "metadata:",
-      `  opencode/autoinvoke: ${skill.autoinvoke ? '"true"' : '"false"'}`,
-      "---",
-      "",
-      skill.content,
-    ].join("\n");
-    return frontmatter;
+    return this.formatMarkdown(skill);
   }
 }
 
