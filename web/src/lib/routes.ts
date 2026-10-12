@@ -2,7 +2,8 @@ export const ROUTES = {
   home: "/",
   project: "/project-memories",
   profile: "/user-profile",
-  skills: "/skills",
+  // Keep off `/skills` — that prefix serves the OpenCode HTTP skill catalog.
+  skills: "/skill-library",
 } as const;
 
 export type AppView = "project" | "profile" | "skills";
