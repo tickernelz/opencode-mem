@@ -1,6 +1,7 @@
 import fs from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
-import type { Connect, Plugin } from "vite";
+import type { Plugin } from "vite";
 
 type MemoryItem = {
   id: string;
@@ -10,6 +11,11 @@ type MemoryItem = {
   displayName?: string;
   projectName?: string;
   isPinned?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  linkedMemoryId?: string;
+  linkedPromptId?: string;
+  memoryType?: string;
   [key: string]: unknown;
 };
 
@@ -33,7 +39,7 @@ function readJson<T>(filePath: string): T {
   return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
 }
 
-function readBody(req: Connect.IncomingMessage): Promise<string> {
+function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let body = "";
     req.on("data", (chunk) => {
@@ -44,7 +50,7 @@ function readBody(req: Connect.IncomingMessage): Promise<string> {
   });
 }
 
-function sendJson(res: Connect.ServerResponse, status: number, body: unknown) {
+function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.end(JSON.stringify(body));
@@ -54,12 +60,20 @@ function stubOk(message = "Simulated success") {
   return { success: true, data: { message } };
 }
 
+function memoryTime(value: unknown): number {
+  if (typeof value === "string" || typeof value === "number") {
+    const time = new Date(value).getTime();
+    return Number.isFinite(time) ? time : 0;
+  }
+  return 0;
+}
+
 function sortMemories(items: MemoryItem[]) {
   return [...items].sort((a, b) => {
     const pinA = a.type === "memory" && a.isPinned ? 1 : 0;
     const pinB = b.type === "memory" && b.isPinned ? 1 : 0;
     if (pinA !== pinB) return pinB - pinA;
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    return memoryTime(b.createdAt) - memoryTime(a.createdAt);
   });
 }
 
