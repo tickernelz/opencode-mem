@@ -73,6 +73,16 @@
       />
     </FormField>
 
+    <FormField id="skill-content" label={i18n.t("label-skill-content")} value={draft.content}>
+      <Textarea
+        id="skill-content"
+        rows={10}
+        required
+        bind:value={draft.content}
+        placeholder={i18n.t("placeholder-skill-content")}
+      />
+    </FormField>
+
     <div class="flex flex-wrap gap-4">
       <label class="flex items-center gap-2 text-sm">
         <Checkbox bind:checked={draft.enabled} />
@@ -83,16 +93,6 @@
         {i18n.t("label-skill-autoinvoke")}
       </label>
     </div>
-
-    <FormField id="skill-content" label={i18n.t("label-skill-content")} value={draft.content}>
-      <Textarea
-        id="skill-content"
-        rows={10}
-        required
-        bind:value={draft.content}
-        placeholder={i18n.t("placeholder-skill-content")}
-      />
-    </FormField>
   </form>
 
   {#snippet footer()}
