@@ -1,6 +1,7 @@
 <script lang="ts">
   import Pencil from "@lucide/svelte/icons/pencil";
   import Plus from "@lucide/svelte/icons/plus";
+  import Sparkles from "@lucide/svelte/icons/sparkles";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import type { SkillItem } from "$lib/stores/skills.svelte";
   import Badge from "$lib/components/ui/badge.svelte";
@@ -8,7 +9,7 @@
   import EmptyState from "$lib/components/ui/empty-state.svelte";
   import { useI18n } from "$lib/i18n/context.svelte";
   import { formatDate } from "$lib/format";
-  import { GAP_LOOSE, ICON_SM, STACK } from "$lib/ui/styles";
+  import { GAP, GAP_LOOSE, ICON_SM, STACK } from "$lib/ui/styles";
   import { cn } from "$lib/utils";
 
   type Props = {
