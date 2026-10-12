@@ -9,7 +9,7 @@
   import EmptyState from "$lib/components/ui/empty-state.svelte";
   import { useI18n } from "$lib/i18n/context.svelte";
   import { formatDate } from "$lib/format";
-  import { GAP, GAP_LOOSE, ICON_SM, STACK } from "$lib/ui/styles";
+  import { GAP, GAP_LOOSE, ICON, ICON_SM, STACK } from "$lib/ui/styles";
   import { cn } from "$lib/utils";
 
   type Props = {
@@ -27,9 +27,14 @@
 
 <section class="space-y-4">
   <div class={cn("flex flex-wrap items-center justify-end", GAP_LOOSE)}>
-    <Button onclick={onCreate}>
-      <Plus class={ICON_SM} aria-hidden="true" />
-      {i18n.t("btn-new-skill")}
+    <Button
+      variant="default"
+      size="icon"
+      aria-label={i18n.t("btn-add-skill")}
+      title={i18n.t("btn-add-skill")}
+      onclick={onCreate}
+    >
+      <Plus class={ICON} aria-hidden="true" />
     </Button>
   </div>
 
