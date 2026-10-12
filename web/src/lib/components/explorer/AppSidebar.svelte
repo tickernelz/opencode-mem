@@ -3,6 +3,7 @@
   import Folder from "@lucide/svelte/icons/folder";
   import Languages from "@lucide/svelte/icons/languages";
   import Moon from "@lucide/svelte/icons/moon";
+  import Sparkles from "@lucide/svelte/icons/sparkles";
   import Sun from "@lucide/svelte/icons/sun";
   import User from "@lucide/svelte/icons/user";
   import X from "@lucide/svelte/icons/x";
@@ -30,6 +31,7 @@
     brand: string;
     projectLabel: string;
     profileLabel: string;
+    skillsLabel: string;
     langLabel: string;
     languageLabel: string;
     themeLabel: string;
@@ -45,6 +47,7 @@
     brand,
     projectLabel,
     profileLabel,
+    skillsLabel,
     langLabel,
     languageLabel,
     themeLabel,
@@ -161,6 +164,19 @@
       <User class={cn(ICON, "shrink-0")} aria-hidden="true" />
       {#if !iconOnly}
         <span class="truncate text-start">{profileLabel}</span>
+      {/if}
+    </a>
+    <a
+      href={ROUTES.skills}
+      class={navClass(currentView === "skills")}
+      aria-current={currentView === "skills" ? "page" : undefined}
+      title={skillsLabel}
+      aria-label={skillsLabel}
+      onclick={(e) => onNavClick(e, ROUTES.skills)}
+    >
+      <Sparkles class={cn(ICON, "shrink-0")} aria-hidden="true" />
+      {#if !iconOnly}
+        <span class="truncate text-start">{skillsLabel}</span>
       {/if}
     </a>
   </nav>

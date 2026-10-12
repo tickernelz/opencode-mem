@@ -1669,3 +1669,148 @@ export async function handleRunTagMigrationBatch(
     return { success: false, error: String(error) };
   }
 }
+
+function skillToApi(skill: {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  autoinvoke: boolean;
+  enabled: boolean;
+  containerTag: string | null;
+  createdAt: number;
+  updatedAt: number;
+}) {
+  return {
+    id: skill.id,
+    name: skill.name,
+    description: skill.description,
+    content: skill.content,
+    autoinvoke: skill.autoinvoke,
+    enabled: skill.enabled,
+    containerTag: skill.containerTag,
+    createdAt: safeToISOString(skill.createdAt),
+    updatedAt: safeToISOString(skill.updatedAt),
+  };
+}
+
+export async function handleListSkills(options?: {
+  containerTag?: string;
+  enabledOnly?: boolean;
+}): Promise<ApiResponse<{ items: ReturnType<typeof skillToApi>[] }>> {
+  try {
+    const { skillsManager } = await import("./skills/skills-manager.js");
+    const items = await skillsManager.list({
+      containerTag: options?.containerTag,
+      enabledOnly: options?.enabledOnly,
+    });
+    return { success: true, data: { items: items.map(skillToApi) } };
+  } catch (error) {
+    log("handleListSkills: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleGetSkill(
+  id: string
+): Promise<ApiResponse<ReturnType<typeof skillToApi>>> {
+  try {
+    const { skillsManager } = await import("./skills/skills-manager.js");
+    const skill = await skillsManager.get(id);
+    if (!skill) return { success: false, error: `Skill not found: ${id}` };
+    return { success: true, data: skillToApi(skill) };
+  } catch (error) {
+    log("handleGetSkill: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleCreateSkill(body: {
+  id?: string;
+  name?: string;
+  description?: string;
+  content?: string;
+  autoinvoke?: boolean;
+  enabled?: boolean;
+  containerTag?: string | null;
+}): Promise<ApiResponse<ReturnType<typeof skillToApi>>> {
+  try {
+    if (!body?.id || !body?.name || !body?.content) {
+      return { success: false, error: "id, name, and content are required" };
+    }
+    const { skillsManager } = await import("./skills/skills-manager.js");
+    const skill = await skillsManager.create({
+      id: body.id,
+      name: body.name,
+      description: body.description,
+      content: body.content,
+      autoinvoke: body.autoinvoke,
+      enabled: body.enabled,
+      containerTag: body.containerTag,
+    });
+    return { success: true, data: skillToApi(skill) };
+  } catch (error) {
+    log("handleCreateSkill: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleUpdateSkill(
+  id: string,
+  body: {
+    name?: string;
+    description?: string;
+    content?: string;
+    autoinvoke?: boolean;
+    enabled?: boolean;
+    containerTag?: string | null;
+  }
+): Promise<ApiResponse<ReturnType<typeof skillToApi>>> {
+  try {
+    const { skillsManager } = await import("./skills/skills-manager.js");
+    const skill = await skillsManager.update(id, body);
+    return { success: true, data: skillToApi(skill) };
+  } catch (error) {
+    log("handleUpdateSkill: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleDeleteSkill(id: string): Promise<ApiResponse<{ deleted: boolean }>> {
+  try {
+    const { skillsManager } = await import("./skills/skills-manager.js");
+    const deleted = await skillsManager.delete(id);
+    if (!deleted) return { success: false, error: `Skill not found: ${id}` };
+    return { success: true, data: { deleted: true } };
+  } catch (error) {
+    log("handleDeleteSkill: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleSkillsCatalogIndex(): Promise<
+  ApiResponse<{ skills: Array<{ name: string; version: string; files: string[] }> }>
+> {
+  try {
+    const { skillsManager } = await import("./skills/skills-manager.js");
+    const catalog = await skillsManager.toHttpCatalog();
+    return { success: true, data: catalog };
+  } catch (error) {
+    log("handleSkillsCatalogIndex: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleSkillsCatalogFile(
+  id: string
+): Promise<ApiResponse<{ markdown: string }>> {
+  try {
+    const { skillsManager } = await import("./skills/skills-manager.js");
+    const markdown = await skillsManager.toCatalogMarkdown(id);
+    if (!markdown) return { success: false, error: `Skill not found: ${id}` };
+    return { success: true, data: { markdown } };
+  } catch (error) {
+    log("handleSkillsCatalogFile: error", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
+}

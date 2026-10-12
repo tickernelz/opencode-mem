@@ -13,6 +13,8 @@
   import EditMemoryDialog from "$lib/components/explorer/EditMemoryDialog.svelte";
   import MemoryList from "$lib/components/explorer/MemoryList.svelte";
   import ProfileView from "$lib/components/explorer/ProfileView.svelte";
+  import SkillDialog from "$lib/components/explorer/SkillDialog.svelte";
+  import SkillsView from "$lib/components/explorer/SkillsView.svelte";
   import TagMigrationDialog from "$lib/components/explorer/TagMigrationDialog.svelte";
   import TagFilter from "$lib/components/explorer/TagFilter.svelte";
   import Alert from "$lib/components/ui/alert.svelte";
@@ -28,6 +30,7 @@
   import { initRouter, navigate, ROUTES, shouldHandleSpaClick } from "$lib/router";
   import { createRouter } from "$lib/router.svelte";
   import { createMemoriesExplorer } from "$lib/stores/memories-explorer.svelte";
+  import { createSkillsStore } from "$lib/stores/skills.svelte";
   import { createUserProfile } from "$lib/stores/user-profile.svelte";
   import {
     GAP,
@@ -56,6 +59,7 @@
   const router = createRouter();
   const explorer = createMemoriesExplorer();
   const profile = createUserProfile();
+  const skills = createSkillsStore();
 
   let sidebarOpen = $state(false);
   let sidebarCollapsed = $state(readCollapsed());
@@ -63,7 +67,11 @@
   let headerScrolled = $state(false);
 
   const pageTitle = $derived(
-    router.view === "project" ? i18n.t("tab-project") : i18n.t("tab-profile")
+    router.view === "project"
+      ? i18n.t("tab-project")
+      : router.view === "skills"
+        ? i18n.t("tab-skills")
+        : i18n.t("tab-profile")
   );
 
   $effect(() => {
@@ -108,6 +116,9 @@
     if (router.view === "profile") {
       void profile.loadUserProfile();
     }
+    if (router.view === "skills") {
+      void skills.loadSkills();
+    }
   });
 
   function onLangToggle() {
@@ -115,6 +126,7 @@
     void explorer.loadMemories();
     void explorer.loadStats();
     if (router.view === "profile") void profile.loadUserProfile();
+    if (router.view === "skills") void skills.loadSkills();
   }
 
   function onHomeClick(event: MouseEvent) {
@@ -136,6 +148,7 @@
     brand={i18n.t("brand")}
     projectLabel={i18n.t("tab-project")}
     profileLabel={i18n.t("tab-profile")}
+    skillsLabel={i18n.t("tab-skills")}
     {langLabel}
     languageLabel={i18n.t("nav-language")}
     themeLabel={i18n.t("nav-theme")}
@@ -334,6 +347,14 @@
           onTagsChange={explorer.updateMemoryTags}
           knownTags={explorer.knownTags}
         />
+      {:else if router.view === "skills"}
+        <SkillsView
+          skills={skills.skills}
+          loading={skills.loading}
+          onCreate={skills.openCreate}
+          onEdit={skills.openEdit}
+          onDelete={skills.deleteSkill}
+        />
       {:else}
         <ProfileView
           profile={profile.userProfile}
@@ -345,6 +366,14 @@
     </div>
   </div>
 </div>
+
+<SkillDialog
+  bind:open={skills.dialogOpen}
+  editing={skills.editingId !== null}
+  bind:draft={skills.draft}
+  onOpenChange={(open) => (skills.dialogOpen = open)}
+  onSave={skills.saveSkill}
+/>
 
 <AddMemoryDialog
   open={explorer.addOpen}

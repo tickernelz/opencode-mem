@@ -261,6 +261,33 @@ export const USER_PROFILES_MIGRATIONS: SchemaMigration[] = [
   },
 ];
 
+export const SKILLS_MIGRATIONS: SchemaMigration[] = [
+  {
+    version: 1,
+    description: "Baseline shared skills table",
+    statements: [
+      {
+        sql: `
+          CREATE TABLE IF NOT EXISTS skills (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            content TEXT NOT NULL,
+            autoinvoke INTEGER NOT NULL DEFAULT 1,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            container_tag TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          )
+        `,
+      },
+      { sql: `CREATE INDEX IF NOT EXISTS idx_skills_enabled ON skills(enabled)` },
+      { sql: `CREATE INDEX IF NOT EXISTS idx_skills_container_tag ON skills(container_tag)` },
+      { sql: `CREATE INDEX IF NOT EXISTS idx_skills_updated_at ON skills(updated_at DESC)` },
+    ],
+  },
+];
+
 export const AI_SESSIONS_MIGRATIONS: SchemaMigration[] = [
   {
     version: 1,

@@ -161,15 +161,23 @@ You do **not** need to ask OpenCode to “remember” things for the plugin to w
 
 Manual search/add/list still work even if auto-capture has no provider configured. Auto-capture and user profile learning need a provider that can return structured/tool-call output.
 
-### Memory vs AGENTS.md / project docs
+### Memory vs AGENTS.md vs Skills
 
-| Store in **memory**                                                  | Store in **AGENTS.md** / static docs                        |
-| -------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Project-specific decisions, bug patterns, “we tried X and it failed” | Stable rules and workflows that rarely change               |
-| User preferences discovered over sessions                            | Always-on coding conventions and process                    |
-| Facts that should follow you across chats                            | Instructions every agent should see regardless of retrieval |
+| Store in **memory**                                                  | Store in **AGENTS.md** / static docs                        | Store as **Skills** (web UI / `skills.db`)            |
+| -------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------- |
+| Project-specific decisions, bug patterns, “we tried X and it failed” | Stable rules and workflows that rarely change               | Reusable procedures the agent loads on demand         |
+| User preferences discovered over sessions                            | Always-on coding conventions and process                    | Team-editable skill packs shared via the same storage |
+| Facts that should follow you across chats                            | Instructions every agent should see regardless of retrieval | OpenCode-native `skill` tool (V2 plugin bridge)       |
 
-Rule of thumb: if it is a lasting project instruction, put it in AGENTS.md; if it is context that grows from real work, let memory (or auto-capture) hold it.
+Rule of thumb: lasting always-on project instructions → `AGENTS.md`; growing work context → memory; reusable on-demand procedures → **Skills**.
+
+#### Shared Skills (V2)
+
+- Create/edit skills in the web explorer (**Skills** tab): Markdown editor with live preview.
+- Persisted in `skills.db` under the plugin storage path (not as memory vectors).
+- On OpenCode **V2**, the plugin registers enabled skills via `ctx.skill.transform` so the agent can load them with the native `skill` tool.
+- Optional HTTP catalog for other OpenCode instances: add your web base URL to config, e.g. `"skills": ["http://127.0.0.1:4747/skills/"]` (serves `/skills/index.json` and `/skills/<id>/<id>.md`).
+- REST: `GET/POST /api/skills`, `GET/PUT/DELETE /api/skills/:id`.
 
 ### Intelligent prompt-based memory extraction
 

@@ -36,6 +36,13 @@ import {
   handleAICleanup,
   handleApplyCleanup,
   handleUpdateProfileItem,
+  handleListSkills,
+  handleGetSkill,
+  handleCreateSkill,
+  handleUpdateSkill,
+  handleDeleteSkill,
+  handleSkillsCatalogIndex,
+  handleSkillsCatalogFile,
 } from "./api-handlers.js";
 
 /**
@@ -701,6 +708,81 @@ export class WebServer {
         const body = (await req.json().catch(() => ({}))) as any;
         const result = await handleUpdateProfileItem(body);
         return this.jsonResponse(result);
+      }
+
+      if (path === "/api/skills" && method === "GET") {
+        const containerTag = url.searchParams.get("tag") || undefined;
+        const enabledOnly = url.searchParams.get("enabledOnly") === "true";
+        const result = await handleListSkills({ containerTag, enabledOnly });
+        return this.jsonResponse(result);
+      }
+
+      if (path === "/api/skills" && method === "POST") {
+        const body = (await req.json().catch(() => ({}))) as any;
+        const result = await handleCreateSkill(body);
+        return this.jsonResponse(result, result.success ? 200 : 400);
+      }
+
+      if (path.startsWith("/api/skills/") && method === "GET") {
+        const id = decodeURIComponent(path.slice("/api/skills/".length));
+        if (!id || id.includes("/")) {
+          return this.jsonResponse({ success: false, error: "Invalid skill id" }, 400);
+        }
+        const result = await handleGetSkill(id);
+        return this.jsonResponse(result, result.success ? 200 : 404);
+      }
+
+      if (path.startsWith("/api/skills/") && method === "PUT") {
+        const id = decodeURIComponent(path.slice("/api/skills/".length));
+        if (!id || id.includes("/")) {
+          return this.jsonResponse({ success: false, error: "Invalid skill id" }, 400);
+        }
+        const body = (await req.json().catch(() => ({}))) as any;
+        const result = await handleUpdateSkill(id, body);
+        return this.jsonResponse(result, result.success ? 200 : 400);
+      }
+
+      if (path.startsWith("/api/skills/") && method === "DELETE") {
+        const id = decodeURIComponent(path.slice("/api/skills/".length));
+        if (!id || id.includes("/")) {
+          return this.jsonResponse({ success: false, error: "Invalid skill id" }, 400);
+        }
+        const result = await handleDeleteSkill(id);
+        return this.jsonResponse(result, result.success ? 200 : 404);
+      }
+
+      // OpenCode HTTP skill catalog (public path; prefer loopback / network auth).
+      if (path === "/skills/index.json" && method === "GET") {
+        const result = await handleSkillsCatalogIndex();
+        if (!result.success || !result.data) {
+          return this.jsonResponse(result, 500);
+        }
+        return new Response(JSON.stringify(result.data), {
+          status: 200,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+
+      // OpenCode catalog layout: /skills/{id}/{id}.md
+      if (path.startsWith("/skills/") && path.endsWith(".md") && method === "GET") {
+        const rest = path.slice("/skills/".length);
+        const parts = rest.split("/").filter(Boolean);
+        if (parts.length !== 2) {
+          return new Response("Not Found", { status: 404 });
+        }
+        const id = decodeURIComponent(parts[0]!);
+        const filename = decodeURIComponent(parts[1]!);
+        if (!id || filename !== `${id}.md`) {
+          return new Response("Not Found", { status: 404 });
+        }
+        const result = await handleSkillsCatalogFile(id);
+        if (!result.success || !result.data?.markdown) {
+          return new Response("Not Found", { status: 404 });
+        }
+        return new Response(result.data.markdown, {
+          status: 200,
+          headers: { "Content-Type": "text/markdown; charset=utf-8" },
+        });
       }
 
       // SPA fallback for client routes (e.g. /profile) — serve the app shell.

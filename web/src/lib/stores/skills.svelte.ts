@@ -1,0 +1,166 @@
+import { toast } from "$lib/toast/toast.svelte";
+import { fetchAPI, toastApiResult } from "$lib/api";
+import { t } from "$lib/i18n";
+import { askConfirm } from "$lib/confirm.svelte";
+
+export type SkillItem = {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  autoinvoke: boolean;
+  enabled: boolean;
+  containerTag: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SkillDraft = {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  autoinvoke: boolean;
+  enabled: boolean;
+};
+
+function emptyDraft(): SkillDraft {
+  return {
+    id: "",
+    name: "",
+    description: "",
+    content: "",
+    autoinvoke: true,
+    enabled: true,
+  };
+}
+
+export function createSkillsStore() {
+  let skills = $state<SkillItem[]>([]);
+  let loading = $state(false);
+  let dialogOpen = $state(false);
+  let editingId = $state<string | null>(null);
+  let draft = $state<SkillDraft>(emptyDraft());
+
+  async function loadSkills() {
+    loading = true;
+    const result = await fetchAPI<{ items: SkillItem[] }>("/api/skills");
+    loading = false;
+    if (!result.success || !result.data) {
+      await toastApiResult(result, { failKey: "toast-skill-load-failed" });
+      return;
+    }
+    skills = result.data.items;
+  }
+
+  function openCreate() {
+    editingId = null;
+    draft = emptyDraft();
+    dialogOpen = true;
+  }
+
+  function openEdit(skill: SkillItem) {
+    editingId = skill.id;
+    draft = {
+      id: skill.id,
+      name: skill.name,
+      description: skill.description,
+      content: skill.content,
+      autoinvoke: skill.autoinvoke,
+      enabled: skill.enabled,
+    };
+    dialogOpen = true;
+  }
+
+  async function saveSkill() {
+    const payload = {
+      id: draft.id.trim(),
+      name: draft.name.trim(),
+      description: draft.description.trim(),
+      content: draft.content,
+      autoinvoke: draft.autoinvoke,
+      enabled: draft.enabled,
+    };
+    if (!payload.name || !payload.content.trim() || (!editingId && !payload.id)) {
+      toast.error(t("toast-skill-save-failed"));
+      return;
+    }
+
+    const result = editingId
+      ? await fetchAPI<SkillItem>(`/api/skills/${encodeURIComponent(editingId)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: payload.name,
+            description: payload.description,
+            content: payload.content,
+            autoinvoke: payload.autoinvoke,
+            enabled: payload.enabled,
+          }),
+        })
+      : await fetchAPI<SkillItem>("/api/skills", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+    await toastApiResult(result, {
+      successKey: "toast-skill-save-success",
+      failKey: "toast-skill-save-failed",
+      onSuccess: async () => {
+        dialogOpen = false;
+        await loadSkills();
+      },
+    });
+  }
+
+  async function deleteSkill(id: string) {
+    const ok = await askConfirm({
+      title: t("confirm-delete-title"),
+      detail: t("confirm-delete-skill", { id }),
+      confirmLabel: t("btn-delete-selected"),
+      cancelLabel: t("btn-cancel"),
+      tone: "danger",
+    });
+    if (!ok) return;
+    const result = await fetchAPI(`/api/skills/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    await toastApiResult(result, {
+      successKey: "toast-skill-delete-success",
+      failKey: "toast-skill-delete-failed",
+      onSuccess: () => loadSkills(),
+    });
+  }
+
+  return {
+    get skills() {
+      return skills;
+    },
+    get loading() {
+      return loading;
+    },
+    get dialogOpen() {
+      return dialogOpen;
+    },
+    set dialogOpen(v: boolean) {
+      dialogOpen = v;
+    },
+    get editingId() {
+      return editingId;
+    },
+    get draft() {
+      return draft;
+    },
+    set draft(v: SkillDraft) {
+      draft = v;
+    },
+    loadSkills,
+    openCreate,
+    openEdit,
+    saveSkill,
+    deleteSkill,
+  };
+}
+
+export type SkillsStore = ReturnType<typeof createSkillsStore>;

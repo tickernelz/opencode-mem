@@ -1,5 +1,8 @@
+import { isAbsolute, resolve } from "node:path";
 import type { Context } from "@opencode/plugin/promise/plugin";
 import { log } from "../services/logger.js";
+import { onSkillsChanged, skillsManager } from "../services/skills/skills-manager.js";
+import { getTags } from "../services/tags.js";
 import { eventBelongsToLocation, legacyToolResult, toLegacyEvent } from "./legacy-client.js";
 
 interface MemoryContextHooks {
@@ -52,6 +55,62 @@ export async function registerV2Adapter(ctx: Context, legacy: any) {
   const messageIDs = new Map<string, string>();
   const suppressed = new Set<string>();
   const memoryContext = legacy.memoryContext as MemoryContextHooks | undefined;
+  /** Skill IDs last registered from opencode-mem DB (so we can remove stale ones). */
+  const registeredSkillIds = new Set<string>();
+
+  async function registerDbSkills(): Promise<void> {
+    if (!ctx.skill?.transform) return;
+
+    const projectTag = getTags(ctx.location.directory).project.tag;
+    let skills: Awaited<ReturnType<typeof skillsManager.list>> = [];
+    try {
+      skills = await skillsManager.list({
+        enabledOnly: true,
+        containerTag: projectTag,
+      });
+    } catch (error) {
+      log("Failed to load skills for OpenCode registration", { error: String(error) });
+      return;
+    }
+
+    const nextIds = new Set(skills.map((skill) => skill.id));
+
+    await ctx.skill.transform((editor) => {
+      for (const id of registeredSkillIds) {
+        if (!nextIds.has(id) && editor.get(id)) {
+          editor.remove(id);
+        }
+      }
+
+      for (const skill of skills) {
+        const path = skillsManager.skillPath(skill.id);
+        const absolutePath = isAbsolute(path) ? path : resolve(path);
+        const payload = {
+          id: skill.id,
+          name: skill.name,
+          description: skill.description || undefined,
+          autoinvoke: skill.autoinvoke,
+          path: absolutePath,
+          content: skill.content,
+        } as any;
+
+        if (editor.get(skill.id)) {
+          editor.update(skill.id, (entry) => {
+            entry.name = payload.name;
+            entry.description = payload.description;
+            entry.autoinvoke = payload.autoinvoke;
+            entry.path = payload.path;
+            entry.content = payload.content;
+          });
+        } else {
+          editor.add(payload);
+        }
+      }
+    });
+
+    registeredSkillIds.clear();
+    for (const id of nextIds) registeredSkillIds.add(id);
+  }
 
   await ctx.tool.transform((editor) =>
     editor.add({
@@ -73,6 +132,18 @@ export async function registerV2Adapter(ctx: Context, legacy: any) {
         ) as any,
     } as any)
   );
+
+  await registerDbSkills();
+  const unsubscribeSkills = onSkillsChanged(() => {
+    void (async () => {
+      try {
+        await registerDbSkills();
+        await ctx.skill?.reload?.();
+      } catch (error) {
+        log("Failed to reload OpenCode skills after DB change", { error: String(error) });
+      }
+    })();
+  });
 
   await ctx.session.hook("prompt", async (event) => {
     messageIDs.set(event.sessionID, event.messageID);
@@ -156,6 +227,7 @@ export async function registerV2Adapter(ctx: Context, legacy: any) {
   })();
 
   return async () => {
+    unsubscribeSkills();
     controller.abort();
     await watcher;
     contexts.clear();
