@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { tursoConnectionManager } from "../src/services/turso/connection-manager.js";
 import { registerV2Adapter } from "../src/v2/adapter.js";
 
@@ -37,8 +37,8 @@ describe("V2 skills bridge helpers", () => {
       content: "Do the thing.",
     });
     const path = skillsManager.skillPath("bridge-demo");
-    expect(path.startsWith("/")).toBe(true);
-    expect(path.endsWith("bridge-demo/SKILL.md")).toBe(true);
+    expect(isAbsolute(path)).toBe(true);
+    expect(path.replace(/\\/g, "/").endsWith("bridge-demo/SKILL.md")).toBe(true);
     expect(existsSync(path)).toBe(true);
     const md = readFileSync(path, "utf8");
     expect(md).toContain('name: "Bridge Demo"');
