@@ -387,8 +387,7 @@ export const translations = {
     "placeholder-skill-content": "## Was ich tue\n\n- …",
     "skill-edit": "Bearbeiten",
     "skill-preview": "Vorschau",
-    "skill-empty":
-      "Noch keine Skills. Lege eine wiederverwendbare Prozedur an, die der Agent laden kann.",
+    "skill-empty": "Keine Skills gefunden",
     "skill-disabled": "Deaktiviert",
     "confirm-delete-skill": "Skill „{id}“ löschen?",
     "toast-skill-save-success": "Skill gespeichert",
