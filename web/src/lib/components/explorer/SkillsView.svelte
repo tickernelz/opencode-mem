@@ -26,10 +26,7 @@
 </script>
 
 <section class="space-y-4">
-  <div class={cn("flex flex-wrap items-center justify-between", GAP_LOOSE)}>
-    <h1 class="text-lg font-medium tracking-tight">
-      {i18n.t("section-skills", { count: skills.length })}
-    </h1>
+  <div class={cn("flex flex-wrap items-center justify-end", GAP_LOOSE)}>
     <Button onclick={onCreate}>
       <Plus class={ICON_SM} aria-hidden="true" />
       {i18n.t("btn-new-skill")}
@@ -40,7 +37,10 @@
     {#if loading && skills.length === 0}
       <EmptyState>{i18n.t("loading-init")}</EmptyState>
     {:else if skills.length === 0}
-      <EmptyState>{i18n.t("skill-empty")}</EmptyState>
+      <div class={cn("flex flex-col items-center py-10 text-muted-foreground", GAP)}>
+        <Sparkles class="size-8" aria-hidden="true" />
+        <p class="text-sm">{i18n.t("skill-empty")}</p>
+      </div>
     {:else}
       <ul class="space-y-2">
         {#each skills as skill (skill.id)}

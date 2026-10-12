@@ -225,6 +225,10 @@
               <Loader class={cn(ICON_SM, "animate-spin")} aria-hidden="true" />
             {/if}
           </div>
+        {:else if router.view === "skills"}
+          <span class={META_CHIP}>
+            {i18n.t("text-total", { count: skills.skills.length })}
+          </span>
         {/if}
       </div>
     </header>
