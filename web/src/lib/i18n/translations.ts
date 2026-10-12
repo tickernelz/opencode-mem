@@ -188,7 +188,6 @@ export const translations = {
     "skill-preview": "Preview",
     "skill-empty": "No skills yet. Create a reusable procedure the agent can load.",
     "skill-disabled": "Disabled",
-    "skill-hint": "OpenCode loads these via the native skill tool (V2 plugin bridge).",
     "confirm-delete-skill": "Delete skill “{id}”?",
     "toast-skill-save-success": "Skill saved",
     "toast-skill-save-failed": "Failed to save skill",
@@ -388,16 +387,17 @@ export const translations = {
     "placeholder-skill-content": "## Was ich tue\n\n- …",
     "skill-edit": "Bearbeiten",
     "skill-preview": "Vorschau",
-    "skill-empty": "Noch keine Skills. Lege eine wiederverwendbare Prozedur an, die der Agent laden kann.",
+    "skill-empty":
+      "Noch keine Skills. Lege eine wiederverwendbare Prozedur an, die der Agent laden kann.",
     "skill-disabled": "Deaktiviert",
-    "skill-hint": "OpenCode lädt diese über das native skill-Tool (V2-Plugin-Bridge).",
     "confirm-delete-skill": "Skill „{id}“ löschen?",
     "toast-skill-save-success": "Skill gespeichert",
     "toast-skill-save-failed": "Skill konnte nicht gespeichert werden",
     "toast-skill-delete-success": "Skill gelöscht",
     "toast-skill-delete-failed": "Skill konnte nicht gelöscht werden",
     "toast-skill-load-failed": "Skills konnten nicht geladen werden",
-    "hint-skill-id": "Kleinbuchstaben kebab-case (a-z, 0-9, Bindestriche). Wird zur OpenCode Skill-ID.",
+    "hint-skill-id":
+      "Kleinbuchstaben kebab-case (a-z, 0-9, Bindestriche). Wird zur OpenCode Skill-ID.",
   },
   zh: {
     title: "OpenCode Memory Explorer",

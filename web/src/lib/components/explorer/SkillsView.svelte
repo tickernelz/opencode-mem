@@ -28,12 +28,9 @@
 
 <section class="space-y-4">
   <div class={cn("flex flex-wrap items-center justify-between", GAP_LOOSE)}>
-    <div class="space-y-1">
-      <h1 class="text-lg font-medium tracking-tight">
-        {i18n.t("section-skills", { count: skills.length })}
-      </h1>
-      <p class="text-sm text-muted-foreground">{i18n.t("skill-hint")}</p>
-    </div>
+    <h1 class="text-lg font-medium tracking-tight">
+      {i18n.t("section-skills", { count: skills.length })}
+    </h1>
     <Button onclick={onCreate}>
       <Plus class={ICON_SM} aria-hidden="true" />
       {i18n.t("btn-new-skill")}
