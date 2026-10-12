@@ -3,7 +3,7 @@
   import Folder from "@lucide/svelte/icons/folder";
   import Languages from "@lucide/svelte/icons/languages";
   import Moon from "@lucide/svelte/icons/moon";
-  import Sparkles from "@lucide/svelte/icons/sparkles";
+  import ScrollText from "@lucide/svelte/icons/scroll-text";
   import Sun from "@lucide/svelte/icons/sun";
   import User from "@lucide/svelte/icons/user";
   import X from "@lucide/svelte/icons/x";

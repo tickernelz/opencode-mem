@@ -1,7 +1,7 @@
 <script lang="ts">
   import Pencil from "@lucide/svelte/icons/pencil";
   import Plus from "@lucide/svelte/icons/plus";
-  import Sparkles from "@lucide/svelte/icons/sparkles";
+  import ScrollText from "@lucide/svelte/icons/scroll-text";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import type { SkillItem } from "$lib/stores/skills.svelte";
   import Badge from "$lib/components/ui/badge.svelte";
