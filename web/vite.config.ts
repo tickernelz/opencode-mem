@@ -20,16 +20,6 @@ export default defineConfig({
       "@": path.resolve(webRoot, "src"),
     },
   },
-  optimizeDeps: {
-    exclude: [
-      "codemirror",
-      "svelte-codemirror-editor",
-      "@codemirror/lang-markdown",
-      "@codemirror/theme-one-dark",
-      "@codemirror/view",
-      "@codemirror/state",
-    ],
-  },
   server: {
     // When SIM is on, the plugin handles /api before the proxy.
     proxy: simEnabled

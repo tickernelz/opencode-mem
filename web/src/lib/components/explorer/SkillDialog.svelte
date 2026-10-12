@@ -5,9 +5,9 @@
   import FormField from "$lib/components/ui/form-field.svelte";
   import Input from "$lib/components/ui/input.svelte";
   import Checkbox from "$lib/components/ui/checkbox.svelte";
-  import MarkdownEditor from "$lib/components/ui/markdown-editor.svelte";
+  import Textarea from "$lib/components/ui/textarea.svelte";
   import { useI18n } from "$lib/i18n/context.svelte";
-  import { STACK_FORM } from "$lib/ui/styles";
+  import { GAP_LOOSE, STACK_FORM } from "$lib/ui/styles";
 
   type Props = {
     open?: boolean;
@@ -40,7 +40,7 @@
 <AppDialog
   bind:open
   title={editing ? i18n.t("modal-skill-edit-title") : i18n.t("modal-skill-create-title")}
-  class="max-w-4xl sm:max-w-4xl"
+  class="sm:max-w-lg"
   onOpenChange={handleOpenChange}
 >
   <form
@@ -51,7 +51,7 @@
       submit();
     }}
   >
-    <div class="grid gap-3 md:grid-cols-2">
+    <div class="grid sm:grid-cols-2 {GAP_LOOSE}">
       <FormField id="skill-id" label={i18n.t("label-skill-id")} value={draft.id}>
         <Input
           id="skill-id"
@@ -60,30 +60,21 @@
           required={!editing}
           pattern="[a-z0-9]+(-[a-z0-9]+)*"
           maxlength={64}
-          placeholder={i18n.t("placeholder-skill-id")}
         />
-        <p class="mt-1 text-xs text-muted-foreground">{i18n.t("hint-skill-id")}</p>
       </FormField>
       <FormField id="skill-name" label={i18n.t("label-skill-name")} value={draft.name}>
-        <Input
-          id="skill-name"
-          bind:value={draft.name}
-          required
-          placeholder={i18n.t("placeholder-skill-name")}
-        />
+        <Input id="skill-name" bind:value={draft.name} required />
       </FormField>
     </div>
+
+    <p class="text-xs text-muted-foreground">{i18n.t("hint-skill-id")}</p>
 
     <FormField
       id="skill-description"
       label={i18n.t("label-skill-description")}
       value={draft.description}
     >
-      <Input
-        id="skill-description"
-        bind:value={draft.description}
-        placeholder={i18n.t("placeholder-skill-description")}
-      />
+      <Input id="skill-description" bind:value={draft.description} />
     </FormField>
 
     <div class="flex flex-wrap gap-4">
@@ -97,14 +88,8 @@
       </label>
     </div>
 
-    <FormField label={i18n.t("label-skill-content")} floating={false} spacing="normal">
-      <MarkdownEditor
-        bind:value={draft.content}
-        placeholder={i18n.t("placeholder-skill-content")}
-        editLabel={i18n.t("skill-edit")}
-        previewLabel={i18n.t("skill-preview")}
-        minHeight="18rem"
-      />
+    <FormField id="skill-content" label={i18n.t("label-skill-content")} value={draft.content}>
+      <Textarea id="skill-content" rows={10} required bind:value={draft.content} />
     </FormField>
   </form>
 
