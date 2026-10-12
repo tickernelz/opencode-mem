@@ -227,7 +227,9 @@
           </div>
         {:else if router.view === "skills"}
           <span class={META_CHIP}>
-            {i18n.t("text-total", { count: skills.skills.length })}
+            {i18n.t("text-total", {
+              count: skills.isSearching ? skills.filteredSkills.length : skills.skills.length,
+            })}
           </span>
         {/if}
       </div>
@@ -352,10 +354,35 @@
           knownTags={explorer.knownTags}
         />
       {:else if router.view === "skills"}
+        <div class={PAGE_TOOLBAR}>
+          <div class={cn("flex w-full min-w-0 items-center", GAP)}>
+            <div class="flex min-w-0 flex-1 justify-center px-1">
+              <SearchInput
+                id="skills-search-input"
+                class="w-full max-w-xl"
+                placeholder={i18n.t("placeholder-search-skills")}
+                bind:value={skills.searchInput}
+                showClear={skills.isSearching}
+                onClear={skills.clearSearch}
+              />
+            </div>
+            <div class={cn("flex shrink-0 items-center", GAP)}>
+              <Button
+                variant="default"
+                size="icon"
+                aria-label={i18n.t("btn-add-skill")}
+                title={i18n.t("btn-add-skill")}
+                onclick={skills.openCreate}
+              >
+                <Plus class={ICON} aria-hidden="true" />
+              </Button>
+            </div>
+          </div>
+        </div>
         <SkillsView
           skills={skills.skills}
+          filtered={skills.filteredSkills}
           loading={skills.loading}
-          onCreate={skills.openCreate}
           onEdit={skills.openEdit}
           onDelete={skills.deleteSkill}
         />

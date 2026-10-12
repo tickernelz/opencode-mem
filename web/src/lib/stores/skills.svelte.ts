@@ -41,6 +41,18 @@ export function createSkillsStore() {
   let dialogOpen = $state(false);
   let editingId = $state<string | null>(null);
   let draft = $state<SkillDraft>(emptyDraft());
+  let searchInput = $state("");
+
+  const filteredSkills = $derived.by(() => {
+    const query = searchInput.trim().toLowerCase();
+    if (!query) return skills;
+    return skills.filter((skill) => {
+      const haystack = `${skill.id} ${skill.name} ${skill.description}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  });
+
+  const isSearching = $derived(searchInput.trim().length > 0);
 
   async function loadSkills() {
     loading = true;
@@ -133,9 +145,16 @@ export function createSkillsStore() {
     });
   }
 
+  function clearSearch() {
+    searchInput = "";
+  }
+
   return {
     get skills() {
       return skills;
+    },
+    get filteredSkills() {
+      return filteredSkills;
     },
     get loading() {
       return loading;
@@ -155,11 +174,21 @@ export function createSkillsStore() {
     set draft(v: SkillDraft) {
       draft = v;
     },
+    get searchInput() {
+      return searchInput;
+    },
+    set searchInput(v: string) {
+      searchInput = v;
+    },
+    get isSearching() {
+      return isSearching;
+    },
     loadSkills,
     openCreate,
     openEdit,
     saveSkill,
     deleteSkill,
+    clearSearch,
   };
 }
 
