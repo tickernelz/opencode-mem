@@ -591,13 +591,19 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     if (memoryClient) await memoryClient.close();
   };
 
-  const shutdownHandler = async () => {
+  const shutdownHandler = async (signal: NodeJS.Signals) => {
     try {
       await cleanupPlugin();
     } catch (error) {
       log("Shutdown error", { error: String(error) });
       process.exitCode = 1;
     }
+    // Registering listeners disables the runtime's default termination.
+    // After cleanup, remove ours and re-raise so the host can exit (#408).
+    // Avoid forced process exit here — that crashes onnxruntime-node finalizers (#114).
+    process.off("SIGINT", shutdownHandler);
+    process.off("SIGTERM", shutdownHandler);
+    process.kill(process.pid, signal);
   };
 
   const beforeExitHandler = () => {

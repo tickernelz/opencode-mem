@@ -8,6 +8,16 @@ describe("plugin shutdown", () => {
     expect(source).not.toContain("process.exit(");
   });
 
+  it("re-raises SIGINT/SIGTERM after cleanup so the host can exit", () => {
+    const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf-8");
+
+    // Listeners suppress default termination; after cleanup we must drop them
+    // and re-deliver the signal (#408) without process.exit (#114).
+    expect(source).toContain('process.off("SIGINT", shutdownHandler)');
+    expect(source).toContain('process.off("SIGTERM", shutdownHandler)');
+    expect(source).toContain("process.kill(process.pid, signal)");
+  });
+
   it("clears pending idle auto-capture work during cleanup", () => {
     const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf-8");
 
