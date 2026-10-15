@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import * as fs from "node:fs";
+import { buildMemoryProviderConfig } from "../src/services/ai/provider-config.js";
+import { applySafeExtraParams } from "../src/services/ai/providers/base-provider.js";
 import {
   initConfig,
   CONFIG,
@@ -51,6 +53,28 @@ describe("project-scoped config resolution", () => {
     initConfig("/my/project");
     expect(CONFIG.opencodeProvider).toBe("openai");
     expect(CONFIG.opencodeModel).toBe("project-model");
+  });
+
+  it("preserves JSONC string values through configuration loading and provider parameters", () => {
+    existsSpy = spyOn(fs, "existsSync").mockImplementation((p: unknown) =>
+      normalizePath(p).includes(".config/opencode/opencode-mem")
+    );
+    readSpy = spyOn(fs, "readFileSync").mockReturnValue(`{
+      "storagePath": "/tmp/cache,]v2",
+      "memoryModel": "local-model",
+      "memoryApiUrl": "https://example.invalid/v1",
+      "memoryApiKey": "fixture-only-key",
+      "memoryExtraParams": {"stop": [",}", ",]",],},
+    }`);
+
+    initConfig("/some/project");
+
+    expect(CONFIG.storagePath).toBe("/tmp/cache,]v2");
+    expect(CONFIG.memoryExtraParams).toEqual({ stop: [",}", ",]"] });
+    const providerConfig = buildMemoryProviderConfig(CONFIG);
+    const requestBody: Record<string, unknown> = {};
+    applySafeExtraParams(requestBody, providerConfig.extraParams ?? {});
+    expect(requestBody.stop).toEqual([",}", ",]"]);
   });
 
   it("keeps automatic cleanup policy under global configuration", () => {

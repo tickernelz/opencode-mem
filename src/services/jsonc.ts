@@ -80,6 +80,40 @@ export function stripJsoncComments(content: string): string {
     i++;
   }
 
-  // Remove trailing commas before } or ]
-  return result.replace(/,\s*([}\]])/g, "$1");
+  return removeTrailingCommas(result);
+}
+
+function removeTrailingCommas(content: string): string {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i];
+    if (inString) {
+      result += char;
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === ",") {
+      let next = i + 1;
+      while (next < content.length && /\s/.test(content.charAt(next))) next++;
+      if (content[next] === "}" || content[next] === "]") {
+        i = next - 1;
+        continue;
+      }
+    }
+    result += char;
+  }
+
+  return result;
 }
