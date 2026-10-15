@@ -76,44 +76,51 @@ export function stripJsoncComments(content: string): string {
       continue;
     }
 
+    // Drop structural trailing commas (comma before } or ], allowing
+    // whitespace and comments in between).
+    if (char === "," && isTrailingComma(content, i)) {
+      i++;
+      continue;
+    }
+
     result += char;
     i++;
   }
 
-  return removeTrailingCommas(result);
+  return result;
 }
 
-function removeTrailingCommas(content: string): string {
-  let result = "";
-  let inString = false;
-  let escaped = false;
+/** True when the comma at `commaIndex` is followed only by whitespace/comments then } or ]. */
+function isTrailingComma(content: string, commaIndex: number): boolean {
+  let next = commaIndex + 1;
+  while (next < content.length) {
+    const c = content.charAt(next);
+    const n = content.charAt(next + 1);
 
-  for (let i = 0; i < content.length; i++) {
-    const char = content[i];
-    if (inString) {
-      result += char;
-      if (escaped) {
-        escaped = false;
-      } else if (char === "\\") {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
-      }
+    if (/\s/.test(c)) {
+      next++;
       continue;
     }
 
-    if (char === '"') {
-      inString = true;
-    } else if (char === ",") {
-      let next = i + 1;
-      while (next < content.length && /\s/.test(content.charAt(next))) next++;
-      if (content[next] === "}" || content[next] === "]") {
-        i = next - 1;
-        continue;
-      }
+    if (c === "/" && n === "/") {
+      next += 2;
+      while (next < content.length && content.charAt(next) !== "\n") next++;
+      continue;
     }
-    result += char;
-  }
 
-  return result;
+    if (c === "/" && n === "*") {
+      next += 2;
+      while (
+        next + 1 < content.length &&
+        !(content.charAt(next) === "*" && content.charAt(next + 1) === "/")
+      ) {
+        next++;
+      }
+      next += 2;
+      continue;
+    }
+
+    return c === "}" || c === "]";
+  }
+  return false;
 }
