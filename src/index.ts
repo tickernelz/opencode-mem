@@ -4,6 +4,7 @@ import { tool } from "@opencode-ai/plugin";
 
 import { memoryClient } from "./services/client.js";
 import { formatContextForPrompt } from "./services/context.js";
+import { buildMemoryProvenanceSuffix } from "./services/memory-provenance.js";
 import { getTags } from "./services/tags.js";
 import { stripPrivateContent, isFullyPrivate } from "./services/privacy.js";
 import { awaitCaptureDrain, performAutoCapture } from "./services/auto-capture.js";
@@ -703,6 +704,9 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       results: memories.map((m: any) => ({
         similarity: 1.0,
         memory: m.summary,
+        id: m.id,
+        createdAt: m.createdAt,
+        projectName: m.projectName,
       })),
       total: memories.length,
       timing: 0,
@@ -1422,7 +1426,7 @@ function stripMatchingEmbeddedTagsFooter(memory: string, tags: string[]): string
   return memory.replace(EMBEDDED_TAGS_FOOTER_RE, "");
 }
 
-function formatMemoriesForCompaction(memories: any[]): string {
+export function formatMemoriesForCompaction(memories: any[]): string {
   let output = `## Restored Session Memory\n\n`;
 
   memories.forEach((m, i) => {
@@ -1430,7 +1434,7 @@ function formatMemoriesForCompaction(memories: any[]): string {
     const body =
       tags.length > 0 ? stripMatchingEmbeddedTagsFooter(m.memory ?? "", tags) : (m.memory ?? "");
 
-    output += `### Memory ${i + 1}\n`;
+    output += `### Memory ${i + 1}${buildMemoryProvenanceSuffix(m)}\n`;
     output += `${body}\n\n`;
     if (tags.length > 0) {
       output += `Tags: ${tags.join(", ")}\n\n`;
