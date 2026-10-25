@@ -106,6 +106,91 @@ describe("turso legacy migrator", () => {
     expect(registered[0]?.vectorCount).toBe(1);
   });
 
+  for (const change of ["insert", "delete"] as const) {
+    migrationTest(`keeps migration complete after a normal ${change}`, async () => {
+      baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-completed-"));
+      const projectsDir = join(baseDir, "projects");
+      mkdirSync(projectsDir);
+      const scopeHash = "abcdef0123456789";
+      const dbPath = await createLegacyShard(projectsDir, `project_${scopeHash}_shard_0.db`, [
+        {
+          id: "original",
+          vector: new Float32Array([1, 0, 0, 0]),
+          content: "original memory",
+          containerTag: `opencode_project_${scopeHash}`,
+        },
+      ]);
+      const { CONFIG } = await import("../src/config.js");
+      CONFIG.storagePath = baseDir;
+      CONFIG.embeddingDimensions = 4;
+      CONFIG.databaseEncryptionEnabled = false;
+      CONFIG.databaseEncryptionKey = undefined;
+      const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
+      const { tursoConnectionManager } =
+        await import("../src/services/turso/connection-manager.js");
+      await runLegacyTursoMigration();
+      const sidecarPath = `${dbPath}.turso-migrate.json`;
+      const sidecar = readFileSync(sidecarPath, "utf-8");
+      const markerPath = join(baseDir, ".turso-migrated");
+      const marker = readFileSync(markerPath, "utf-8");
+      const db = await tursoConnectionManager.getConnection(dbPath);
+      if (change === "insert") {
+        await db.run(`INSERT INTO memories (id, content, vector, container_tag, created_at, updated_at)
+          SELECT 'added', content, vector, container_tag, created_at, updated_at FROM memories`);
+      } else {
+        await db.run("DELETE FROM memories");
+      }
+
+      // A live lock makes any erroneous re-entry fail rather than silently
+      // rewriting the historical counts. A completed shard needs no migration.
+      writeFileSync(
+        join(baseDir, ".turso-migrate.lock"),
+        JSON.stringify({ pid: process.pid, timestamp: new Date().toISOString() })
+      );
+      const { closeTursoAndInvalidateCaches } = await import("../src/services/turso/lifecycle.js");
+      await closeTursoAndInvalidateCaches();
+      await runLegacyTursoMigration();
+      expect(readFileSync(sidecarPath, "utf-8")).toBe(sidecar);
+      expect(readFileSync(markerPath, "utf-8")).toBe(marker);
+      const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+      const shards = await tursoShardManager.getAllShards("project", scopeHash);
+      expect(shards[0]?.vectorCount).toBe(change === "insert" ? 2 : 0);
+    });
+  }
+
+  migrationTest("restores unreadable vectors despite a complete sidecar", async () => {
+    baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-complete-corrupt-"));
+    const projectsDir = join(baseDir, "projects");
+    mkdirSync(projectsDir);
+    const dbPath = await createLegacyShard(projectsDir, "project_abcdef0123456789_shard_0.db", [
+      {
+        id: "recoverable",
+        vector: new Float32Array([1, 0, 0, 0]),
+        content: "preserved in backup",
+        containerTag: "opencode_project_abcdef0123456789",
+      },
+    ]);
+    const { CONFIG } = await import("../src/config.js");
+    CONFIG.storagePath = baseDir;
+    CONFIG.embeddingDimensions = 4;
+    CONFIG.databaseEncryptionEnabled = false;
+    CONFIG.databaseEncryptionKey = undefined;
+    const { runLegacyTursoMigration } = await import("../src/services/turso/legacy-migrator.js");
+    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    await runLegacyTursoMigration();
+    const db = await tursoConnectionManager.getConnection(dbPath);
+    await db.run("UPDATE memories SET vector = x'010203'");
+
+    await runLegacyTursoMigration();
+
+    const restoredDb = await tursoConnectionManager.getConnection(dbPath);
+    const row = await restoredDb.get(
+      "SELECT content, vector_extract(vector) AS vector FROM memories"
+    );
+    expect(row?.content).toBe("preserved in backup");
+    expect(JSON.parse(String(row?.vector))).toEqual([1, 0, 0, 0]);
+  });
+
   migrationTest("resumes from backup after interrupted migration", async () => {
     baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-resume-"));
     const projectsDir = join(baseDir, "projects");

@@ -210,11 +210,9 @@ async function isShardMigrationComplete(dbPath: string): Promise<boolean> {
     if (!(await hasMemoriesTable(db))) {
       return sidecar.expectedCount === 0;
     }
-    const count = await countMemories(db);
-    if (count !== sidecar.expectedCount) {
-      return false;
-    }
-    // Sidecar alone is not enough — require native vector index + readable vectors.
+    // Counts are verified before publishing the complete sidecar. Normal
+    // inserts and deletes must not invalidate that historical migration fact.
+    // Sidecar alone is not enough — still require native, readable vectors.
     return isTursoVectorShardReady(db);
   } catch {
     return false;

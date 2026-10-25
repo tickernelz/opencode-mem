@@ -58,6 +58,7 @@ On first startup after upgrading, opencode-mem automatically migrates existing m
 - Each shard is backed up as `<shard>.db.legacy.bak` before rewrite
 - Progress is tracked per shard in `<shard>.db.turso-migrate.json`
 - A global marker `.turso-migrated` is written only after all shards verify successfully
+- Normal inserts and deletes do not invalidate a completed shard migration; startup still checks that its vectors are readable and match its stored dimensions
 - Do not run multiple OpenCode instances against the same `storagePath` during migration; a lock file (`.turso-migrate.lock`) prevents concurrent migration
 - Manual dimension migrations use `.turso-operation.lock`; other plugin processes reject new memory writes until the migration finishes
 
