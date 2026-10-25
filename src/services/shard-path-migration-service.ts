@@ -280,6 +280,7 @@ export class ShardPathMigrationService {
 
     try {
       // Stage complete, updated copies while originals remain untouched.
+      // A gigantic shard's synchronous copy or single UPDATE/count can still delay a heartbeat.
       for (const move of moves) {
         await tursoConnectionManager.closeConnection(move.oldPath);
         if (!existsSync(move.oldPath)) {
@@ -317,9 +318,11 @@ export class ShardPathMigrationService {
           );
         }
         await tursoConnectionManager.closeConnection(move.stagedPath);
+        releaseLock.heartbeat();
       }
 
       writeSwapState(statePath, state);
+      releaseLock.heartbeat();
 
       // Empty targets remain recoverable until the complete swap succeeds.
       for (let index = 0; index < targetShards.length; index++) {
@@ -328,10 +331,12 @@ export class ShardPathMigrationService {
           "pre-path-migrate",
           archivedTargets[index]!.archivePath!
         );
+        releaseLock.heartbeat();
       }
 
       for (const move of moves) {
         await tursoConnectionManager.closeConnection(move.oldPath);
+        releaseLock.heartbeat();
         await withSqliteFileLockRetry(() => renameSqliteDatabase(move.oldPath, move.backupPath));
         try {
           await withSqliteFileLockRetry(() => renameSqliteDatabase(move.stagedPath, move.newPath));
@@ -339,6 +344,7 @@ export class ShardPathMigrationService {
           await withSqliteFileLockRetry(() => renameSqliteDatabase(move.backupPath, move.oldPath));
           throw error;
         }
+        releaseLock.heartbeat();
 
         await tursoShardManager.reassignShardScope(
           move.shardId,
@@ -354,6 +360,7 @@ export class ShardPathMigrationService {
       }
 
       unlinkSync(statePath);
+      releaseLock.heartbeat();
 
       // Prompt metadata is secondary and must not invalidate a completed,
       // recoverable memory migration.

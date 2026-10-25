@@ -157,4 +157,64 @@ describe("turso engine migrator", () => {
       await reopened.close();
     }
   });
+
+  migrationTest("aborts staged row copying on ownership loss and retries safely", async () => {
+    await withStorage();
+    const dbPath = join(baseDir, "metadata.db");
+    const source = createClient({ url: `file:${dbPath}` });
+    try {
+      await source.execute("CREATE TABLE shards (id TEXT PRIMARY KEY, vector F32_BLOB(4))");
+      for (const id of ["one", "two", "three"]) {
+        await source.execute({
+          sql: "INSERT INTO shards VALUES (?, vector32(?))",
+          args: [id, "[1,0,0,0]"],
+        });
+      }
+      await source.execute("CREATE INDEX shards_vector ON shards (libsql_vector_idx(vector))");
+    } finally {
+      source.close();
+    }
+
+    const { TursoDb } = await import("../src/services/turso/turso-db.js");
+    const run = TursoDb.prototype.run;
+    const lockPath = join(baseDir, ".turso-operation.lock");
+    let copied = 0;
+    TursoDb.prototype.run = async function (sql, args) {
+      const result = await run.call(this, sql, args);
+      if (sql.startsWith("INSERT OR REPLACE INTO shards")) {
+        copied++;
+        writeFileSync(lockPath, JSON.stringify({ pid: 2147483647 }));
+      }
+      return result;
+    };
+    const { runTursoEngineMigration } = await import("../src/services/turso/engine-migrator.js");
+    try {
+      await expect(runTursoEngineMigration()).rejects.toThrow(/ownership lost/);
+    } finally {
+      TursoDb.prototype.run = run;
+    }
+    expect(copied).toBe(1);
+    expect(existsSync(join(baseDir, ".tursodb-engine-v1"))).toBe(false);
+    expect(JSON.parse(readFileSync(lockPath, "utf-8")).pid).toBe(2147483647);
+    const original = createClient({ url: `file:${dbPath}` });
+    try {
+      expect((await original.execute("SELECT id FROM shards")).rows).toHaveLength(3);
+      expect(
+        String(
+          (await original.execute("SELECT sql FROM sqlite_master WHERE name = 'shards_vector'"))
+            .rows[0]?.sql
+        )
+      ).toContain("libsql_vector_idx");
+    } finally {
+      original.close();
+    }
+    await runTursoEngineMigration();
+    expect(existsSync(join(baseDir, ".tursodb-engine-v1"))).toBe(true);
+    const migrated = await connect(dbPath, { experimental: ["encryption"] });
+    try {
+      expect(await migrated.prepare("SELECT id FROM shards").all()).toHaveLength(3);
+    } finally {
+      await migrated.close();
+    }
+  });
 });

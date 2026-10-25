@@ -95,7 +95,8 @@ async function needsEngineRewrite(dbPath: string): Promise<boolean> {
 async function copyTableViaLibsql(
   sourcePath: string,
   targetDb: TursoDb,
-  table: string
+  table: string,
+  heartbeat: () => void
 ): Promise<number> {
   const client = openLibsql(sourcePath);
   try {
@@ -141,6 +142,7 @@ async function copyTableViaLibsql(
         sqlArgs
       );
       imported += 1;
+      heartbeat();
     }
     return imported;
   } finally {
@@ -148,7 +150,7 @@ async function copyTableViaLibsql(
   }
 }
 
-async function rewriteMemoryShard(dbPath: string): Promise<void> {
+async function rewriteMemoryShard(dbPath: string, heartbeat: () => void): Promise<void> {
   const client = openLibsql(dbPath);
   let dims = CONFIG.embeddingDimensions;
   let model = CONFIG.embeddingModel;
@@ -178,18 +180,24 @@ async function rewriteMemoryShard(dbPath: string): Promise<void> {
   const staged = await tursoConnectionManager.getConnection(stagedPath);
   try {
     await tursoShardManager.initShardDb(staged, dims, model);
-    const imported = await copyTableViaLibsql(dbPath, staged, "memories");
+    const imported = await copyTableViaLibsql(dbPath, staged, "memories", heartbeat);
     const metaClient = openLibsql(dbPath);
     try {
-      const metaRows = await metaClient.execute(`SELECT key, value FROM shard_metadata`);
-      for (const row of metaRows.rows) {
-        await staged.run(`INSERT OR REPLACE INTO shard_metadata (key, value) VALUES (?, ?)`, [
-          String(row.key),
-          String(row.value),
-        ]);
+      const metaRows = await metaClient
+        .execute(`SELECT key, value FROM shard_metadata`)
+        .catch(() => null);
+      for (const row of metaRows?.rows ?? []) {
+        try {
+          await staged.run(`INSERT OR REPLACE INTO shard_metadata (key, value) VALUES (?, ?)`, [
+            String(row.key),
+            String(row.value),
+          ]);
+        } catch {
+          // Metadata is optional; do not swallow ownership failures below.
+          break;
+        }
+        heartbeat();
       }
-    } catch {
-      // optional
     } finally {
       metaClient.close();
     }
@@ -205,11 +213,14 @@ async function rewriteMemoryShard(dbPath: string): Promise<void> {
   }
 
   // Match encryption-migrator: Windows cannot rename over an existing file (EPERM).
+  // Pre-swap aborts preserve the original and may leave a staged temp file.
+  heartbeat();
   await withSqliteFileLockRetry(() => {
     copySqliteDatabase(dbPath, backupPath);
     removeSqliteDatabase(dbPath);
     renameSqliteDatabase(stagedPath, dbPath);
   });
+  heartbeat();
 
   log("Migrated libSQL DiskANN shard to @tursodatabase/database", {
     dbPath,
@@ -217,7 +228,11 @@ async function rewriteMemoryShard(dbPath: string): Promise<void> {
   });
 }
 
-async function rewriteGenericDb(dbPath: string, tables: string[]): Promise<void> {
+async function rewriteGenericDb(
+  dbPath: string,
+  tables: string[],
+  heartbeat: () => void
+): Promise<void> {
   const stagedPath = `${dbPath}.tursodb-migrate-${Date.now()}.tmp`;
   const backupPath = `${dbPath}.pre-tursodb-${Date.now()}.bak`;
 
@@ -230,6 +245,7 @@ async function rewriteGenericDb(dbPath: string, tables: string[]): Promise<void>
     const source = openLibsql(dbPath);
     try {
       for (const table of tables) {
+        heartbeat();
         const schema = await source.execute({
           sql: `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`,
           args: [table],
@@ -237,7 +253,7 @@ async function rewriteGenericDb(dbPath: string, tables: string[]): Promise<void>
         const createSql = schema.rows[0]?.sql ? String(schema.rows[0].sql) : null;
         if (!createSql) continue;
         await staged.run(createSql.replace(/F32_BLOB/gi, "BLOB"));
-        await copyTableViaLibsql(dbPath, staged, table);
+        await copyTableViaLibsql(dbPath, staged, table, heartbeat);
       }
       const indexes = await source.execute(
         `SELECT sql FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL AND name NOT LIKE 'sqlite_%'`
@@ -250,6 +266,7 @@ async function rewriteGenericDb(dbPath: string, tables: string[]): Promise<void>
         } catch {
           // index may already exist from CREATE TABLE
         }
+        heartbeat();
       }
     } finally {
       source.close();
@@ -260,11 +277,14 @@ async function rewriteGenericDb(dbPath: string, tables: string[]): Promise<void>
   }
 
   // Match encryption-migrator: Windows cannot rename over an existing file (EPERM).
+  // Pre-swap aborts preserve the original and may leave a staged temp file.
+  heartbeat();
   await withSqliteFileLockRetry(() => {
     copySqliteDatabase(dbPath, backupPath);
     removeSqliteDatabase(dbPath);
     renameSqliteDatabase(stagedPath, dbPath);
   });
+  heartbeat();
   log("Migrated auxiliary DB to @tursodatabase/database", { dbPath, backupPath });
 }
 
@@ -294,23 +314,26 @@ export async function runTursoEngineMigration(): Promise<void> {
   }
 
   const release = acquireTursoOperationLock("tursodb-engine-migrate");
+  const heartbeat = release.heartbeat;
   try {
     for (const path of toRewrite) {
+      heartbeat();
       const base = path.split(/[/\\]/).pop() ?? path;
       if (base.endsWith("_shard_") || /_shard_\d+\.db$/.test(base) || /shard_\d+\.db$/.test(base)) {
-        await rewriteMemoryShard(path);
+        await rewriteMemoryShard(path, heartbeat);
       } else if (base === "metadata.db") {
-        await rewriteGenericDb(path, ["shards"]);
+        await rewriteGenericDb(path, ["shards"], heartbeat);
       } else if (base === "user-prompts.db") {
-        await rewriteGenericDb(path, ["user_prompts"]);
+        await rewriteGenericDb(path, ["user_prompts"], heartbeat);
       } else if (base === "user-profiles.db") {
-        await rewriteGenericDb(path, ["user_profiles", "user_profile_changelogs"]);
+        await rewriteGenericDb(path, ["user_profiles", "user_profile_changelogs"], heartbeat);
       } else if (base === "ai-sessions.db") {
-        await rewriteGenericDb(path, ["ai_sessions", "ai_messages"]);
+        await rewriteGenericDb(path, ["ai_sessions", "ai_messages"], heartbeat);
       } else {
-        await rewriteMemoryShard(path);
+        await rewriteMemoryShard(path, heartbeat);
       }
     }
+    heartbeat();
     writeFileSync(
       markerPath(),
       JSON.stringify({ migratedAt: new Date().toISOString(), rewritten: toRewrite })

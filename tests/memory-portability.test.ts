@@ -147,6 +147,55 @@ describe("memory export/import portability", () => {
     expect(result.rejected?.[0]?.id).toBe("mem_portable");
   });
 
+  it("aborts on ownership loss mid-embedding without importing any records", async () => {
+    await stubEmbedding();
+    await setupProject();
+    const { CONFIG } = await import("../src/config.js");
+    const { memoryPortabilityService } =
+      await import("../src/services/memory-portability-service.js");
+    const inputPath = join(baseDir, "memories.json");
+    await memoryPortabilityService.exportMemories({
+      currentDirectory: projectDir,
+      outputPath: inputPath,
+    });
+    const document = JSON.parse(readFileSync(inputPath, "utf-8"));
+    document.memories = ["import_one", "import_two", "import_three"].map((id) => ({
+      ...document.memories[0],
+      id,
+      tags: [],
+    }));
+    writeFileSync(inputPath, JSON.stringify(document));
+    const targetDir = join(baseDir, "target");
+    mkdirSync(targetDir);
+    const { getProjectTagInfo } = await import("../src/services/tags.js");
+    const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+    const { tursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+    const hash = getProjectTagInfo(targetDir).tag.split("_").pop()!;
+    const shard = await tursoShardManager.createShard("project", hash, 0);
+    const { embeddingService } = await import("../src/services/embedding.js");
+    const lockPath = join(CONFIG.storagePath, ".turso-operation.lock");
+    let embedded = 0;
+    embeddingService.embedWithTimeout = async () => {
+      if (++embedded === 2) writeFileSync(lockPath, JSON.stringify({ pid: 2147483647 }));
+      return new Float32Array([1, 0]);
+    };
+    const result = await memoryPortabilityService.importMemories({
+      currentDirectory: targetDir,
+      inputPath,
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("ownership lost");
+    expect(embedded).toBe(2);
+    expect(
+      await tursoVectorSearch.countAllVectors(
+        await tursoConnectionManager.getConnection(shard.dbPath)
+      )
+    ).toBe(0);
+    // Release must not unlink the replacement owner's lease.
+    expect(JSON.parse(readFileSync(lockPath, "utf-8")).pid).toBe(2147483647);
+  });
+
   it("rejects unsupported schema versions", async () => {
     await stubEmbedding();
     await setupProject();

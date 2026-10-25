@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { connect } from "@tursodatabase/database";
@@ -134,6 +141,60 @@ describe("turso encryption migrator", () => {
       experimental: ["encryption"],
     });
     await plain.close();
+  });
+
+  migrationTest("aborts staged row copying on ownership loss and retries safely", async () => {
+    await withStorage(true);
+    const dbPath = await createPlaintextShard("project_a1b2c3d4e5f67890_shard_0.db");
+    const native = await connect(dbPath, { experimental: ["encryption"] });
+    const db = new TursoDb(native);
+    await db.run(`INSERT INTO memories (id, content, vector, container_tag, created_at, updated_at)
+      SELECT 'mem_second', content, vector, container_tag, created_at, updated_at FROM memories`);
+    await db.close();
+    const { resolveOrCreateDatabaseEncryptionKey } =
+      await import("../src/services/turso/encryption-key.js");
+    const hexkey = resolveOrCreateDatabaseEncryptionKey()!;
+    const run = TursoDb.prototype.run;
+    const lockPath = join(baseDir, ".turso-operation.lock");
+    let copied = 0;
+    TursoDb.prototype.run = async function (sql, args) {
+      const result = await run.call(this, sql, args);
+      if (sql.includes("INSERT OR REPLACE INTO memories")) {
+        copied++;
+        writeFileSync(lockPath, JSON.stringify({ pid: 2147483647 }));
+      }
+      return result;
+    };
+    const { runDatabaseEncryptionMigration } =
+      await import("../src/services/turso/encryption-migrator.js");
+    try {
+      await expect(runDatabaseEncryptionMigration()).rejects.toThrow(/ownership lost/);
+    } finally {
+      TursoDb.prototype.run = run;
+    }
+    expect(copied).toBe(1);
+    expect(existsSync(join(baseDir, ".tursodb-encrypted-v1"))).toBe(false);
+    expect(JSON.parse(readFileSync(lockPath, "utf-8")).pid).toBe(2147483647);
+    const plain = await connect(dbPath, { experimental: ["encryption"] });
+    try {
+      expect(await plain.prepare("SELECT content FROM memories").all()).toEqual([
+        { content: "encrypt me" },
+        { content: "encrypt me" },
+      ]);
+    } finally {
+      await plain.close();
+    }
+    await runDatabaseEncryptionMigration();
+    expect(existsSync(join(baseDir, ".tursodb-encrypted-v1"))).toBe(true);
+    const encrypted = await connect(dbPath, {
+      experimental: ["encryption"],
+      encryption: { cipher: "aes256gcm", hexkey },
+    });
+    try {
+      expect(await encrypted.prepare("SELECT id FROM memories").all()).toHaveLength(2);
+    } finally {
+      await encrypted.close();
+    }
   });
 
   migrationTest("encrypts plaintext shards and skips Turso-internal tables", async () => {

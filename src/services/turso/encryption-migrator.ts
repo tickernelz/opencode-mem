@@ -73,7 +73,7 @@ async function canOpenPlain(dbPath: string): Promise<boolean> {
   }
 }
 
-async function dumpAndReloadEncrypted(dbPath: string): Promise<void> {
+async function dumpAndReloadEncrypted(dbPath: string, heartbeat: () => void): Promise<void> {
   const encryption = resolveDatabaseEncryption();
   if (!encryption) {
     throw new Error("databaseEncryptionKey is required for encryption migration");
@@ -101,6 +101,7 @@ async function dumpAndReloadEncrypted(dbPath: string): Promise<void> {
     );
     const tableNames = tables.map((row) => String(row.name));
     for (const table of tableNames) {
+      heartbeat();
       const create = await sourceDb.get<{ sql?: string }>(
         `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`,
         [table]
@@ -171,6 +172,7 @@ async function dumpAndReloadEncrypted(dbPath: string): Promise<void> {
               ]
             );
           }
+          heartbeat();
         }
         continue;
       }
@@ -184,6 +186,7 @@ async function dumpAndReloadEncrypted(dbPath: string): Promise<void> {
           `INSERT OR REPLACE INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})`,
           columns.map((col) => asSqlValue(row[col]))
         );
+        heartbeat();
       }
     }
 
@@ -201,17 +204,21 @@ async function dumpAndReloadEncrypted(dbPath: string): Promise<void> {
       } catch {
         // may already exist
       }
+      heartbeat();
     }
   } finally {
     await sourceDb.close();
     await stagedDb.close();
   }
 
+  // Pre-swap aborts preserve the plaintext original and may leave a staged temp file.
+  heartbeat();
   await withSqliteFileLockRetry(() => {
     copySqliteDatabase(dbPath, backupPath);
     removeSqliteDatabase(dbPath);
     renameSqliteDatabase(stagedPath, dbPath);
   });
+  heartbeat();
 
   // Verify encrypted open
   const verify = await connect(dbPath, buildConnectOptions(encryption));
@@ -231,8 +238,10 @@ export async function runDatabaseEncryptionMigration(): Promise<void> {
 
   const candidates = collectCandidateDbs();
   const release = acquireTursoOperationLock("tursodb-encrypt");
+  const heartbeat = release.heartbeat;
   try {
     for (const path of candidates) {
+      heartbeat();
       if (await isAlreadyEncrypted(path)) continue;
       if (!(await canOpenPlain(path))) {
         throw new Error(
@@ -240,8 +249,9 @@ export async function runDatabaseEncryptionMigration(): Promise<void> {
             `If it is already encrypted with a different key, update databaseEncryptionKey.`
         );
       }
-      await dumpAndReloadEncrypted(path);
+      await dumpAndReloadEncrypted(path, heartbeat);
     }
+    heartbeat();
     writeFileSync(
       markerPath(),
       JSON.stringify({

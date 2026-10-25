@@ -334,6 +334,7 @@ export class MemoryPortabilityService {
           },
           isPinned: Boolean(memory.isPinned),
         });
+        releaseLock.heartbeat();
       }
 
       // Phase B: single transactional write. Avoid getWriteShard() here because it
@@ -355,6 +356,7 @@ export class MemoryPortabilityService {
               });
             }
             insertedIds.push(item.record.id);
+            releaseLock.heartbeat();
           }
         });
 
@@ -362,6 +364,7 @@ export class MemoryPortabilityService {
           shard.id,
           await tursoVectorSearch.countAllVectors(db)
         );
+        releaseLock.heartbeat();
       });
 
       log("Memory import completed", {
@@ -379,6 +382,7 @@ export class MemoryPortabilityService {
       };
     } catch (error) {
       // Best-effort cleanup if a partial insert somehow escaped the transaction.
+      // Heartbeat failures roll back the transaction; those IDs are harmless no-ops here.
       if (insertedIds.length > 0) {
         try {
           const shards = await tursoShardManager.getAllShards(scope, hash);
