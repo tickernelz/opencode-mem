@@ -191,6 +191,73 @@ describe("turso legacy migrator", () => {
     expect(JSON.parse(String(row?.vector))).toEqual([1, 0, 0, 0]);
   });
 
+  for (const loseLock of [false, true]) {
+    migrationTest(`heartbeats insert batches (ownership lost: ${loseLock})`, async () => {
+      baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-heartbeat-"));
+      const projectsDir = join(baseDir, "projects");
+      mkdirSync(projectsDir);
+      const dbPath = await createLegacyShard(
+        projectsDir,
+        "project_abcdef0123456789_shard_0.db",
+        Array.from({ length: 51 }, (_, i) => ({
+          id: `batch-${i}`,
+          vector: new Float32Array([1, 0, 0, 0]),
+          content: "batch memory",
+          containerTag: "opencode_project_abcdef0123456789",
+        }))
+      );
+      const { CONFIG } = await import("../src/config.js");
+      CONFIG.storagePath = baseDir;
+      CONFIG.embeddingDimensions = 4;
+      CONFIG.databaseEncryptionEnabled = false;
+      CONFIG.databaseEncryptionKey = undefined;
+      const { TURSO_LOCK_STALE_MS } = await import("../src/services/turso/operation-lock.js");
+      const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+      const insert = tursoVectorSearch.insertVectorInTransaction;
+      const lockPath = join(baseDir, ".turso-migrate.lock");
+      const oldTimestamp = new Date(Date.now() - TURSO_LOCK_STALE_MS - 60_000).toISOString();
+      let inserted = 0;
+      tursoVectorSearch.insertVectorInTransaction = async function (tx, record) {
+        if (inserted === 0) {
+          writeFileSync(
+            lockPath,
+            JSON.stringify({
+              pid: loseLock ? 2147483647 : process.pid,
+              timestamp: oldTimestamp,
+            })
+          );
+        }
+        if (inserted === 50) {
+          const lock = JSON.parse(readFileSync(lockPath, "utf-8"));
+          expect(Date.parse(lock.timestamp)).toBeGreaterThan(Date.parse(oldTimestamp));
+        }
+        inserted++;
+        return insert.call(this, tx, record);
+      };
+      try {
+        const { runLegacyTursoMigration } =
+          await import("../src/services/turso/legacy-migrator.js");
+        if (loseLock) {
+          await expect(runLegacyTursoMigration()).rejects.toThrow(
+            /ownership lost.*aborting migration/
+          );
+          expect(existsSync(join(baseDir, ".turso-migrated"))).toBe(false);
+          expect(JSON.parse(readFileSync(lockPath, "utf-8")).pid).toBe(2147483647);
+        } else {
+          await runLegacyTursoMigration();
+          expect(inserted).toBe(51);
+        }
+        const { tursoConnectionManager } =
+          await import("../src/services/turso/connection-manager.js");
+        const db = await tursoConnectionManager.getConnection(dbPath);
+        const row = await db.get("SELECT COUNT(*) AS count FROM memories");
+        expect(Number(row?.count)).toBe(loseLock ? 0 : 51);
+      } finally {
+        tursoVectorSearch.insertVectorInTransaction = insert;
+      }
+    });
+  }
+
   migrationTest("resumes from backup after interrupted migration", async () => {
     baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-resume-"));
     const projectsDir = join(baseDir, "projects");

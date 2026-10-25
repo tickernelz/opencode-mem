@@ -12,6 +12,7 @@ import { log } from "../logger.js";
 import { tursoConnectionManager } from "./connection-manager.js";
 import { tursoShardManager } from "./shard-manager.js";
 import { runTursoEngineMigration } from "./engine-migrator.js";
+import { heartbeatTursoLock, readLiveTursoLock } from "./operation-lock.js";
 import {
   withSqliteFileLockRetry,
   renameSqliteDatabase,
@@ -91,36 +92,13 @@ function writeMarker(storagePath: string, shards: MigrationMarker["shards"]): vo
   writeFileSync(join(storagePath, MIGRATION_MARKER), JSON.stringify(marker, null, 2), "utf-8");
 }
 
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function acquireMigrationLock(storagePath: string): boolean {
   const lockPath = join(storagePath, MIGRATION_LOCK);
-  if (existsSync(lockPath)) {
-    try {
-      const lock = JSON.parse(readFileSync(lockPath, "utf-8")) as MigrationLock;
-      if (lock.pid && isProcessAlive(lock.pid)) {
-        return false;
-      }
-      unlinkSync(lockPath);
-    } catch {
-      try {
-        unlinkSync(lockPath);
-      } catch {
-        // stale or corrupt lock — try atomic create below
-      }
-    }
-  }
+  if (readLiveTursoLock(lockPath)) return false;
 
   const lock: MigrationLock = { pid: process.pid, timestamp: new Date().toISOString() };
   try {
@@ -151,8 +129,12 @@ function releaseMigrationLock(storagePath: string): void {
       unlinkSync(lockPath);
     }
   } catch {
-    unlinkSync(lockPath);
+    // Missing, replaced, corrupt, or held open: cleanup must not block writes.
   }
+}
+
+function heartbeatMigrationLock(): void {
+  heartbeatTursoLock(join(CONFIG.storagePath, MIGRATION_LOCK));
 }
 
 async function countMemories(db: TursoDb): Promise<number> {
@@ -409,6 +391,7 @@ async function migrateMemoryShard(dbPath: string): Promise<ShardMigrationSidecar
   }
 
   const expectedCount = records.length;
+  heartbeatMigrationLock();
   writeSidecar(dbPath, {
     sourceCount,
     expectedCount,
@@ -419,6 +402,7 @@ async function migrateMemoryShard(dbPath: string): Promise<ShardMigrationSidecar
 
   const backup = backupPath(dbPath);
   await tursoConnectionManager.closeConnection(dbPath);
+  heartbeatMigrationLock();
   if (existsSync(dbPath)) {
     await withSqliteFileLockRetry(() => renameSqliteDatabase(dbPath, backup));
   }
@@ -435,6 +419,7 @@ async function migrateMemoryShard(dbPath: string): Promise<ShardMigrationSidecar
       for (const record of batch) {
         await tursoVectorSearch.insertVectorInTransaction(tx, record);
       }
+      heartbeatMigrationLock();
     }
     for (const memoryId of pinnedIds) {
       await tx.execute({
@@ -458,6 +443,7 @@ async function migrateMemoryShard(dbPath: string): Promise<ShardMigrationSidecar
     skippedCount,
     status: "complete",
   };
+  heartbeatMigrationLock();
   writeSidecar(dbPath, completedSidecar);
 
   log("Legacy memory shard migrated to Turso vectors", {
@@ -478,11 +464,13 @@ async function migrateDirectory(
 
   for (const file of readdirSync(dir)) {
     if (!file.endsWith(".db") || file.includes(BACKUP_SUFFIX)) continue;
+    heartbeatMigrationLock();
     const dbPath = join(dir, file);
     const sidecar = await migrateMemoryShard(dbPath);
     if (sidecar) {
       results.push({ path: dbPath, sidecar });
     }
+    heartbeatMigrationLock();
   }
 
   return results;
@@ -637,6 +625,7 @@ export async function runLegacyTursoMigration(): Promise<void> {
   await acquireMigrationLockWithRetry(CONFIG.storagePath);
 
   try {
+    heartbeatMigrationLock();
     const dbFiles = ["metadata.db", "user-prompts.db", "user-profiles.db", "ai-sessions.db"];
     for (const file of dbFiles) {
       const path = join(CONFIG.storagePath, file);
@@ -661,7 +650,9 @@ export async function runLegacyTursoMigration(): Promise<void> {
       throw new Error("Turso legacy migration incomplete: not all shards verified");
     }
 
+    heartbeatMigrationLock();
     await reconcileShardRegistry();
+    heartbeatMigrationLock();
     writeMarker(CONFIG.storagePath, migratedShards);
     log("Turso legacy migration complete", { storagePath: CONFIG.storagePath });
   } finally {

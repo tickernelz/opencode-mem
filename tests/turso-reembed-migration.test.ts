@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { copyFileSync, existsSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { cleanupTursoTestDirectory } from "./turso-test-utils.js";
@@ -124,6 +131,46 @@ describe("turso re-embed migration safety", () => {
     );
     expect(Number(metadata?.value)).toBe(2);
   });
+
+  for (const loseLock of [false, true]) {
+    it(`heartbeats re-embed progress (ownership lost: ${loseLock})`, async () => {
+      const shard = await createSourceShard();
+      await stubEmbedding();
+      const { CONFIG } = await import("../src/config.js");
+      CONFIG.embeddingDimensions = 4;
+      const { TURSO_LOCK_STALE_MS } = await import("../src/services/turso/operation-lock.js");
+      const oldTimestamp = new Date(Date.now() - TURSO_LOCK_STALE_MS - 60_000).toISOString();
+      const lockPath = join(baseDir, ".turso-operation.lock");
+      const { migrationService } = await import("../src/services/migration-service.js");
+      const result = await migrationService.migrateToNewModel("re-embed", (progress) => {
+        if (progress.phase !== "re-embedding") return;
+        if (progress.processed === 1) {
+          const lock = JSON.parse(readFileSync(lockPath, "utf-8"));
+          writeFileSync(
+            lockPath,
+            JSON.stringify({
+              ...lock,
+              pid: loseLock ? 2147483647 : process.pid,
+              timestamp: oldTimestamp,
+            })
+          );
+        } else if (progress.processed === 2) {
+          const lock = JSON.parse(readFileSync(lockPath, "utf-8"));
+          expect(Date.parse(lock.timestamp)).toBeGreaterThan(Date.parse(oldTimestamp));
+        }
+      });
+      expect(result.success).toBe(!loseLock);
+      if (loseLock) {
+        expect(result.error).toContain("ownership lost");
+        expect(JSON.parse(readFileSync(lockPath, "utf-8")).pid).toBe(2147483647);
+        const { tursoConnectionManager } =
+          await import("../src/services/turso/connection-manager.js");
+        const db = await tursoConnectionManager.getConnection(shard.dbPath);
+        const row = await db.get("SELECT vector_extract(vector) AS vector FROM memories LIMIT 1");
+        expect(JSON.parse(String(row?.vector))).toHaveLength(2);
+      }
+    });
+  }
 
   it("archives source shards instead of deleting them during fresh start", async () => {
     const shard = await createSourceShard();

@@ -61,6 +61,7 @@ On first startup after upgrading, opencode-mem automatically migrates existing m
 - Normal inserts and deletes do not invalidate a completed shard migration; startup still checks that its vectors are readable and match its stored dimensions
 - Do not run multiple OpenCode instances against the same `storagePath` during migration; a lock file (`.turso-migrate.lock`) prevents concurrent migration
 - Manual dimension migrations use `.turso-operation.lock`; other plugin processes reject new memory writes until the migration finishes
+- Locks expire after 30 minutes without a progress timestamp update (or file modification time if the timestamp is unavailable), even if the owning process is alive. Legacy and dimension migrations heartbeat as they progress and abort if they discover that ownership was lost. Stale-lock cleanup is logged for diagnosis
 
 If migration is interrupted, the next startup resumes from the backup automatically.
 
