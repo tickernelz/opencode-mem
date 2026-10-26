@@ -196,6 +196,116 @@ describe("memory export/import portability", () => {
     expect(JSON.parse(readFileSync(lockPath, "utf-8")).pid).toBe(2147483647);
   });
 
+  for (const failure of ["mid-transaction", "post-commit", "ordinary"] as const) {
+    const ownershipLoss = failure !== "ordinary";
+    it(`handles catch-time rows after ${failure} failure`, async () => {
+      await stubEmbedding();
+      await setupProject();
+      const { CONFIG } = await import("../src/config.js");
+      const { memoryPortabilityService } =
+        await import("../src/services/memory-portability-service.js");
+      const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+      const { tursoConnectionManager } =
+        await import("../src/services/turso/connection-manager.js");
+      const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+      const { getProjectTagInfo } = await import("../src/services/tags.js");
+      const { TURSO_LOCK_STALE_MS } = await import("../src/services/turso/operation-lock.js");
+      const inputPath = join(baseDir, "memories.json");
+      await memoryPortabilityService.exportMemories({
+        currentDirectory: projectDir,
+        outputPath: inputPath,
+      });
+      const targetDir = join(baseDir, "target");
+      mkdirSync(targetDir);
+      const tag = getProjectTagInfo(targetDir);
+      const hash = tag.tag.split("_").pop()!;
+      const shard = await tursoShardManager.createShard("project", hash, 0);
+      const db = await tursoConnectionManager.getConnection(shard.dbPath);
+      const lockPath = join(CONFIG.storagePath, ".turso-operation.lock");
+      const insert = tursoVectorSearch.insertVectorInTransaction;
+      const scopeLock = tursoShardManager.withScopeWriteLock;
+      const setCount = tursoShardManager.setVectorCount;
+      const document = JSON.parse(readFileSync(inputPath, "utf-8"));
+      document.memories[0].isPinned = false;
+      writeFileSync(inputPath, JSON.stringify(document));
+      let rolledBack = false;
+      tursoVectorSearch.insertVectorInTransaction = async function (...args) {
+        await insert.apply(this, args);
+        if (failure === "mid-transaction") {
+          writeFileSync(
+            lockPath,
+            JSON.stringify({
+              id: "takeover",
+              pid: process.pid,
+              timestamp: new Date().toISOString(),
+            })
+          );
+        }
+      };
+      // For ordinary failure, fail after commit so compensating cleanup has work.
+      tursoShardManager.setVectorCount = async function (...args) {
+        if (!ownershipLoss) throw new Error("ordinary metadata failure");
+        if (failure === "post-commit") {
+          writeFileSync(
+            lockPath,
+            JSON.stringify({
+              id: "takeover",
+              pid: process.pid,
+              timestamp: new Date().toISOString(),
+            })
+          );
+        }
+        return setCount.apply(this, args);
+      };
+      tursoShardManager.withScopeWriteLock = async function (...args) {
+        try {
+          return await scopeLock.apply(this, args);
+        } catch (error) {
+          tursoShardManager.withScopeWriteLock = scopeLock;
+          tursoVectorSearch.insertVectorInTransaction = insert;
+          tursoShardManager.setVectorCount = setCount;
+          if (failure === "mid-transaction") {
+            expect(await tursoVectorSearch.countAllVectors(db)).toBe(0);
+            rolledBack = true;
+            // Original transaction and scope lock have unwound. A successor can
+            // now acquire the expired replacement and commit the very same ID.
+            writeFileSync(
+              lockPath,
+              JSON.stringify({
+                id: "takeover",
+                pid: process.pid,
+                timestamp: new Date(Date.now() - TURSO_LOCK_STALE_MS - 60_000).toISOString(),
+              })
+            );
+            const successor = await memoryPortabilityService.importMemories({
+              currentDirectory: targetDir,
+              inputPath,
+            });
+            expect(successor.success).toBe(true);
+            expect(await tursoVectorSearch.getMemoryById(db, "mem_portable")).toBeTruthy();
+          }
+          throw error;
+        }
+      };
+      try {
+        const result = await memoryPortabilityService.importMemories({
+          currentDirectory: targetDir,
+          inputPath,
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toContain(
+          ownershipLoss ? "ownership lost" : "ordinary metadata failure"
+        );
+        expect(rolledBack).toBe(failure === "mid-transaction");
+        expect(await tursoVectorSearch.countAllVectors(db)).toBe(ownershipLoss ? 1 : 0);
+      } finally {
+        tursoShardManager.withScopeWriteLock = scopeLock;
+        tursoVectorSearch.insertVectorInTransaction = insert;
+        tursoShardManager.setVectorCount = setCount;
+      }
+    });
+  }
+
   it("rejects unsupported schema versions", async () => {
     await stubEmbedding();
     await setupProject();

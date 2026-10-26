@@ -20,7 +20,10 @@ import { extractScopeFromContainerTag } from "./memory-scope.js";
 import { getProjectTagInfo } from "./tags.js";
 import { embeddingService } from "./embedding.js";
 import { ensureTursoReady } from "./turso/ready.js";
-import { acquireTursoOperationLock } from "./turso/operation-lock.js";
+import {
+  acquireTursoOperationLock,
+  isTursoLockOwnershipLostError,
+} from "./turso/operation-lock.js";
 import { tursoShardManager } from "./turso/shard-manager.js";
 import { tursoConnectionManager } from "./turso/connection-manager.js";
 import { tursoVectorSearch } from "./turso/vector-search.js";
@@ -381,9 +384,11 @@ export class MemoryPortabilityService {
         containerTag: target.tag,
       };
     } catch (error) {
-      // Best-effort cleanup if a partial insert somehow escaped the transaction.
-      // Heartbeat failures roll back the transaction; those IDs are harmless no-ops here.
-      if (insertedIds.length > 0) {
+      // Best-effort cleanup for ordinary failures only. Ownership loss rolls back
+      // an open transaction, but a successor may already have committed these IDs
+      // (or our transaction may have committed before the final heartbeat).
+      // Never compensate shared rows without current ownership.
+      if (!isTursoLockOwnershipLostError(error) && insertedIds.length > 0) {
         try {
           const shards = await tursoShardManager.getAllShards(scope, hash);
           for (const shard of shards) {

@@ -4,7 +4,10 @@ import { CONFIG } from "../config.js";
 import { extractScopeFromContainerTag } from "./memory-scope.js";
 import { getProjectTagInfo } from "./tags.js";
 import { ensureTursoReady } from "./turso/ready.js";
-import { acquireTursoOperationLock } from "./turso/operation-lock.js";
+import {
+  acquireTursoOperationLock,
+  isTursoLockOwnershipLostError,
+} from "./turso/operation-lock.js";
 import { tursoShardManager } from "./turso/shard-manager.js";
 import { tursoConnectionManager } from "./turso/connection-manager.js";
 import { tursoVectorSearch } from "./turso/vector-search.js";
@@ -387,12 +390,26 @@ export class ShardPathMigrationService {
         actions,
       };
     } catch (error) {
-      await this.rollbackSwap(state, statePath);
+      const ownershipLost = isTursoLockOwnershipLostError(error);
+      if (ownershipLost) {
+        // A successor may already be writing to the migrated paths. Only fresh
+        // ownership at startup may recover any journal that remains.
+        log(
+          "WARNING: Path migration interrupted after lock ownership lost; leaving recoverable state untouched",
+          { error: String(error), statePath }
+        );
+      } else {
+        await this.rollbackSwap(state, statePath);
+      }
       return {
         success: false,
         ...resultBase,
         dryRun: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: ownershipLost
+          ? `Path migration interrupted after lock ownership lost and may have completed; state is recoverable. ${String(error)}`
+          : error instanceof Error
+            ? error.message
+            : String(error),
       };
     } finally {
       releaseLock();
