@@ -166,9 +166,12 @@ interface OpenCodeMemConfig {
   /** Automatically clear OpenCode's cached plugin install when a newer npm latest is available. */
   autoUpdate?: boolean;
   /**
-   * Self-heal a store whose Turso WAL index outlived its WAL (`-tshm`/`-shm`
-   * beside a 0-byte `-wal`): verify a copy of the main `.db`, move the sidecars
-   * to `<storagePath>/recovery/`, then retry once. Default true.
+   * Self-heal a store whose Turso WAL index is stale (a leftover `-tshm`/`-shm`,
+   * often after a foreign writer or beside a 0-byte `-wal`): verify a copy of
+   * the main `.db`, move the *index* sidecars to `<storagePath>/recovery/`, then
+   * retry once. A non-empty `-wal` is left in place so the engine can rebuild
+   * its index from it. Recovery is serialised across processes with
+   * `<storagePath>/recovery/<dbstem>.lock`. Default true.
    */
   tursoAutoHeal?: boolean;
   /**
@@ -695,10 +698,12 @@ const CONFIG_TEMPLATE = `{
   // Pinned versions like opencode-mem@2.26.0 are never auto-updated.
   "autoUpdate": true,
 
-  // Recover a store whose Turso WAL index outlived its WAL (a stale -tshm/-shm
+  // Recover a store whose Turso WAL index is stale (a leftover -tshm/-shm, often
   // beside a 0-byte -wal). The guard copies the main .db, verifies it with
-  // PRAGMA integrity_check, moves -wal/-shm/-tshm to <storagePath>/recovery/,
-  // then retries the open once. Files are moved, never deleted.
+  // PRAGMA integrity_check, moves the -shm/-tshm index sidecars to
+  // <storagePath>/recovery/, and retries the open once. A non-empty -wal is
+  // never moved, so committed but uncheckpointed transactions are preserved.
+  // Recovery is serialised across processes by <storagePath>/recovery/<db>.lock.
   "tursoAutoHeal": true,
 
   // Turso experimental multiprocess_wal (Unix). Set false for single-owner mode:

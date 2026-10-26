@@ -7,7 +7,11 @@ import { log } from "../logger.js";
 import { collectReleasedSqliteHandles } from "./sqlite-handle-release.js";
 import { TursoDb } from "./turso-db.js";
 import { resolveOrCreateDatabaseEncryptionKey } from "./encryption-key.js";
-import { isWalIndexCorruptionError, quarantineWalSidecars } from "./wal-index-recovery.js";
+import {
+  isWalIndexCorruptionError,
+  quarantineWalSidecars,
+  acquireRecoveryLock,
+} from "./wal-index-recovery.js";
 
 export type ConnectFactory = (path: string, opts?: DatabaseOpts) => Promise<Database>;
 
@@ -107,9 +111,15 @@ export class TursoConnectionManager {
   constructor(private readonly connectFactory: ConnectFactory = connect) {}
 
   /**
-   * Connect, and on a stale-WAL-index failure quarantine the sidecars once and
-   * retry once. Only the two known signatures heal (see #435); any other open
+   * Connect, and on a stale-WAL-index failure quarantine the index sidecars once
+   * and retry once. Only the two known signatures heal (see #435); any other open
    * error propagates unchanged.
+   *
+   * Recovery is serialised across processes (they share `storagePath` through
+   * `multiprocess_wal`) with `<storagePath>/recovery/<dbstem>.lock`. Under that
+   * lock the open is re-attempted before any file is moved, so a peer that
+   * healed first leaves us nothing to do. A non-empty WAL is never moved — see
+   * `wal-index-recovery.ts` for the data-safety contract.
    */
   private async connectWithWalIndexRecovery(dbPath: string, opts: DatabaseOpts): Promise<Database> {
     try {
@@ -121,34 +131,120 @@ export class TursoConnectionManager {
       if (this.healedPaths.has(dbPath)) {
         throw error;
       }
-      this.healedPaths.add(dbPath);
 
-      const outcome = await quarantineWalSidecars(dbPath, this.connectFactory, opts);
-      if (outcome.status !== "quarantined") {
-        log("Turso open failed and the store was left untouched (no recovery attempted)", {
+      let lock: ReturnType<typeof acquireRecoveryLock>;
+      try {
+        lock = acquireRecoveryLock(dbPath);
+      } catch (lockError) {
+        log("Turso WAL index recovery skipped: could not take the recovery lock", {
           path: dbPath,
-          reason: outcome.reason,
-          hint: "Restore this database from a backup; the sidecar files were not moved.",
+          error: String(lockError),
+          originalError: String(error),
+        });
+        throw error;
+      }
+      if (!lock) {
+        log("Turso WAL index recovery skipped: another process owns the recovery lock", {
+          path: dbPath,
+          hint: "The owning process is healing this store; leaving its files untouched.",
           error: String(error),
         });
         throw error;
       }
+      if (lock.tookOverStaleLock) {
+        log("Took over a stale Turso WAL index recovery lock", {
+          path: dbPath,
+          lock: lock.lockPath,
+        });
+      }
 
-      log("Moved stale WAL sidecars aside after a Turso open failure; retrying once", {
-        path: dbPath,
-        quarantineDir: outcome.quarantineDir,
-        moved: outcome.moved,
-      });
+      this.healedPaths.add(dbPath);
 
       try {
-        return await this.connectFactory(dbPath, opts);
-      } catch (retryError) {
-        log("Turso open still failing after WAL sidecar recovery", {
+        // The peer may have healed between our failed open and taking the lock.
+        try {
+          const connection = await this.connectFactory(dbPath, opts);
+          log("Turso open succeeded on the recovery-lock recheck; nothing was moved", {
+            path: dbPath,
+          });
+          return connection;
+        } catch (recheckError) {
+          if (!isWalIndexCorruptionError(recheckError)) {
+            // e.g. a lock error: do not move a live owner's files.
+            log(
+              "Turso recovery-lock recheck failed with an unrelated error; store left untouched",
+              {
+                path: dbPath,
+                error: String(recheckError),
+                originalError: String(error),
+              }
+            );
+            throw error;
+          }
+        }
+
+        const outcome = await quarantineWalSidecars(dbPath, this.connectFactory, opts);
+        if (outcome.status === "failed") {
+          log("Turso WAL index recovery failed; the store was left as-is where possible", {
+            path: dbPath,
+            reason: outcome.reason,
+            quarantineDir: outcome.quarantineDir,
+            moved: outcome.moved,
+            error: String(error),
+          });
+          throw error;
+        }
+        if (outcome.status === "skipped") {
+          log("Turso open failed and the store was left untouched (no recovery attempted)", {
+            path: dbPath,
+            reason: outcome.reason,
+            hint: "Restore this database from a backup; the sidecar files were not moved.",
+            error: String(error),
+          });
+          throw error;
+        }
+
+        log("Moved stale WAL index sidecars aside after a Turso open failure; retrying once", {
           path: dbPath,
           quarantineDir: outcome.quarantineDir,
-          error: String(retryError),
+          moved: outcome.moved,
+          removedEmptyWal: outcome.removedEmptyWal,
+          retainedWalBytes: outcome.retainedWalBytes,
+          hint:
+            outcome.retainedWalBytes > 0
+              ? "A non-empty -wal was kept; the engine rebuilds its index from it."
+              : undefined,
         });
-        throw error;
+
+        try {
+          return await this.connectFactory(dbPath, opts);
+        } catch (retryError) {
+          log("Turso open still failing after WAL index recovery", {
+            path: dbPath,
+            quarantineDir: outcome.quarantineDir,
+            error: String(retryError),
+            walPreserved: outcome.retainedWalBytes > 0,
+            hint:
+              outcome.retainedWalBytes > 0
+                ? "The non-empty -wal was not moved, so no committed data was discarded."
+                : "The -wal was empty or absent, so no committed data was discarded.",
+          });
+          throw error;
+        }
+      } finally {
+        try {
+          lock.release();
+        } catch (releaseError) {
+          try {
+            log("Failed to release the Turso WAL index recovery lock", {
+              path: dbPath,
+              lock: lock.lockPath,
+              error: String(releaseError),
+            });
+          } catch {
+            // A logging failure must never replace the original open error.
+          }
+        }
       }
     }
   }
