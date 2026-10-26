@@ -53,7 +53,7 @@ Startup recovers interrupted re-embed swaps, converts libSQL DiskANN indexes to 
 
 On macOS and Linux, multiple OpenCode sessions can share the same `storagePath` via Turso’s experimental `multiprocess_wal` (every process must use the same mode — restart all sessions after upgrading). On Windows the engine rejects that flag, so only one OpenCode session can own the memory databases at a time.
 
-`tursoMultiprocessWal: false` opens in single-owner mode instead: other processes then fail with `database is locked` rather than sharing the store. That is the safer choice if non-plugin tools touch the same files, because a *writing* foreign SQLite process makes Turso’s WAL index stale and its own next write is silently lost. `tursoAutoHeal` (default `true`) moves a store’s `-shm`/`-tshm`/`-wal` sidecars into `storagePath/recovery/<db>-<timestamp>/` and retries once when an open fails with a stale WAL index, after verifying a copy of the main database.
+`tursoMultiprocessWal: false` opens in single-owner mode instead: other processes then fail with `database is locked` rather than sharing the store. That is the safer choice if non-plugin tools touch the same files, because a _writing_ foreign SQLite process makes Turso’s WAL index stale and its own next write is silently lost. `tursoAutoHeal` (default `true`) moves a store’s `-shm`/`-tshm`/`-wal` sidecars into `storagePath/recovery/<db>-<timestamp>/` and retries once when an open fails with a stale WAL index, after verifying a copy of the main database.
 
 On first startup after upgrading, opencode-mem automatically migrates existing memory shard databases to native Turso/libSQL vector format:
 
