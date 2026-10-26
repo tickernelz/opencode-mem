@@ -7,6 +7,7 @@ import { log } from "../logger.js";
 import { collectReleasedSqliteHandles } from "./sqlite-handle-release.js";
 import { TursoDb } from "./turso-db.js";
 import { resolveOrCreateDatabaseEncryptionKey } from "./encryption-key.js";
+import { isWalIndexCorruptionError, quarantineWalSidecars } from "./wal-index-recovery.js";
 
 export type ConnectFactory = (path: string, opts?: DatabaseOpts) => Promise<Database>;
 
@@ -23,11 +24,16 @@ export function supportsTursoMultiprocessWal(
   return platform !== "win32";
 }
 
-/** Experimental flags required on every Turso open for the current platform. */
+/**
+ * Experimental flags required on every Turso open for the current platform.
+ * `multiprocessWal: false` opts into single-owner mode (Unix), so a foreign
+ * process gets a loud "database is locked" instead of silent divergence.
+ */
 export function tursoExperimentalFeatures(
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
+  multiprocessWal: boolean = CONFIG.tursoMultiprocessWal
 ): Array<(typeof TURSO_BASE_EXPERIMENTAL_FEATURES)[number] | "multiprocess_wal"> {
-  if (supportsTursoMultiprocessWal(platform)) {
+  if (multiprocessWal && supportsTursoMultiprocessWal(platform)) {
     return [...TURSO_BASE_EXPERIMENTAL_FEATURES, "multiprocess_wal"];
   }
   return [...TURSO_BASE_EXPERIMENTAL_FEATURES];
@@ -94,8 +100,77 @@ export class TursoConnectionManager {
   private readonly pending = new Map<string, Promise<TursoDb>>();
   private readonly closingConnections = new Map<string, Promise<void>>();
   private closingPromise: Promise<void> | null = null;
+  /** One WAL-index recovery attempt per path per process — never loop. */
+  private readonly healedPaths = new Set<string>();
+  private readonly warnedForeignShmPaths = new Set<string>();
 
   constructor(private readonly connectFactory: ConnectFactory = connect) {}
+
+  /**
+   * Connect, and on a stale-WAL-index failure quarantine the sidecars once and
+   * retry once. Only the two known signatures heal (see #435); any other open
+   * error propagates unchanged.
+   */
+  private async connectWithWalIndexRecovery(dbPath: string, opts: DatabaseOpts): Promise<Database> {
+    try {
+      return await this.connectFactory(dbPath, opts);
+    } catch (error) {
+      if (!CONFIG.tursoAutoHeal || !isWalIndexCorruptionError(error)) {
+        throw error;
+      }
+      if (this.healedPaths.has(dbPath)) {
+        throw error;
+      }
+      this.healedPaths.add(dbPath);
+
+      const outcome = await quarantineWalSidecars(dbPath, this.connectFactory, opts);
+      if (outcome.status !== "quarantined") {
+        log("Turso open failed and the store was left untouched (no recovery attempted)", {
+          path: dbPath,
+          reason: outcome.reason,
+          hint: "Restore this database from a backup; the sidecar files were not moved.",
+          error: String(error),
+        });
+        throw error;
+      }
+
+      log("Moved stale WAL sidecars aside after a Turso open failure; retrying once", {
+        path: dbPath,
+        quarantineDir: outcome.quarantineDir,
+        moved: outcome.moved,
+      });
+
+      try {
+        return await this.connectFactory(dbPath, opts);
+      } catch (retryError) {
+        log("Turso open still failing after WAL sidecar recovery", {
+          path: dbPath,
+          quarantineDir: outcome.quarantineDir,
+          error: String(retryError),
+        });
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * A foreign sqlite process that wrote this store leaves `-shm` next to a
+   * Turso `-tshm`. Read-only access is harmless; a foreign writer diverges
+   * silently and loses its own next write, so warn once per path. Never delete
+   * `-shm` here — it may belong to a live reader.
+   */
+  private warnOnForeignSqliteShm(dbPath: string): void {
+    if (this.warnedForeignShmPaths.has(dbPath)) return;
+    if (!existsSync(`${dbPath}-shm`) || !existsSync(`${dbPath}-tshm`)) return;
+    this.warnedForeignShmPaths.add(dbPath);
+    log("Foreign SQLite process touched this store (-shm beside -tshm)", {
+      path: dbPath,
+      hint:
+        "Read-only access is harmless, but a foreign writer silently loses data — " +
+        "see issue #435. Close other tools on this store, or set tursoMultiprocessWal=false " +
+        "for single-owner mode.",
+    });
+  }
 
   async getConnection(dbPath: string): Promise<TursoDb> {
     if (this.closingPromise) {
@@ -127,9 +202,10 @@ export class TursoConnectionManager {
       const opts = buildConnectOptions(encryption);
       let database: Database | null = null;
       try {
-        database = await this.connectFactory(dbPath, opts);
+        database = await this.connectWithWalIndexRecovery(dbPath, opts);
         const db = new TursoDb(database);
         await db.execute("PRAGMA foreign_keys = ON");
+        this.warnOnForeignSqliteShm(dbPath);
         this.connections.set(dbPath, db);
         return db;
       } catch (error) {

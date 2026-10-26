@@ -165,6 +165,18 @@ interface OpenCodeMemConfig {
     | "aegis128x4";
   /** Automatically clear OpenCode's cached plugin install when a newer npm latest is available. */
   autoUpdate?: boolean;
+  /**
+   * Self-heal a store whose Turso WAL index outlived its WAL (`-tshm`/`-shm`
+   * beside a 0-byte `-wal`): verify a copy of the main `.db`, move the sidecars
+   * to `<storagePath>/recovery/`, then retry once. Default true.
+   */
+  tursoAutoHeal?: boolean;
+  /**
+   * Open with Turso's experimental `multiprocess_wal` (Unix). Set false for
+   * single-owner mode, so a foreign process fails loudly with "database is
+   * locked" instead of writing into a divergent WAL. Default true.
+   */
+  tursoMultiprocessWal?: boolean;
   compaction?: {
     enabled?: boolean;
     memoryLimit?: number;
@@ -302,6 +314,8 @@ const DEFAULTS: Required<
   databaseEncryptionEnabled: false,
   databaseEncryptionCipher: "aes256gcm",
   autoUpdate: true,
+  tursoAutoHeal: true,
+  tursoMultiprocessWal: true,
   memory: {
     defaultScope: "project",
   },
@@ -680,6 +694,17 @@ const CONFIG_TEMPLATE = `{
   // Automatically update when installed as opencode-mem@latest (or a range).
   // Pinned versions like opencode-mem@2.26.0 are never auto-updated.
   "autoUpdate": true,
+
+  // Recover a store whose Turso WAL index outlived its WAL (a stale -tshm/-shm
+  // beside a 0-byte -wal). The guard copies the main .db, verifies it with
+  // PRAGMA integrity_check, moves -wal/-shm/-tshm to <storagePath>/recovery/,
+  // then retries the open once. Files are moved, never deleted.
+  "tursoAutoHeal": true,
+
+  // Turso experimental multiprocess_wal (Unix). Set false for single-owner mode:
+  // a second process then fails loudly with "database is locked" instead of
+  // writing into a divergent WAL. See issue #435.
+  "tursoMultiprocessWal": true,
 
   // ============================================
   // User Profile System
@@ -1197,6 +1222,8 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     databaseEncryptionCipher:
       fileConfig.databaseEncryptionCipher ?? DEFAULTS.databaseEncryptionCipher,
     autoUpdate: fileConfig.autoUpdate ?? DEFAULTS.autoUpdate,
+    tursoAutoHeal: fileConfig.tursoAutoHeal ?? DEFAULTS.tursoAutoHeal,
+    tursoMultiprocessWal: fileConfig.tursoMultiprocessWal ?? DEFAULTS.tursoMultiprocessWal,
     memory: {
       defaultScope: fileConfig.memory?.defaultScope ?? DEFAULTS.memory.defaultScope,
     },
