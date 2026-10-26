@@ -209,13 +209,17 @@ export class TursoConnectionManager {
 
     this.closingPromise = (async () => {
       await Promise.allSettled([...this.pending.values(), ...this.closingConnections.values()]);
-      for (const [path, db] of this.connections) {
-        try {
-          await db.close();
-        } catch (error) {
-          log("Error closing Turso database", { path, error: String(error) });
-        }
-      }
+      // Close in parallel: each close runs a bounded WAL checkpoint, and the
+      // host allows only ~5s between SIGTERM and SIGKILL.
+      await Promise.allSettled(
+        [...this.connections].map(async ([path, db]) => {
+          try {
+            await db.close();
+          } catch (error) {
+            log("Error closing Turso database", { path, error: String(error) });
+          }
+        })
+      );
       this.connections.clear();
       this.pending.clear();
       await collectReleasedSqliteHandles();

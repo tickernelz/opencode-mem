@@ -1,4 +1,5 @@
 import type { Database } from "@tursodatabase/database";
+import { log } from "../logger.js";
 
 export type SqlValue = null | string | number | bigint | boolean | Uint8Array | ArrayBuffer;
 export type SqlArgs = SqlValue[] | Record<string, SqlValue>;
@@ -112,8 +113,18 @@ function bindArgs(args?: SqlArgs): SqlValue[] | [Record<string, SqlValue>] {
   return [normalized];
 }
 
+/**
+ * Upper bound for the pre-close WAL checkpoint. The host SIGTERMs and SIGKILLs
+ * the service after ~5s, so a checkpoint that cannot finish (another process
+ * holds a read lock) must not eat the whole shutdown budget.
+ */
+const CHECKPOINT_TIMEOUT_MS = 1500;
+
 export class TursoDb {
-  constructor(private readonly database: Database) {}
+  constructor(
+    private readonly database: Database,
+    private readonly checkpointTimeoutMs: number = CHECKPOINT_TIMEOUT_MS
+  ) {}
 
   getClient(): Database {
     return this.database;
@@ -203,7 +214,46 @@ export class TursoDb {
     return wrapped[txnMode]();
   }
 
+  /**
+   * Checkpoint the WAL into the main DB before closing so a SIGKILL during
+   * teardown cannot leave a 0-byte `-wal` beside a stale `-tshm` (every later
+   * open then fails with "short read on WAL frame"). Never throws: a busy or
+   * slow checkpoint is logged and skipped.
+   */
+  private async checkpointBeforeClose(): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const checkpoint = this.database.all("PRAGMA wal_checkpoint(TRUNCATE)");
+      // Keep the checkpoint observed even when the timeout wins the race: a
+      // late "database is locked" rejection must not escape as unhandled while
+      // the host is tearing the process down.
+      void checkpoint.catch(() => {});
+      const rows = await Promise.race([
+        checkpoint,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`timed out after ${this.checkpointTimeoutMs}ms`)),
+            this.checkpointTimeoutMs
+          );
+        }),
+      ]);
+      // `PRAGMA wal_checkpoint` returns {busy, log, checkpointed}; busy>0 means a
+      // reader blocked the truncate and the WAL was only partially checkpointed.
+      const result = Array.isArray(rows) ? rows[0] : undefined;
+      log("Turso WAL checkpoint before close", {
+        busy: result?.busy,
+        log: result?.log,
+        checkpointed: result?.checkpointed,
+      });
+    } catch (error) {
+      log("Turso WAL checkpoint before close failed", { error: String(error) });
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
   async close(): Promise<void> {
+    await this.checkpointBeforeClose();
     await this.database.close();
   }
 }
