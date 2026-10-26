@@ -1,6 +1,5 @@
 import {
   closeSync,
-  existsSync,
   fstatSync,
   openSync,
   readFileSync,
@@ -8,7 +7,9 @@ import {
   unlinkSync,
   writeFileSync,
   writeSync,
+  type Stats,
 } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { CONFIG } from "../../config.js";
 import { log } from "../logger.js";
@@ -22,6 +23,7 @@ const LEGACY_MIGRATION_LOCK = ".turso-migrate.lock";
 export const TURSO_LOCK_STALE_MS = 30 * 60 * 1000;
 
 interface LockState {
+  id?: string;
   pid: number;
   timestamp?: string;
   operation?: string;
@@ -36,27 +38,75 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
-function lockAgeMs(path: string, state: LockState | null): number | null {
+function lockAgeMs(identity: Stats, state: LockState | null): number | null {
   let timestamp = typeof state?.timestamp === "string" ? Date.parse(state.timestamp) : NaN;
   if (!Number.isFinite(timestamp)) {
-    try {
-      timestamp = statSync(path).mtimeMs;
-    } catch {
-      // Without a usable timestamp or mtime, fail closed for a live PID.
-    }
+    timestamp = identity.mtimeMs;
   }
   return Number.isFinite(timestamp) ? Date.now() - timestamp : null;
 }
 
+function sameFile(a: Pick<Stats, "dev" | "ino">, b: Pick<Stats, "dev" | "ino">): boolean {
+  return a.dev === b.dev && a.ino === b.ino;
+}
+
+/** Remove only the file inspected by the caller; cleanup must never throw. */
+export function unlinkTursoLockIfUnchanged(
+  path: string,
+  identity: Pick<Stats, "dev" | "ino">
+): boolean {
+  try {
+    if (!sameFile(identity, statSync(path))) return false;
+    // A nanosecond stat → unlink race remains without interprocess locking.
+    // The true owner bounds it by aborting at its next progress heartbeat.
+    unlinkSync(path);
+    return true;
+  } catch {
+    // Missing or held open (Windows): preserve best-effort cleanup semantics.
+    return false;
+  }
+}
+
+/** Release by acquisition identity, never merely by PID. */
+export function releaseTursoLock(path: string, expectedId: string): void {
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, "r");
+    const identity = fstatSync(fd);
+    const state = JSON.parse(readFileSync(fd, "utf-8")) as LockState | null;
+    if (state?.id === expectedId) unlinkTursoLockIfUnchanged(path, identity);
+  } catch {
+    // Missing, replaced, corrupt, or held open: cleanup must not block writes.
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+export class TursoLockOwnershipLostError extends Error {
+  override name = "TursoLockOwnershipLostError";
+}
+
+export function isTursoLockOwnershipLostError(
+  error: unknown
+): error is TursoLockOwnershipLostError {
+  return error instanceof TursoLockOwnershipLostError;
+}
+
 /** Shared lease check for both write gating and atomic migration acquisition. */
 export function readLiveTursoLock(path: string): LockState | null {
-  if (!existsSync(path)) return null;
+  let fd: number;
+  try {
+    fd = openSync(path, "r");
+  } catch {
+    return null;
+  }
+  const identity = fstatSync(fd);
   let state: LockState | null = null;
   let reason = "corrupt lock";
   try {
-    state = JSON.parse(readFileSync(path, "utf-8")) as LockState | null;
+    state = JSON.parse(readFileSync(fd, "utf-8")) as LockState | null;
     if (state && Number.isInteger(state.pid) && state.pid > 0) {
-      const age = lockAgeMs(path, state);
+      const age = lockAgeMs(identity, state);
       if (isProcessAlive(state.pid)) {
         if (age === null || age <= TURSO_LOCK_STALE_MS) return state;
         reason = "progress heartbeat expired";
@@ -66,16 +116,11 @@ export function readLiveTursoLock(path: string): LockState | null {
     }
   } catch {
     // Corrupt locks are stale and removed below.
+  } finally {
+    closeSync(fd);
   }
-  const ageMs = lockAgeMs(path, state);
-  let removed = false;
-  try {
-    unlinkSync(path);
-    removed = true;
-  } catch {
-    // Already removed (race) or held open (Windows) — either way the lock is
-    // gone or unowned; do not let cleanup failure block writes.
-  }
+  const ageMs = lockAgeMs(identity, state);
+  const removed = unlinkTursoLockIfUnchanged(path, identity);
   const details = {
     path,
     pid: state?.pid ?? null,
@@ -91,11 +136,19 @@ export function readLiveTursoLock(path: string): LockState | null {
     // turn an unowned lock into a permanent write outage.
     console.warn("WARNING: Invalidating stale Turso migration lock", details);
   }
+  if (!removed) {
+    try {
+      // A replacement must be evaluated on its own lease, not the stale read.
+      if (!sameFile(identity, statSync(path))) return readLiveTursoLock(path);
+    } catch {
+      // Another owner already removed it.
+    }
+  }
   return null;
 }
 
 /** Refresh progress only while this process still owns the lease. */
-export function heartbeatTursoLock(path: string): void {
+export function heartbeatTursoLock(path: string, expectedId: string): void {
   let fd: number | undefined;
   try {
     // Open without creating, and update the same file we checked. If another
@@ -103,7 +156,7 @@ export function heartbeatTursoLock(path: string): void {
     fd = openSync(path, "r+");
     const previous = readFileSync(fd, "utf-8");
     const state = JSON.parse(previous) as LockState | null;
-    if (state?.pid !== process.pid) throw new Error("lock owner changed");
+    if (state?.id !== expectedId) throw new Error("lock owner changed");
     const updated = JSON.stringify({ ...state, timestamp: new Date().toISOString() });
     // Keep any shortened tail as JSON whitespace rather than leaving a corrupt
     // window between a rewrite and truncate (older locks may be pretty-printed).
@@ -116,9 +169,12 @@ export function heartbeatTursoLock(path: string): void {
       throw new Error("lock file replaced");
     }
   } catch (error) {
-    throw new Error(`Turso migration lock ownership lost at ${path}; aborting migration`, {
-      cause: error,
-    });
+    throw new TursoLockOwnershipLostError(
+      `Turso migration lock ownership lost at ${path}; aborting migration`,
+      {
+        cause: error,
+      }
+    );
   } finally {
     if (fd !== undefined) closeSync(fd);
   }
@@ -142,20 +198,15 @@ export function acquireTursoOperationLock(
 ): (() => void) & { heartbeat: () => void } {
   assertNoTursoMigrationInProgress();
   const path = join(CONFIG.storagePath, OPERATION_LOCK);
+  const id = randomUUID();
   const state: LockState = {
+    id,
     pid: process.pid,
     timestamp: new Date().toISOString(),
     operation,
   };
   writeFileSync(path, JSON.stringify(state), { flag: "wx" });
 
-  const release = () => {
-    try {
-      const current = JSON.parse(readFileSync(path, "utf-8")) as LockState | null;
-      if (current?.pid === process.pid) unlinkSync(path);
-    } catch {
-      // Missing, replaced, corrupt, or held open: cleanup must not block writes.
-    }
-  };
-  return Object.assign(release, { heartbeat: () => heartbeatTursoLock(path) });
+  const release = () => releaseTursoLock(path, id);
+  return Object.assign(release, { heartbeat: () => heartbeatTursoLock(path, id) });
 }

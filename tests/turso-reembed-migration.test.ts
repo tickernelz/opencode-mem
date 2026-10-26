@@ -150,6 +150,7 @@ describe("turso re-embed migration safety", () => {
             lockPath,
             JSON.stringify({
               ...lock,
+              id: loseLock ? "foreign-acquisition" : lock.id,
               pid: loseLock ? 2147483647 : process.pid,
               timestamp: oldTimestamp,
             })

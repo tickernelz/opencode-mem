@@ -7,12 +7,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { CONFIG } from "../../config.js";
 import { log } from "../logger.js";
 import { tursoConnectionManager } from "./connection-manager.js";
 import { tursoShardManager } from "./shard-manager.js";
 import { runTursoEngineMigration } from "./engine-migrator.js";
-import { heartbeatTursoLock, readLiveTursoLock } from "./operation-lock.js";
+import { heartbeatTursoLock, readLiveTursoLock, releaseTursoLock } from "./operation-lock.js";
 import {
   withSqliteFileLockRetry,
   renameSqliteDatabase,
@@ -43,6 +44,7 @@ interface MigrationMarker {
 }
 
 interface MigrationLock {
+  id: string;
   pid: number;
   timestamp: string;
 }
@@ -96,23 +98,31 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function acquireMigrationLock(storagePath: string): boolean {
+function acquireMigrationLock(storagePath: string): string | null {
   const lockPath = join(storagePath, MIGRATION_LOCK);
-  if (readLiveTursoLock(lockPath)) return false;
+  if (readLiveTursoLock(lockPath)) return null;
 
-  const lock: MigrationLock = { pid: process.pid, timestamp: new Date().toISOString() };
+  const lock: MigrationLock = {
+    id: randomUUID(),
+    pid: process.pid,
+    timestamp: new Date().toISOString(),
+  };
   try {
     writeFileSync(lockPath, JSON.stringify(lock), { flag: "wx" });
-    return true;
+    return lock.id;
   } catch {
-    return false;
+    return null;
   }
 }
 
-async function acquireMigrationLockWithRetry(storagePath: string, maxAttempts = 3): Promise<void> {
+async function acquireMigrationLockWithRetry(
+  storagePath: string,
+  maxAttempts = 3
+): Promise<string> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    if (acquireMigrationLock(storagePath)) {
-      return;
+    const id = acquireMigrationLock(storagePath);
+    if (id) {
+      return id;
     }
     await sleep(200 + attempt * 150);
   }
@@ -120,21 +130,8 @@ async function acquireMigrationLockWithRetry(storagePath: string, maxAttempts = 
   throw new Error("Turso legacy migration locked by another process");
 }
 
-function releaseMigrationLock(storagePath: string): void {
-  const lockPath = join(storagePath, MIGRATION_LOCK);
-  if (!existsSync(lockPath)) return;
-  try {
-    const lock = JSON.parse(readFileSync(lockPath, "utf-8")) as MigrationLock;
-    if (lock.pid === process.pid) {
-      unlinkSync(lockPath);
-    }
-  } catch {
-    // Missing, replaced, corrupt, or held open: cleanup must not block writes.
-  }
-}
-
-function heartbeatMigrationLock(): void {
-  heartbeatTursoLock(join(CONFIG.storagePath, MIGRATION_LOCK));
+function releaseMigrationLock(storagePath: string, id: string): void {
+  releaseTursoLock(join(storagePath, MIGRATION_LOCK), id);
 }
 
 async function countMemories(db: TursoDb): Promise<number> {
@@ -294,7 +291,10 @@ function rowToRecord(row: Record<string, unknown>): MemoryRecord | null {
   };
 }
 
-async function migrateMemoryShard(dbPath: string): Promise<ShardMigrationSidecar | null> {
+async function migrateMemoryShard(
+  dbPath: string,
+  heartbeatMigrationLock: () => void
+): Promise<ShardMigrationSidecar | null> {
   if (await isShardMigrationComplete(dbPath)) {
     const sidecar = readSidecar(dbPath);
     return sidecar;
@@ -456,7 +456,8 @@ async function migrateMemoryShard(dbPath: string): Promise<ShardMigrationSidecar
 }
 
 async function migrateDirectory(
-  dirName: "users" | "projects"
+  dirName: "users" | "projects",
+  heartbeatMigrationLock: () => void
 ): Promise<Array<{ path: string; sidecar: ShardMigrationSidecar }>> {
   const dir = join(CONFIG.storagePath, dirName);
   const results: Array<{ path: string; sidecar: ShardMigrationSidecar }> = [];
@@ -466,7 +467,7 @@ async function migrateDirectory(
     if (!file.endsWith(".db") || file.includes(BACKUP_SUFFIX)) continue;
     heartbeatMigrationLock();
     const dbPath = join(dir, file);
-    const sidecar = await migrateMemoryShard(dbPath);
+    const sidecar = await migrateMemoryShard(dbPath, heartbeatMigrationLock);
     if (sidecar) {
       results.push({ path: dbPath, sidecar });
     }
@@ -622,7 +623,9 @@ export async function runLegacyTursoMigration(): Promise<void> {
     return;
   }
 
-  await acquireMigrationLockWithRetry(CONFIG.storagePath);
+  const lockId = await acquireMigrationLockWithRetry(CONFIG.storagePath);
+  const heartbeatMigrationLock = () =>
+    heartbeatTursoLock(join(CONFIG.storagePath, MIGRATION_LOCK), lockId);
 
   try {
     heartbeatMigrationLock();
@@ -636,7 +639,7 @@ export async function runLegacyTursoMigration(): Promise<void> {
     const migratedShards: MigrationMarker["shards"] = [];
 
     for (const dirName of ["users", "projects"] as const) {
-      const dirResults = await migrateDirectory(dirName);
+      const dirResults = await migrateDirectory(dirName, heartbeatMigrationLock);
       for (const { path, sidecar } of dirResults) {
         migratedShards.push({
           path,
@@ -656,6 +659,6 @@ export async function runLegacyTursoMigration(): Promise<void> {
     writeMarker(CONFIG.storagePath, migratedShards);
     log("Turso legacy migration complete", { storagePath: CONFIG.storagePath });
   } finally {
-    releaseMigrationLock(CONFIG.storagePath);
+    releaseMigrationLock(CONFIG.storagePath, lockId);
   }
 }

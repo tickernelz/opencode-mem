@@ -1,5 +1,14 @@
-import { afterEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
+import * as fs from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { cleanupTursoTestDirectory } from "./turso-test-utils.js";
@@ -26,6 +35,46 @@ describe("turso operation lock staleness", () => {
   }
 
   const oldTimestamp = () => new Date(Date.now() - staleMs - 60_000).toISOString();
+
+  it("does not unlink a replacement file using the inspected stale identity", async () => {
+    const { unlinkTursoLockIfUnchanged } = await withStorage();
+    const path = join(baseDir, ".turso-operation.lock");
+    writeFileSync(path, JSON.stringify({ pid: process.pid, timestamp: oldTimestamp() }));
+    const identity = statSync(path);
+    renameSync(path, `${path}.old`);
+    writeFileSync(path, "replacement");
+    expect(unlinkTursoLockIfUnchanged(path, identity)).toBe(false);
+    expect(readFileSync(path, "utf-8")).toBe("replacement");
+  });
+
+  it("re-evaluates and blocks a fresh replacement between stale read and cleanup", async () => {
+    const { assertNoTursoMigrationInProgress } = await withStorage();
+    const path = join(baseDir, ".turso-operation.lock");
+    writeFileSync(path, JSON.stringify({ pid: process.pid, timestamp: oldTimestamp() }));
+    const original = fs.readFileSync;
+    let replaced = false;
+    const read = spyOn(fs, "readFileSync").mockImplementation(((
+      ...args: Parameters<typeof original>
+    ) => {
+      const contents = original(...args);
+      if (typeof args[0] === "number" && !replaced) {
+        replaced = true;
+        renameSync(path, `${path}.old`);
+        writeFileSync(
+          path,
+          JSON.stringify({ pid: process.pid, timestamp: new Date().toISOString(), id: "foreign" })
+        );
+      }
+      return contents;
+    }) as typeof original);
+    try {
+      expect(() => assertNoTursoMigrationInProgress()).toThrow(/writes are temporarily blocked/);
+      expect(replaced).toBe(true);
+      expect(JSON.parse(original(path, "utf-8")).id).toBe("foreign");
+    } finally {
+      read.mockRestore();
+    }
+  });
 
   for (const file of [".turso-operation.lock", ".turso-migrate.lock"]) {
     it(`cleans an aged-out live PID in ${file}`, async () => {
@@ -96,25 +145,43 @@ describe("turso operation lock staleness", () => {
     expect(existsSync(path)).toBe(false);
   });
 
+  it("rejects an expired acquisition after same-process takeover", async () => {
+    const { acquireTursoOperationLock } = await withStorage();
+    const first = acquireTursoOperationLock("first");
+    const path = join(baseDir, ".turso-operation.lock");
+    const state = JSON.parse(readFileSync(path, "utf-8"));
+    writeFileSync(path, JSON.stringify({ ...state, timestamp: oldTimestamp() }));
+    const second = acquireTursoOperationLock("second");
+    expect(() => first.heartbeat()).toThrow(/ownership lost/);
+    first();
+    expect(JSON.parse(readFileSync(path, "utf-8")).operation).toBe("second");
+    second.heartbeat();
+    second();
+    expect(existsSync(path)).toBe(false);
+  });
+
   it("refreshes legacy progress without relying on the acquisition timestamp", async () => {
     const { heartbeatTursoLock, assertNoTursoMigrationInProgress } = await withStorage();
     const path = join(baseDir, ".turso-migrate.lock");
-    writeFileSync(path, JSON.stringify({ pid: process.pid, timestamp: oldTimestamp() }, null, 2));
-    heartbeatTursoLock(path);
+    writeFileSync(
+      path,
+      JSON.stringify({ id: "legacy-test", pid: process.pid, timestamp: oldTimestamp() }, null, 2)
+    );
+    heartbeatTursoLock(path, "legacy-test");
     expect(() => assertNoTursoMigrationInProgress()).toThrow(/writes are temporarily blocked/);
   });
 
   it("aborts a heartbeat when the lock is missing, corrupt, or no longer ours", async () => {
     const { heartbeatTursoLock } = await withStorage();
     const path = join(baseDir, ".turso-migrate.lock");
-    expect(() => heartbeatTursoLock(path)).toThrow(/ownership lost.*aborting migration/);
+    expect(() => heartbeatTursoLock(path, "test")).toThrow(/ownership lost.*aborting migration/);
     expect(existsSync(path)).toBe(false);
     for (const contents of [
       "{broken",
       JSON.stringify({ pid: 2147483647, timestamp: oldTimestamp() }),
     ]) {
       writeFileSync(path, contents);
-      expect(() => heartbeatTursoLock(path)).toThrow(/ownership lost.*aborting migration/);
+      expect(() => heartbeatTursoLock(path, "test")).toThrow(/ownership lost.*aborting migration/);
       expect(readFileSync(path, "utf-8")).toBe(contents);
     }
   });

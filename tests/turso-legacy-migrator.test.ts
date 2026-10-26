@@ -191,7 +191,7 @@ describe("turso legacy migrator", () => {
     expect(JSON.parse(String(row?.vector))).toEqual([1, 0, 0, 0]);
   });
 
-  for (const loseLock of [false, true]) {
+  for (const loseLock of [false, true, "same-process"] as const) {
     migrationTest(`heartbeats insert batches (ownership lost: ${loseLock})`, async () => {
       baseDir = mkdtempSync(join(tmpdir(), "turso-migrate-heartbeat-"));
       const projectsDir = join(baseDir, "projects");
@@ -211,7 +211,8 @@ describe("turso legacy migrator", () => {
       CONFIG.embeddingDimensions = 4;
       CONFIG.databaseEncryptionEnabled = false;
       CONFIG.databaseEncryptionKey = undefined;
-      const { TURSO_LOCK_STALE_MS } = await import("../src/services/turso/operation-lock.js");
+      const { TURSO_LOCK_STALE_MS, readLiveTursoLock } =
+        await import("../src/services/turso/operation-lock.js");
       const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
       const insert = tursoVectorSearch.insertVectorInTransaction;
       const lockPath = join(baseDir, ".turso-migrate.lock");
@@ -219,13 +220,28 @@ describe("turso legacy migrator", () => {
       let inserted = 0;
       tursoVectorSearch.insertVectorInTransaction = async function (tx, record) {
         if (inserted === 0) {
+          const lock = JSON.parse(readFileSync(lockPath, "utf-8"));
           writeFileSync(
             lockPath,
             JSON.stringify({
-              pid: loseLock ? 2147483647 : process.pid,
+              ...lock,
+              id: loseLock === true ? "foreign-acquisition" : lock.id,
+              pid: loseLock === true ? 2147483647 : process.pid,
               timestamp: oldTimestamp,
             })
           );
+          if (loseLock === "same-process") {
+            expect(readLiveTursoLock(lockPath)).toBeNull();
+            writeFileSync(
+              lockPath,
+              JSON.stringify({
+                id: "successor",
+                pid: process.pid,
+                timestamp: new Date().toISOString(),
+              }),
+              { flag: "wx" }
+            );
+          }
         }
         if (inserted === 50) {
           const lock = JSON.parse(readFileSync(lockPath, "utf-8"));
@@ -242,7 +258,9 @@ describe("turso legacy migrator", () => {
             /ownership lost.*aborting migration/
           );
           expect(existsSync(join(baseDir, ".turso-migrated"))).toBe(false);
-          expect(JSON.parse(readFileSync(lockPath, "utf-8")).pid).toBe(2147483647);
+          const replacement = JSON.parse(readFileSync(lockPath, "utf-8"));
+          expect(replacement.pid).toBe(loseLock === true ? 2147483647 : process.pid);
+          if (loseLock === "same-process") expect(replacement.id).toBe("successor");
         } else {
           await runLegacyTursoMigration();
           expect(inserted).toBe(51);
