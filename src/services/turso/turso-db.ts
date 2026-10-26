@@ -1,6 +1,15 @@
 import type { Database } from "@tursodatabase/database";
 import { log } from "../logger.js";
 
+/** Logging failures (ENOSPC, EACCES) must never abort a database close. */
+function safeLog(message: string, data?: unknown): void {
+  try {
+    log(message, data);
+  } catch {
+    // swallow — the close matters more than the diagnostic
+  }
+}
+
 export type SqlValue = null | string | number | bigint | boolean | Uint8Array | ArrayBuffer;
 export type SqlArgs = SqlValue[] | Record<string, SqlValue>;
 
@@ -240,13 +249,13 @@ export class TursoDb {
       // `PRAGMA wal_checkpoint` returns {busy, log, checkpointed}; busy>0 means a
       // reader blocked the truncate and the WAL was only partially checkpointed.
       const result = Array.isArray(rows) ? rows[0] : undefined;
-      log("Turso WAL checkpoint before close", {
+      safeLog("Turso WAL checkpoint before close", {
         busy: result?.busy,
         log: result?.log,
         checkpointed: result?.checkpointed,
       });
     } catch (error) {
-      log("Turso WAL checkpoint before close failed", { error: String(error) });
+      safeLog("Turso WAL checkpoint before close failed", { error: String(error) });
     } finally {
       if (timer !== undefined) clearTimeout(timer);
     }
@@ -255,5 +264,18 @@ export class TursoDb {
   async close(): Promise<void> {
     await this.checkpointBeforeClose();
     await this.database.close();
+  }
+
+  /**
+   * Close without the WAL checkpoint, for the synchronous `exit` handler where
+   * async continuations never run. The turso async `close()` calls the native
+   * close in its first statement with nothing awaited before it, so an
+   * un-awaited call really does release the handle — but it leaves the `-wal`
+   * in place, which is unavoidable without an event loop.
+   */
+  closeSync(): void {
+    // Errors surface as a rejected promise (never a throw) and are ignored:
+    // the process is exiting and there is no budget left to act on them.
+    void this.database.close().catch(() => {});
   }
 }

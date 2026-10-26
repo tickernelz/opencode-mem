@@ -235,7 +235,7 @@ export class TursoConnectionManager {
   closeAllSync(): void {
     for (const [path, db] of this.connections) {
       try {
-        void db.close();
+        db.closeSync();
       } catch (error) {
         log("Error closing Turso database (sync)", { path, error: String(error) });
       }
