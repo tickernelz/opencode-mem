@@ -1,14 +1,5 @@
 import type { Database } from "@tursodatabase/database";
-import { log } from "../logger.js";
-
-/** Logging failures (ENOSPC, EACCES) must never abort a database close. */
-function safeLog(message: string, data?: unknown): void {
-  try {
-    log(message, data);
-  } catch {
-    // swallow — the close matters more than the diagnostic
-  }
-}
+import { safeLog } from "../logger.js";
 
 export type SqlValue = null | string | number | bigint | boolean | Uint8Array | ArrayBuffer;
 export type SqlArgs = SqlValue[] | Record<string, SqlValue>;

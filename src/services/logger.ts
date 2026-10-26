@@ -141,6 +141,19 @@ export function serializeError(error: unknown): {
   return { error: String(error) };
 }
 
+/**
+ * Log without letting a logger failure escape. `log()` initialises the log
+ * directory lazily and can throw on ENOSPC/EACCES; callers on a teardown path
+ * must never let a diagnostic write skip the work that follows it.
+ */
+export function safeLog(message: string, data?: unknown): void {
+  try {
+    log(message, data);
+  } catch {
+    // swallow — the caller's cleanup matters more than this line
+  }
+}
+
 export function log(message: string, data?: unknown) {
   ensureLoggerInitialized();
 

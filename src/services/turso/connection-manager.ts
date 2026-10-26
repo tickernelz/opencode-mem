@@ -3,7 +3,7 @@ import type { DatabaseOpts, EncryptionOpts } from "@tursodatabase/database-commo
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve, relative, isAbsolute, sep } from "node:path";
 import { CONFIG } from "../../config.js";
-import { log } from "../logger.js";
+import { safeLog } from "../logger.js";
 import { collectReleasedSqliteHandles } from "./sqlite-handle-release.js";
 import { TursoDb } from "./turso-db.js";
 import { resolveOrCreateDatabaseEncryptionKey } from "./encryption-key.js";
@@ -188,7 +188,7 @@ export class TursoConnectionManager {
           try {
             await db.close();
           } catch (error) {
-            log("Error closing Turso database", { path: dbPath, error: String(error) });
+            safeLog("Error closing Turso database", { path: dbPath, error: String(error) });
           }
 
           this.connections.delete(dbPath);
@@ -216,7 +216,7 @@ export class TursoConnectionManager {
           try {
             await db.close();
           } catch (error) {
-            log("Error closing Turso database", { path, error: String(error) });
+            safeLog("Error closing Turso database", { path, error: String(error) });
           }
         })
       );
@@ -237,7 +237,7 @@ export class TursoConnectionManager {
       try {
         db.closeSync();
       } catch (error) {
-        log("Error closing Turso database (sync)", { path, error: String(error) });
+        safeLog("Error closing Turso database (sync)", { path, error: String(error) });
       }
     }
     this.connections.clear();
