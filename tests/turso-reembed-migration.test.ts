@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
+import * as fs from "node:fs";
 import {
   copyFileSync,
   existsSync,
@@ -172,6 +173,51 @@ describe("turso re-embed migration safety", () => {
       }
     });
   }
+
+  it("preserves a successor re-embed journal after ownership loss", async () => {
+    const shard = await createSourceShard();
+    await stubEmbedding();
+    const { CONFIG } = await import("../src/config.js");
+    CONFIG.embeddingDimensions = 4;
+    const { TURSO_LOCK_STALE_MS } = await import("../src/services/turso/operation-lock.js");
+    const lockPath = join(baseDir, ".turso-operation.lock");
+    const statePath = `${shard.dbPath}.reembed-swap.json`;
+    const successorJournal = {
+      dbPath: shard.dbPath,
+      stagedPath: `${shard.dbPath}.reembed-successor.tmp`,
+      backupPath: `${shard.dbPath}.pre-reembed-successor.bak`,
+      owner: "successor",
+    };
+    const originalWrite = fs.writeFileSync;
+    const write = spyOn(fs, "writeFileSync").mockImplementation(((
+      ...args: Parameters<typeof originalWrite>
+    ) => {
+      originalWrite(...args);
+      const target = String(args[0]);
+      if (!target.endsWith(".reembed-swap.json")) return;
+      originalWrite(statePath, JSON.stringify(successorJournal), "utf-8");
+      const lock = JSON.parse(readFileSync(lockPath, "utf-8"));
+      originalWrite(
+        lockPath,
+        JSON.stringify({
+          ...lock,
+          id: "foreign-acquisition",
+          pid: 2147483647,
+          timestamp: new Date(Date.now() - TURSO_LOCK_STALE_MS - 60_000).toISOString(),
+        })
+      );
+    }) as typeof originalWrite);
+
+    try {
+      const { migrationService } = await import("../src/services/migration-service.js");
+      const result = await migrationService.migrateToNewModel("re-embed");
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("ownership lost");
+      expect(JSON.parse(readFileSync(statePath, "utf-8"))).toEqual(successorJournal);
+    } finally {
+      write.mockRestore();
+    }
+  });
 
   it("archives source shards instead of deleting them during fresh start", async () => {
     const shard = await createSourceShard();

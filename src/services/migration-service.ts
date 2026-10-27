@@ -8,7 +8,10 @@ import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
 import { formatTagsForEmbedding } from "./turso/vector-utils.js";
 import type { MemoryRecord, ShardInfo } from "./turso/types.js";
-import { acquireTursoOperationLock } from "./turso/operation-lock.js";
+import {
+  acquireTursoOperationLock,
+  isTursoLockOwnershipLostError,
+} from "./turso/operation-lock.js";
 import {
   withSqliteFileLockRetry,
   renameSqliteDatabase,
@@ -201,6 +204,8 @@ export class MigrationService {
     startTime: number,
     heartbeat: () => void
   ): Promise<MigrationResult> {
+    // Warmup (ONNX load / remote probes) can outlast a single lease window.
+    heartbeat();
     await embeddingService.warmup();
     heartbeat();
     embeddingService.clearCache();
@@ -392,11 +397,24 @@ export class MigrationService {
       return stagedCount;
     } catch (error) {
       await tursoConnectionManager.closeConnection(stagedPath);
-      if (existsSync(stagedPath)) {
-        await withSqliteFileLockRetry(() => removeSqliteDatabase(stagedPath));
-      }
-      if (existsSync(swapStatePath) && existsSync(shard.dbPath)) {
-        unlinkSync(swapStatePath);
+      if (isTursoLockOwnershipLostError(error)) {
+        // The journal path is shared per shard. A successor may already own it
+        // (and the lock); never unlink it after ownership loss. Only discard our
+        // nonce-scoped staged file when the source shard is still in place.
+        log(
+          "WARNING: Re-embed interrupted after lock ownership lost; leaving swap journal untouched",
+          { error: String(error), swapStatePath, dbPath: shard.dbPath }
+        );
+        if (existsSync(shard.dbPath) && existsSync(stagedPath)) {
+          await withSqliteFileLockRetry(() => removeSqliteDatabase(stagedPath));
+        }
+      } else {
+        if (existsSync(stagedPath)) {
+          await withSqliteFileLockRetry(() => removeSqliteDatabase(stagedPath));
+        }
+        if (existsSync(swapStatePath) && existsSync(shard.dbPath)) {
+          unlinkSync(swapStatePath);
+        }
       }
       throw error;
     }
