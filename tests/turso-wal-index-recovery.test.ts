@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  rmSync,
   statSync,
   utimesSync,
   writeFileSync,
@@ -338,13 +339,18 @@ describe("turso WAL index recovery", () => {
     // Freeze the clock so the timestamped quarantine dir is predictable.
     setSystemTime(new Date("2026-01-02T03:04:05.678Z"));
     const quarantineDir = join(baseDir, "recovery", "memories-2026-01-02T03-04-05-678Z");
-    const blocker = join(quarantineDir, "memories.db-tshm");
+    // Block the second sidecar (-shm). -tshm is moved first so a partial
+    // quarantine still removes the Turso index that blocks open.
+    const blocker = join(quarantineDir, "memories.db-shm");
     mkdirSync(blocker, { recursive: true });
     writeFileSync(join(blocker, "blocker"), "x");
 
+    let liveOpens = 0;
     const connectFactory = async (path: string) => {
       if (path === dbPath) {
-        throw new Error(SHORT_READ);
+        liveOpens += 1;
+        // Fail open, lock recheck, and the post-partial retry.
+        if (liveOpens <= 3) throw new Error(SHORT_READ);
       }
       return stubDatabase([{ integrity_check: "ok" }]);
     };
@@ -357,18 +363,62 @@ describe("turso WAL index recovery", () => {
       await manager.closeAll();
     }
 
-    // -shm moved before the -tshm rename failed; the WAL was untouched.
+    // -tshm moved before the -shm rename failed; the WAL was untouched.
+    // The blocker directory remains under the quarantine name.
     expect(readdirSync(quarantineDir).sort()).toEqual(["memories.db-shm", "memories.db-tshm"]);
-    expect(existsSync(`${dbPath}-shm`)).toBe(false);
-    expect(existsSync(`${dbPath}-tshm`)).toBe(true);
+    expect(existsSync(`${dbPath}-tshm`)).toBe(false);
+    expect(existsSync(`${dbPath}-shm`)).toBe(true);
     expect(existsSync(`${dbPath}-wal`)).toBe(true);
     expect(recoveryEntries(baseDir).filter((entry) => entry.endsWith(".lock"))).toEqual([]);
+    // open + recheck + partial-failure retry
+    expect(liveOpens).toBe(3);
 
     const logged = readFileSync(logFile, "utf8");
     expect(logged).toContain("WAL index recovery failed");
     expect(logged).toContain(dbPath);
     expect(logged).toContain(quarantineDir);
     expect(logged).toContain("short read on WAL frame");
+  });
+
+  it("can finish recovery in-process after a quarantine that moved nothing", async () => {
+    const dbPath = await prepare("turso-heal-fs-retry-");
+    setSystemTime(new Date("2026-01-02T03:04:05.678Z"));
+    const quarantineDir = join(baseDir, "recovery", "memories-2026-01-02T03-04-05-678Z");
+    // Block the first sidecar so the first attempt moves nothing.
+    const blocker = join(quarantineDir, "memories.db-tshm");
+    mkdirSync(blocker, { recursive: true });
+    writeFileSync(join(blocker, "blocker"), "x");
+
+    let liveOpens = 0;
+    const connectFactory = async (path: string) => {
+      if (path === dbPath) {
+        liveOpens += 1;
+        // First attempt: open + recheck fail (no post-quarantine retry — nothing moved).
+        // Second attempt: open + recheck fail, then succeed after a real quarantine.
+        if (liveOpens <= 4) throw new Error(SHORT_READ);
+      }
+      return stubDatabase([{ integrity_check: "ok" }]);
+    };
+
+    const { TursoConnectionManager } = await import("../src/services/turso/connection-manager.js");
+    const manager = new TursoConnectionManager(connectFactory);
+    try {
+      await expect(manager.getConnection(dbPath)).rejects.toThrow(/short read on WAL frame/);
+      expect(existsSync(`${dbPath}-tshm`)).toBe(true);
+      expect(existsSync(`${dbPath}-shm`)).toBe(true);
+
+      // Clear the blocker so the next open can quarantine both sidecars.
+      rmSync(blocker, { recursive: true, force: true });
+
+      await manager.getConnection(dbPath);
+    } finally {
+      await manager.closeAll();
+    }
+
+    expect(existsSync(`${dbPath}-tshm`)).toBe(false);
+    expect(existsSync(`${dbPath}-shm`)).toBe(false);
+    expect(quarantineDirs(baseDir).length).toBeGreaterThanOrEqual(1);
+    expect(liveOpens).toBe(5);
   });
 
   it("takes over a stale recovery lock and proceeds", async () => {

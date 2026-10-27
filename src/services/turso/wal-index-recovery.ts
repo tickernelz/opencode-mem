@@ -53,8 +53,12 @@ const WAL_INDEX_CORRUPTION_PATTERNS = [
   /invalid page type:\s*0\b/i,
 ];
 
-/** Index sidecars that are moved aside. The WAL itself is handled separately. */
-export const WAL_INDEX_SIDECAR_SUFFIXES = ["-shm", "-tshm"] as const;
+/**
+ * Index sidecars that are moved aside. The WAL itself is handled separately.
+ * `-tshm` is moved first: it is the Turso index that blocks open, so a partial
+ * quarantine that stops after the first rename is more likely to already heal.
+ */
+export const WAL_INDEX_SIDECAR_SUFFIXES = ["-tshm", "-shm"] as const;
 export const WAL_FILE_SUFFIX = "-wal";
 
 /** A lock older than this is assumed to belong to a crashed healer. */

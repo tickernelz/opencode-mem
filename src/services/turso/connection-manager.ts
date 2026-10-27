@@ -104,7 +104,11 @@ export class TursoConnectionManager {
   private readonly pending = new Map<string, Promise<TursoDb>>();
   private readonly closingConnections = new Map<string, Promise<void>>();
   private closingPromise: Promise<void> | null = null;
-  /** One WAL-index recovery attempt per path per process — never loop. */
+  /**
+   * Paths that already had a completed recovery attempt this process (no loop).
+   * Set after a successful quarantine or a definitive skip — not when quarantine
+   * moved nothing, so a later open can still finish a blocked first attempt.
+   */
   private readonly healedPaths = new Set<string>();
   private readonly warnedForeignShmPaths = new Set<string>();
 
@@ -158,8 +162,6 @@ export class TursoConnectionManager {
         });
       }
 
-      this.healedPaths.add(dbPath);
-
       try {
         // The peer may have healed between our failed open and taking the lock.
         try {
@@ -192,9 +194,29 @@ export class TursoConnectionManager {
             moved: outcome.moved,
             error: String(error),
           });
-          throw error;
+          // A partial move (e.g. -tshm gone, -shm rename failed) may already be
+          // enough to open. Retry once when anything moved; leave healedPaths
+          // clear when nothing moved so a later attempt can finish the job.
+          if (outcome.moved.length === 0) {
+            throw error;
+          }
+          this.healedPaths.add(dbPath);
+          try {
+            return await this.connectFactory(dbPath, opts);
+          } catch (retryError) {
+            log("Turso open still failing after a partial WAL index recovery", {
+              path: dbPath,
+              quarantineDir: outcome.quarantineDir,
+              moved: outcome.moved,
+              error: String(retryError),
+            });
+            throw error;
+          }
         }
         if (outcome.status === "skipped") {
+          // Retrying the same path will not help (missing main file / bad copy /
+          // nothing to move). Remember so we do not keep copying the database.
+          this.healedPaths.add(dbPath);
           log("Turso open failed and the store was left untouched (no recovery attempted)", {
             path: dbPath,
             reason: outcome.reason,
@@ -203,6 +225,11 @@ export class TursoConnectionManager {
           });
           throw error;
         }
+
+        // Quarantine completed: mark before the retry so a still-corrupt store
+        // cannot loop. Do not mark earlier — a mid-quarantine failure with
+        // nothing useful moved must remain retryable in this process.
+        this.healedPaths.add(dbPath);
 
         log("Moved stale WAL index sidecars aside after a Turso open failure; retrying once", {
           path: dbPath,
