@@ -219,15 +219,18 @@ export class TursoDb {
    * teardown cannot leave a 0-byte `-wal` beside a stale `-tshm` (every later
    * open then fails with "short read on WAL frame"). Never throws: a busy or
    * slow checkpoint is logged and skipped.
+   *
+   * The timeout only bounds how long we *prefer* to wait before logging a
+   * failure — turso's `close()` does not take `execLock`, so we must still
+   * await settlement of the pragma before returning. Closing under an
+   * in-flight statement would recreate the tear this helper exists to avoid.
+   * A truncate stuck on a foreign reader can therefore still hold shutdown
+   * past the bound until the reader leaves (or the host SIGKILLs).
    */
   private async checkpointBeforeClose(): Promise<void> {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const checkpoint = this.database.all("PRAGMA wal_checkpoint(TRUNCATE)");
     try {
-      const checkpoint = this.database.all("PRAGMA wal_checkpoint(TRUNCATE)");
-      // Keep the checkpoint observed even when the timeout wins the race: a
-      // late "database is locked" rejection must not escape as unhandled while
-      // the host is tearing the process down.
-      void checkpoint.catch(() => {});
       const rows = await Promise.race([
         checkpoint,
         new Promise<never>((_, reject) => {
@@ -249,6 +252,10 @@ export class TursoDb {
       safeLog("Turso WAL checkpoint before close failed", { error: String(error) });
     } finally {
       if (timer !== undefined) clearTimeout(timer);
+      // Always drain the pragma before close(), including after a timeout win:
+      // a late rejection must not escape unhandled, and the native close must
+      // not race an in-flight statement on the same handle.
+      await checkpoint.catch(() => {});
     }
   }
 

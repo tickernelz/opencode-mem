@@ -74,13 +74,39 @@ describe("turso close checkpoint", () => {
       await db.close();
 
       expect(calls).toEqual(["all", "close"]);
-
-      // Give the abandoned checkpoint time to reject and surface.
-      await new Promise((resolve) => setTimeout(resolve, 150));
       expect(unhandled).toEqual([]);
     } finally {
       process.off("unhandledRejection", onUnhandled);
     }
+  });
+
+  it("waits for a timed-out checkpoint to settle before closing", async () => {
+    // turso's close() does not take execLock — closing under an in-flight
+    // pragma would race the native handle. After the timeout fires we must
+    // still drain the checkpoint before close runs.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const calls: string[] = [];
+    const database = {
+      async all() {
+        calls.push("all");
+        await gate;
+        return [{ busy: 0, log: 0, checkpointed: 0 }];
+      },
+      async close() {
+        calls.push("close");
+      },
+    } as unknown as Database;
+
+    const closing = new TursoDb(database, 10).close();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(calls).toEqual(["all"]);
+
+    release();
+    await closing;
+    expect(calls).toEqual(["all", "close"]);
   });
 
   it("still closes when logging fails", async () => {
