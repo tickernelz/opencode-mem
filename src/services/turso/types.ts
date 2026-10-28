@@ -30,6 +30,11 @@ export interface MemoryRecord {
   gitRepoUrl?: string;
 }
 
+export interface MemoryListFilters {
+  excludeSessionId?: string;
+  createdAfter?: number;
+}
+
 export interface SearchResult {
   id: string;
   memory: string;

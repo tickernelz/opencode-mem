@@ -1,7 +1,7 @@
 import { tursoConnectionManager } from "./connection-manager.js";
 import { tursoShardManager } from "./shard-manager.js";
 import { log } from "../logger.js";
-import type { MemoryRecord, SearchResult, ShardInfo } from "./types.js";
+import type { MemoryListFilters, MemoryRecord, SearchResult, ShardInfo } from "./types.js";
 import {
   distanceToSimilarity,
   escapeLikePattern,
@@ -359,26 +359,37 @@ export class TursoVectorSearch {
   async listMemories(
     db: TursoDb,
     containerTag: string,
-    limit: number
+    limit: number,
+    filters: MemoryListFilters = {}
   ): Promise<Record<string, unknown>[]> {
-    return containerTag === ""
-      ? db.all(
-          `
+    const conditions: string[] = [];
+    const args: Array<string | number> = [];
+    if (containerTag !== "") {
+      conditions.push("container_tag = ?");
+      args.push(containerTag);
+    }
+    if (filters.excludeSessionId !== undefined) {
+      // Match the existing metadata.sessionID filter, including legacy rows
+      // without session_id and absent/malformed metadata that parses as unknown.
+      conditions.push(
+        `CASE WHEN json_valid(metadata) THEN json_extract(metadata, '$.sessionID') END IS NOT ?`
+      );
+      args.push(filters.excludeSessionId);
+    }
+    if (filters.createdAfter !== undefined) {
+      conditions.push("created_at > ?");
+      args.push(filters.createdAfter);
+    }
+    args.push(limit);
+    return db.all(
+      `
       SELECT * FROM memories
+      ${conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : ""}
       ORDER BY is_pinned DESC, created_at DESC
       LIMIT ?
     `,
-          [limit]
-        )
-      : db.all(
-          `
-      SELECT * FROM memories
-      WHERE container_tag = ?
-      ORDER BY is_pinned DESC, created_at DESC
-      LIMIT ?
-    `,
-          [containerTag, limit]
-        );
+      args
+    );
   }
 
   async getAllMemories(db: TursoDb): Promise<Record<string, unknown>[]> {

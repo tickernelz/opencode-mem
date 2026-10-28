@@ -232,6 +232,12 @@ Deze instellingen staan onder de `chatMessage`-sleutel in `~/.config/opencode/op
 | `injectionMarkers`                                     | built-ins        | Extra markers die geïnjecteerde blokken identificeren; worden toegevoegd aan de ingebouwde lijst, vervangen die nooit.                                                                                                                                                                                                          |
 | `captureChildSessions`                                 | `false`          | Leg prompts vast van orchestrator-childsessies (sessies met een `parentID`, bijv. OpenCode task/subagent-children). Hun “user”-berichten worden door de parent-agent geschreven, niet door jou, en worden standaard niet opgeslagen, auto-captured, gebruikt voor profiel-leren, of van geïnjecteerde geheugencontext voorzien. |
 
+Uitsluitingen op basis van sessie en leeftijd worden toegepast vóór de limiet voor
+geïnjecteerde herinneringen. Uitgesloten herinneringen nemen daardoor geen plaatsen
+in die voor geschikte herinneringen beschikbaar zijn. Met `chatMessage.maxMemories`
+op `0` wordt het injecteren van projectherinneringen uitgeschakeld; het
+gebruikersprofiel kan nog steeds worden geïnjecteerd als dit is ingeschakeld.
+
 ### Embeddings kiezen / configureren
 
 Embeddings voeden similarity search voor herinneringen en het gebruikersprofiel. Configureer ze in hetzelfde bestand (`~/.config/opencode/opencode-mem.jsonc`). Er is **geen MLX-backend** — lokale embeddings gebruiken `@huggingface/transformers` met ONNX, niet Apple MLX.

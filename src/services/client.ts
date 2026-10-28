@@ -12,7 +12,7 @@ import {
 import { CONFIG } from "../config.js";
 import { log, serializeError } from "./logger.js";
 import type { MemoryType } from "../types/index.js";
-import type { MemoryRecord } from "./turso/types.js";
+import type { MemoryListFilters, MemoryRecord } from "./turso/types.js";
 import {
   deleteMemoryMarkdownFile,
   isMarkdownBackend,
@@ -310,7 +310,12 @@ export class LocalMemoryClient {
     }
   }
 
-  async listMemories(containerTag: string, limit = 20, scope: MemoryScope = "project") {
+  async listMemories(
+    containerTag: string,
+    limit = 20,
+    scope: MemoryScope = "project",
+    filters: MemoryListFilters = {}
+  ) {
     try {
       await this.initialize();
 
@@ -336,7 +341,8 @@ export class LocalMemoryClient {
         const memories = await tursoVectorSearch.listMemories(
           db,
           scope === "all-projects" ? "" : containerTag,
-          limit
+          limit,
+          filters
         );
         allMemories.push(...memories);
       }

@@ -232,6 +232,12 @@ Diese Einstellungen liegen unter dem Schlüssel `chatMessage` in `~/.config/open
 | `injectionMarkers`                                     | Built-ins        | Zusätzliche Marker zur Erkennung injizierter Blöcke; werden zur Built-in-Liste hinzugefügt, ersetzen sie nie.                                                                                                                                                                                                                   |
 | `captureChildSessions`                                 | `false`          | Prompts aus Orchestrator-Child-Sitzungen erfassen (Sitzungen mit `parentID`, z. B. OpenCode-Task-/Subagent-Children). Deren „User“-Nachrichten schreibt der Parent-Agent, nicht du — daher werden sie standardmäßig nicht gespeichert, auto-captured, für Profil-Lernen genutzt oder mit injiziertem Speicher-Kontext versehen. |
 
+Ausschlüsse nach Sitzung und Alter werden vor dem Limit für injizierte Memories
+angewendet. Ausgeschlossene Memories belegen daher keine Plätze, die für geeignete
+Memories verfügbar wären. Mit `chatMessage.maxMemories` auf `0` wird die Injektion
+von Projekt-Memories deaktiviert; das Nutzerprofil kann weiterhin injiziert werden,
+wenn es aktiviert ist.
+
 ### Embeddings wählen / konfigurieren
 
 Embeddings treiben die Ähnlichkeitssuche für Memories und das Benutzerprofil. Konfiguration in derselben Datei (`~/.config/opencode/opencode-mem.jsonc`). Es gibt **kein MLX-Backend** — lokale Embeddings nutzen `@huggingface/transformers` mit ONNX, nicht Apple MLX.

@@ -234,6 +234,11 @@ Bu ayarlar `~/.config/opencode/opencode-mem.jsonc` içindeki `chatMessage` anaht
 | `injectionMarkers`                                     | yerleşikler      | Enjekte edilmiş blokları tanımlayan ek işaretçiler; yerleşik listeye eklenir, asla onun yerine geçmez.                                                                                                                                                                                                                         |
 | `captureChildSessions`                                 | `false`          | Orkestratör alt oturumlarından (`parentID` olan oturumlar, örn. OpenCode görev/alt ajan çocukları) prompt yakala. Bunların “kullanıcı” mesajları sizin değil üst ajan tarafından yazılır; bu nedenle varsayılan olarak saklanmaz, otomatik yakalanmaz, profil öğrenmede kullanılmaz veya enjekte edilmiş bellek bağlamı almaz. |
 
+Oturum ve yaşa göre hariç tutma kuralları, enjekte edilen bellek sayısı sınırından
+önce uygulanır; böylece hariç tutulan bellekler uygun belleklere ayrılabilecek yerleri
+doldurmaz. `chatMessage.maxMemories` değerini `0` yapmak proje belleği enjeksiyonunu
+devre dışı bırakır; kullanıcı profili etkinleştirilmişse yine de enjekte edilebilir.
+
 ### Embedding seçimi / yapılandırması
 
 Embedding’ler bellekler ve kullanıcı profili için benzerlik aramasını güçlendirir. Bunları aynı dosyada yapılandırın (`~/.config/opencode/opencode-mem.jsonc`). **MLX backend yoktur** — yerel embedding’ler Apple MLX değil, ONNX ile `@huggingface/transformers` kullanır.

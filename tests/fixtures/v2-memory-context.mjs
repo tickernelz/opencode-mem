@@ -32,10 +32,17 @@ mock.module(moduleUrl("services/client"), () => ({
   memoryClient: {
     warmup: async () => {},
     close: async () => {},
-    listMemories: async () => {
+    listMemories: async (_tag, limit, _scope, filters = {}) => {
       lookupCount++;
       if (failLookup) throw new Error("fixture lookup failure");
-      return { success: true, memories };
+      const eligible = memories.filter(
+        (memory) =>
+          (filters.excludeSessionId === undefined ||
+            memory.metadata?.sessionID !== filters.excludeSessionId) &&
+          (filters.createdAfter === undefined ||
+            new Date(memory.createdAt).getTime() > filters.createdAfter)
+      );
+      return { success: true, memories: eligible.slice(0, limit) };
     },
   },
 }));

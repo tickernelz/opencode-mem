@@ -705,19 +705,17 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   const loadMemoryContext = async (sessionID: string): Promise<string> => {
     const listResult = await memoryClient.listMemories(
       tags.project.tag,
-      CONFIG.chatMessage.maxMemories
+      CONFIG.chatMessage.maxMemories,
+      "project",
+      {
+        excludeSessionId: CONFIG.chatMessage.excludeCurrentSession ? sessionID : undefined,
+        createdAfter: CONFIG.chatMessage.maxAgeDays
+          ? Date.now() - CONFIG.chatMessage.maxAgeDays * 86400000
+          : undefined,
+      }
     );
 
-    let memories = listResult.success ? listResult.memories : [];
-
-    if (CONFIG.chatMessage.excludeCurrentSession) {
-      memories = memories.filter((m: any) => m.metadata?.sessionID !== sessionID);
-    }
-
-    if (CONFIG.chatMessage.maxAgeDays) {
-      const cutoffDate = Date.now() - CONFIG.chatMessage.maxAgeDays * 86400000;
-      memories = memories.filter((m: any) => new Date(m.createdAt).getTime() > cutoffDate);
-    }
+    const memories = listResult.success ? listResult.memories : [];
 
     // Still format an empty project-memory payload so injectProfile can emit
     // <user_profile> on its own (e.g. chatMessage.maxMemories: 0).

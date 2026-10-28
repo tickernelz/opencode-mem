@@ -232,6 +232,10 @@ memory({ mode: "import", inputPath: "./memories.json" });
 | `injectionMarkers`                                     | 内置             | 识别注入块的额外标记；添加到内置列表，永不替换它。                                                                                                                                              |
 | `captureChildSessions`                                 | `false`          | 捕获编排器子会话的提示（带有 `parentID` 的会话，例如 OpenCode 任务/子代理子会话）。其“用户”消息由父代理写入，而非你本人，因此默认不会存储、自动捕获、用于画像学习，也不会获得注入的记忆上下文。 |
 
+会话和时间范围的排除条件会在应用记忆注入数量上限之前生效，因此被排除的记忆
+不会占用原本可供符合条件的记忆使用的名额。将 `chatMessage.maxMemories` 设为 `0`
+会禁用项目记忆注入，但启用用户画像后仍可注入用户画像。
+
 ### 选择 / 配置嵌入模型
 
 嵌入为记忆与用户画像提供相似性搜索能力。在同一文件中配置（`~/.config/opencode/opencode-mem.jsonc`）。**没有 MLX 后端** — 本地嵌入使用带 ONNX 的 `@huggingface/transformers`，而非 Apple MLX。

@@ -271,6 +271,11 @@ These settings live under the `chatMessage` key in `~/.config/opencode/opencode-
 | `injectionMarkers`                                     | built-ins        | Extra markers identifying injected blocks; added to the built-in list, never replacing it.                                                                                                                                                                                                             |
 | `captureChildSessions`                                 | `false`          | Capture prompts from orchestrator child sessions (sessions with a `parentID`, e.g. OpenCode task/subagent children). Their "user" messages are written by the parent agent, not by you, so by default they are not stored, auto-captured, used for profile learning, or given injected memory context. |
 
+Session and age exclusions are applied before the injected memory limit, so excluded
+memories do not consume slots that could hold eligible memories. Setting
+`chatMessage.maxMemories` to `0` disables project-memory injection while still allowing
+the user profile to be injected when enabled.
+
 ### Choosing / configuring embeddings
 
 Embeddings power similarity search for memories and the user profile. Configure them in the same file (`~/.config/opencode/opencode-mem.jsonc`). There is **no MLX backend** — local embeddings use `@huggingface/transformers` with ONNX, not Apple MLX.
