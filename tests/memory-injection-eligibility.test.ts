@@ -16,6 +16,7 @@ let result: {
   ageFiltered: string[];
   ageDisabled: string[];
   pinned: string[];
+  crossPinned: string[];
   metadata: string[];
   fewer: string[];
   zero: string;
@@ -67,8 +68,14 @@ describe("memory injection eligibility", () => {
     expect(result.pinned).toEqual(["recent-0", "recent-1", "pinned"]);
   });
 
-  it("handles legacy, missing, malformed, and distinct-session metadata", () => {
-    expect(result.metadata).toEqual(["malformed", "missing-metadata", "different-session"]);
+  it("keeps pinned memories when merging shard limits", () => {
+    expect(result.crossPinned).toEqual(["shard1-newest", "shard1-newer", "cross-pinned"]);
+  });
+
+  it("excludes by session_id with metadata fallback for legacy rows", () => {
+    // session_id wins when set (missing-metadata, session-column-only); legacy
+    // metadata.sessionID still excludes; malformed/null session stays eligible.
+    expect(result.metadata).toEqual(["malformed", "different-session"]);
   });
 
   it("returns fewer memories when fewer are eligible", () => {

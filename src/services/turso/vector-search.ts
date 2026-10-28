@@ -369,10 +369,14 @@ export class TursoVectorSearch {
       args.push(containerTag);
     }
     if (filters.excludeSessionId !== undefined) {
-      // Match the existing metadata.sessionID filter, including legacy rows
-      // without session_id and absent/malformed metadata that parses as unknown.
+      // Prefer the indexed session_id column (same resolution as insert/get-by-session),
+      // then fall back to metadata.sessionID for legacy rows. Absent/malformed metadata
+      // with a null session_id stays eligible — matching prior JS undefined semantics.
       conditions.push(
-        `CASE WHEN json_valid(metadata) THEN json_extract(metadata, '$.sessionID') END IS NOT ?`
+        `COALESCE(
+          NULLIF(session_id, ''),
+          CASE WHEN json_valid(metadata) THEN json_extract(metadata, '$.sessionID') END
+        ) IS NOT ?`
       );
       args.push(filters.excludeSessionId);
     }

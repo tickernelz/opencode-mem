@@ -104,6 +104,8 @@ const now = Date.now();
 const realNow = Date.now;
 Date.now = () => now;
 async function add(id, age, session, shard = 0, options = {}) {
+  const sessionColumn =
+    "sessionColumn" in options ? options.sessionColumn : options.legacy ? null : (session ?? null);
   await databases[shard].execute(
     `INSERT INTO memories (id, content, vector, container_tag, created_at, updated_at, metadata, session_id, is_pinned)
      VALUES (?, ?, vector32('[1,0]'), ?, ?, ?, ?, ?, ?)`,
@@ -118,7 +120,7 @@ async function add(id, age, session, shard = 0, options = {}) {
         : session
           ? JSON.stringify({ sessionID: session })
           : null,
-      options.legacy ? null : (session ?? null),
+      sessionColumn,
       options.pinned ? 1 : 0,
     ]
   );
@@ -192,11 +194,23 @@ await add("pinned", 1000, undefined, 0, { pinned: true });
 for (let i = 0; i < 4; i++) await add("recent-" + i, i);
 result.pinned = ids(await plugin.memoryContext.load(sessionID));
 
-// Legacy/malformed metadata follows the existing metadata.sessionID semantics.
+// Across shards, pins must survive the merged limit (not only per-shard ORDER BY).
+await clear();
+await add("cross-pinned", 5000, undefined, 0, { pinned: true });
+await add("shard0-recent", 40, undefined, 0);
+await add("shard1-newer", 10, undefined, 1);
+await add("shard1-newest", 0, undefined, 1);
+result.crossPinned = ids(await plugin.memoryContext.load(sessionID));
+
+// Session exclusion prefers session_id, then metadata.sessionID for legacy rows.
 await clear();
 await add("legacy-current", 0, sessionID, 0, { legacy: true });
 await add("malformed", 10, undefined, 0, { metadata: "not-json" });
 await add("missing-metadata", 20, sessionID, 0, { metadata: null });
+await add("session-column-only", 25, undefined, 0, {
+  metadata: null,
+  sessionColumn: sessionID,
+});
 await add("different-session", 30, sessionID + "-suffix");
 result.metadata = ids(await plugin.memoryContext.load(sessionID));
 

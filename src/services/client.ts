@@ -347,9 +347,17 @@ export class LocalMemoryClient {
         allMemories.push(...memories);
       }
 
-      allMemories.sort((a, b) => Number(b.created_at) - Number(a.created_at));
+      // Match per-shard SQL (is_pinned DESC, created_at DESC) when selecting the
+      // merged limit, then present the chosen rows by recency for injection order.
+      allMemories.sort((a, b) => {
+        const pinDiff = Number(b.is_pinned ?? 0) - Number(a.is_pinned ?? 0);
+        if (pinDiff !== 0) return pinDiff;
+        return Number(b.created_at) - Number(a.created_at);
+      });
+      const selected = allMemories.slice(0, limit);
+      selected.sort((a, b) => Number(b.created_at) - Number(a.created_at));
 
-      const memories = allMemories.slice(0, limit).map((r: any) => ({
+      const memories = selected.map((r: any) => ({
         id: r.id,
         summary: r.content,
         createdAt: safeToISOString(r.created_at),
