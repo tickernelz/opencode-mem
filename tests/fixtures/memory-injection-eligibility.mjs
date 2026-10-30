@@ -37,7 +37,7 @@ mock.module(moduleUrl("config"), () => ({
 }));
 mock.module(moduleUrl("services/embedding"), () => ({
   EmbeddingService: class {},
-  embeddingService: { isWarmedUp: true, warmup: async () => {} },
+  embeddingService: { isWarmedUp: true, warmup: async () => {}, dispose: async () => {} },
 }));
 mock.module(moduleUrl("services/turso/ready"), () => ({
   ensureTursoReady: async () => {},

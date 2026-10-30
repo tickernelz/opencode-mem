@@ -65,6 +65,11 @@ interface OpenCodeMemConfig {
    * When set, passed to `pipeline({ dtype })` and outranks auto-detection.
    */
   embeddingDtype?: string;
+  /**
+   * Release the local ONNX pipeline after this many idle milliseconds.
+   * `0` (default) keeps it loaded for the process lifetime.
+   */
+  embeddingIdleTimeoutMs?: number;
   similarityThreshold?: number;
   maxMemories?: number;
   maxProfileItems?: number;
@@ -286,6 +291,7 @@ const DEFAULTS: Required<
   embeddingDimensions: 768,
   embeddingUseTaskPrefixes: false,
   embeddingPooling: "mean",
+  embeddingIdleTimeoutMs: 0,
   similarityThreshold: 0.6,
   maxMemories: 10,
   maxProfileItems: 5,
@@ -444,6 +450,10 @@ const CONFIG_TEMPLATE = `{
 
   // Optional local ONNX dtype override (e.g. "q8", "fp32"). When unset, transformers.js defaults apply.
   // "embeddingDtype": "q8",
+
+  // Release the local model after this many ms without embedding work.
+  // 0 (default) keeps it loaded for the whole process lifetime.
+  // "embeddingIdleTimeoutMs": 600000,
   
   // Auto-detected dimensions (no need to set manually)
   // "embeddingDimensions": 768,
@@ -941,6 +951,13 @@ export function normalizeEmbeddingDtype(value: unknown): LocalOnnxDtype | undefi
   );
 }
 
+export function normalizeEmbeddingIdleTimeoutMs(value: number): number {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`Invalid embeddingIdleTimeoutMs config: ${String(value)}`);
+  }
+  return value;
+}
+
 function getEmbeddingDimensions(model: string): number {
   const dimensionMap: Record<string, number> = {
     // Local Xenova models
@@ -1122,6 +1139,9 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
       ? fileConfig.embeddingDocumentPrefix
       : embeddingPreset?.documentPrefix;
   const embeddingDtype = normalizeEmbeddingDtype(fileConfig.embeddingDtype);
+  const embeddingIdleTimeoutMs = normalizeEmbeddingIdleTimeoutMs(
+    fileConfig.embeddingIdleTimeoutMs ?? DEFAULTS.embeddingIdleTimeoutMs
+  );
   const autoCaptureMaxContextBytes = normalizeAutoCaptureMaxContextBytes(
     fileConfig.autoCaptureMaxContextBytes ?? DEFAULTS.autoCaptureMaxContextBytes
   );
@@ -1163,6 +1183,7 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     embeddingQueryPrefix,
     embeddingDocumentPrefix,
     embeddingDtype,
+    embeddingIdleTimeoutMs,
     embeddingApiUrl: fileConfig.embeddingApiUrl,
     embeddingApiKey: fileConfig.embeddingApiUrl
       ? resolveSecretValue(fileConfig.embeddingApiKey ?? process.env.OPENAI_API_KEY)

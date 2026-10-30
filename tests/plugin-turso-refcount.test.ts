@@ -78,11 +78,22 @@ describe("plugin Turso refcount (#443)", () => {
 
     const id = await userPromptManager.savePrompt("sess-b", "msg-b", "/tmp/p", "world");
 
+    // Fake a warmed local model so the close path has something to release.
+    const { embeddingService } = await import("../src/services/embedding.js");
+    const released: string[] = [];
+    Object.assign(embeddingService, {
+      pipe: { dispose: async () => released.push("dispose") },
+      isWarmedUp: true,
+    });
+
     await memoryClient.close();
     expect(pluginTursoRefCount()).toBe(1);
     expect((await userPromptManager.getPromptById(id))?.content).toBe("world");
+    // Sibling instance still live: the process-wide model must stay loaded.
+    expect(released).toEqual([]);
 
     await memoryClient.close();
     expect(pluginTursoRefCount()).toBe(0);
+    expect(released).toEqual(["dispose"]);
   });
 });

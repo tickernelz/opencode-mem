@@ -1,5 +1,5 @@
 import { CONFIG } from "../config.js";
-import { log } from "./logger.js";
+import { log, safeLog } from "./logger.js";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -354,12 +354,63 @@ export class EmbeddingService {
   public initError: string | null = null;
   private cache: Map<string, Float32Array> = new Map();
   private cachedFingerprint: string | null = null;
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  private inFlight = 0;
+  /** Release requested while an embed held the pipeline; runs when it drains. */
+  private pendingDispose: string | null = null;
+  /** Bumped by dispose so a slow initialize cannot resurrect a released pipeline. */
+  private generation = 0;
 
   static getInstance(): EmbeddingService {
     if (!(globalThis as any)[GLOBAL_EMBEDDING_KEY]) {
       (globalThis as any)[GLOBAL_EMBEDDING_KEY] = new EmbeddingService();
     }
     return (globalThis as any)[GLOBAL_EMBEDDING_KEY];
+  }
+
+  private clearIdleTimer(): void {
+    if (this.idleTimer !== null) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+  }
+
+  private scheduleIdleDispose(): void {
+    this.clearIdleTimer();
+    // Remote embeddings hold no model in-process, so there is nothing to release.
+    if ((CONFIG.embeddingApiUrl && CONFIG.embeddingApiKey) || !this.isWarmedUp) return;
+    const ms = CONFIG.embeddingIdleTimeoutMs;
+    if (!(ms > 0)) return;
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      void this.dispose("idle-timeout");
+    }, ms);
+    (this.idleTimer as any).unref?.();
+  }
+
+  /** Drop the local pipeline so its weights can be reclaimed; the next embed() re-warms it. */
+  async dispose(reason: string = "dispose"): Promise<void> {
+    this.clearIdleTimer();
+    if (this.inFlight > 0) {
+      // A running embed still holds the pipeline; release once it drains.
+      this.pendingDispose = reason;
+      return;
+    }
+    this.generation++;
+    const pipe = this.pipe;
+    this.pipe = null;
+    this.isWarmedUp = false;
+    this.initPromise = null;
+    this.initError = null;
+    if (pipe?.dispose) {
+      try {
+        await pipe.dispose();
+      } catch (error) {
+        safeLog("Failed to dispose embedding pipeline", { error: String(error) });
+      }
+    }
+    // Teardown path: a logger failure must not escape the idle timer or close().
+    safeLog("Embedding model released", { reason, model: CONFIG.embeddingModel });
   }
 
   async warmup(progressCallback?: (progress: any) => void): Promise<void> {
@@ -384,6 +435,7 @@ export class EmbeddingService {
       }
 
       // Local model path
+      const generation = this.generation;
       const { pipeline } = await ensureTransformersLoaded();
       // Explicit config wins; otherwise auto-resolve from model declaration / cache (#393).
       const dtype = CONFIG.embeddingDtype ?? resolveLocalOnnxDtype(CONFIG.embeddingModel);
@@ -394,12 +446,19 @@ export class EmbeddingService {
           source: CONFIG.embeddingDtype ? "config" : "auto",
         });
       }
-      this.pipe = await pipeline("feature-extraction", CONFIG.embeddingModel, {
+      const pipe = await pipeline("feature-extraction", CONFIG.embeddingModel, {
         ...(dtype ? { dtype } : {}),
         progress_callback: progressCallback,
       });
+      if (generation !== this.generation) {
+        // dispose() ran while the model was loading; keep nothing resident.
+        await (pipe as any).dispose?.();
+        return;
+      }
+      this.pipe = pipe;
       this.isWarmedUp = true;
       this.initError = null;
+      this.scheduleIdleDispose();
       log("Embedding model warmed up", {
         model: CONFIG.embeddingModel,
         pooling: CONFIG.embeddingPooling,
@@ -433,26 +492,42 @@ export class EmbeddingService {
       await this.initPromise;
     }
 
-    let result: Float32Array;
+    this.inFlight++;
+    try {
+      let result: Float32Array;
 
-    if (CONFIG.embeddingApiUrl && CONFIG.embeddingApiKey) {
-      const data: any = await fetchRemoteEmbeddingWithRetry(fetch, input);
-      result = new Float32Array(data.data[0].embedding);
-    } else {
-      const output = await this.pipe(input, {
-        pooling: CONFIG.embeddingPooling,
-        normalize: true,
-      });
-      result = new Float32Array(output.data);
+      if (CONFIG.embeddingApiUrl && CONFIG.embeddingApiKey) {
+        const data: any = await fetchRemoteEmbeddingWithRetry(fetch, input);
+        result = new Float32Array(data.data[0].embedding);
+      } else {
+        const pipe = this.pipe;
+        if (!pipe) {
+          throw new Error("Embedding model was released before the request ran");
+        }
+        const output = await pipe(input, {
+          pooling: CONFIG.embeddingPooling,
+          normalize: true,
+        });
+        result = new Float32Array(output.data);
+      }
+
+      if (this.cache.size >= MAX_CACHE_SIZE) {
+        const firstKey = this.cache.keys().next().value;
+        if (firstKey !== undefined) this.cache.delete(firstKey);
+      }
+      this.cache.set(input, result);
+
+      return result;
+    } finally {
+      this.inFlight--;
+      if (this.pendingDispose) {
+        const reason = this.pendingDispose;
+        this.pendingDispose = null;
+        void this.dispose(reason);
+      } else {
+        this.scheduleIdleDispose();
+      }
     }
-
-    if (this.cache.size >= MAX_CACHE_SIZE) {
-      const firstKey = this.cache.keys().next().value;
-      if (firstKey !== undefined) this.cache.delete(firstKey);
-    }
-    this.cache.set(input, result);
-
-    return result;
   }
 
   async embedWithTimeout(text: string, options?: EmbedOptions): Promise<Float32Array> {
