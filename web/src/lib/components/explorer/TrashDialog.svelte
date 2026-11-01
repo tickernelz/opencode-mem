@@ -45,15 +45,15 @@
   >
     <div
       class={cn(
-        "bg-background max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-lg border shadow-lg",
+        "bg-background flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border shadow-lg",
         STACK
       )}
     >
-      <div class={cn("flex items-center justify-between border-b px-4 py-3", GAP)}>
+      <div class={cn("flex shrink-0 items-center justify-between border-b px-4 py-3", GAP)}>
         <h2 id="trash-dialog-title" class="text-lg font-semibold">{i18n.t("modal-trash-title")}</h2>
         <Button type="button" variant="outline" onclick={close}>{i18n.t("btn-cancel")}</Button>
       </div>
-      <div class="overflow-y-auto px-4 py-3">
+      <div class="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {#if loading}
           <p class="text-muted-foreground text-sm">{i18n.t("loading-trash")}</p>
         {:else if items.length === 0}
