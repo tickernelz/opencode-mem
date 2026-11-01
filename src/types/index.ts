@@ -27,4 +27,5 @@ export type AIProviderType =
   | "minimax"
   | "google-gemini"
   | "orcarouter"
-  | "runcrate";
+  | "runcrate"
+  | "cloudgpu";

@@ -9,6 +9,7 @@ import { APIRouteProvider } from "./providers/api-route.js";
 import { CheaperInferenceProvider } from "./providers/cheaper-inference.js";
 import { OrcaRouterProvider } from "./providers/orcarouter.js";
 import { RuncrateProvider } from "./providers/runcrate.js";
+import { CloudGPUProvider } from "./providers/cloudgpu.js";
 import { aiSessionManager } from "./session/ai-session-manager.js";
 import type { AIProviderType } from "./session/session-types.js";
 
@@ -23,6 +24,9 @@ export class AIProviderFactory {
 
       case "runcrate":
         return new RuncrateProvider(config, aiSessionManager);
+
+      case "cloudgpu":
+        return new CloudGPUProvider(config, aiSessionManager);
 
       case "cheaper-inference":
         return new CheaperInferenceProvider(config, aiSessionManager);
@@ -62,6 +66,7 @@ export class AIProviderFactory {
       "google-gemini",
       "orcarouter",
       "runcrate",
+      "cloudgpu",
     ];
   }
 
