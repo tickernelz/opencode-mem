@@ -65,6 +65,9 @@ const { userPromptManager: mgr, UserPromptManager } = await import(
 const { tursoConnectionManager } = await import(u("services/turso/connection-manager"));
 const { CaptureEvidenceRecorder } = await import(u("services/capture-evidence"));
 const { performAutoCapture } = await import(u("services/auto-capture"));
+async function expectObserveResolves(recorder, event) {
+  await recorder.observe(event);
+}
 const ctx = {
   client: {
     session: {
@@ -179,6 +182,42 @@ try {
     }
   }
   await emit(scenario.deletedCheckpoint ? "session.deleted" : "session.idle", { sessionID: "s" });
+  if (scenario.lateAfterCheckpoint) {
+    // Buffered late events must not rebind and flip ready back to 0.
+    await emit("message.updated", {
+      info: { id: "a-late", sessionID: "s", role: "assistant", parentID: "u" },
+    });
+    if (scenario.v1) {
+      await emit("message.part.updated", {
+        part: {
+          id: "late-text",
+          sessionID: "s",
+          messageID: "a-late",
+          type: "text",
+          text: "LATE_SHOULD_NOT_UNREADY",
+          time: { end: 1 },
+        },
+      });
+    } else {
+      await emit("session.text.ended", {
+        sessionID: "s",
+        assistantMessageID: "a-late",
+        ordinal: 99,
+        text: "LATE_SHOULD_NOT_UNREADY",
+      });
+    }
+  }
+  if (scenario.observeThrows) {
+    const original = mgr.markCaptureEvidenceReady.bind(mgr);
+    mgr.markCaptureEvidenceReady = async () => {
+      throw new Error("checkpoint write failed");
+    };
+    await expectObserveResolves(recorder, {
+      type: "session.deleted",
+      properties: { sessionID: "s" },
+    });
+    mgr.markCaptureEvidenceReady = original;
+  }
   await recorder.drain();
   const evidence = await mgr.getCaptureEvidence(id, project);
   if (scenario.restart) {

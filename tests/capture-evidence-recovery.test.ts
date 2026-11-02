@@ -74,6 +74,20 @@ describe("deleted-session durable evidence recovery", () => {
   it("uses deletion as a checkpoint for already observed evidence", () => {
     expect(run({ deletedCheckpoint: true }).counters).toEqual({ fetch: 0, summary: 1, persist: 1 });
   });
+  for (const v1 of [false, true]) {
+    it(`keeps checkpointed ${v1 ? "V1" : "V2"} evidence ready despite late buffered events`, () => {
+      const r = run({ v1, deletedCheckpoint: true, lateAfterCheckpoint: true });
+      expect(r.evidence).toContain("Changed synthetic implementation and verified tests");
+      expect(r.evidence).not.toContain("LATE_SHOULD_NOT_UNREADY");
+      expect(r.counters).toEqual({ fetch: 0, summary: 1, persist: 1 });
+      expect(r.prompt.captured).toBe(true);
+    });
+  }
+  it("observe settles after a checkpoint write failure so callers can still recover", () => {
+    const r = run({ deletedCheckpoint: true, observeThrows: true });
+    expect(r.evidence).toContain("Changed synthetic implementation");
+    expect(r.counters).toEqual({ fetch: 0, summary: 1, persist: 1 });
+  });
   it("prefers the live host transcript over ready evidence when the session still exists", () => {
     const r = run({ liveHost: true });
     expect(r.counters).toEqual({ fetch: 1, summary: 1, persist: 1 });

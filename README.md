@@ -609,10 +609,14 @@ Troubleshooting:
 - V2 events are a volatile stream: disconnected/missed events, unresolvable prompt
   association, and evidence lost to expiry/eviction cannot be recovered. The guarantee
   is capture from evidence received, saved, and checkpointed ready by an idle/deleted
-  event, not reconstruction of unseen or previously deleted transcripts. A disconnect
-  before that terminal checkpoint leaves the partial evidence deferred until a later
-  checkpoint; restart does not assume unfinished work is complete. V1 uses explicit assistant parent IDs; V2 freezes the
-  delivered input at step start rather than guessing the latest queued prompt.
+  event, not reconstruction of unseen or previously deleted transcripts. After that
+  checkpoint the session is sealed against late rebinds until the next authored user
+  input (V2 `session.inbox.delivered`, V1 user `message.updated`), so buffered parts
+  cannot flip ready evidence back to unreadiness. A disconnect before the terminal
+  checkpoint leaves the partial evidence deferred until a later checkpoint; restart
+  does not assume unfinished work is complete. V1 uses explicit assistant parent IDs;
+  V2 freezes the delivered input at step start rather than guessing the latest queued
+  prompt.
 - If the live host reports `Session.NotFoundError` (or deletion/startup replay has no
   ready evidence), capture logs `skipped` / `session_not_found`, releases its claim
   without backoff or consuming retries, and skips further host-dependent lookups in that

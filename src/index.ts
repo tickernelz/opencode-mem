@@ -1262,20 +1262,24 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       if (!cleanedUp && isConfigured() && CONFIG.autoCaptureEnabled) {
         try {
           await captureEvidence.observe(event);
-          if (event.type === "session.deleted") {
-            const sessionID = event.properties?.sessionID ?? event.properties?.info?.id;
-            if (typeof sessionID === "string") {
-              // Evidence is already durable and terminal. No deleted-host lookup.
-              void performAutoCapture(ctx, sessionID, directory, {
-                signal: pluginLifetime.signal,
-                preferSavedEvidence: true,
-              }).catch((error) =>
-                log("Deleted-session capture deferred", { error: String(error) })
-              );
-            }
-          }
         } catch (error) {
           log("Capture evidence preservation failed", { error: String(error) });
+        }
+        if (event.type === "session.deleted") {
+          const sessionID = event.properties?.sessionID ?? event.properties?.info?.id;
+          if (typeof sessionID === "string") {
+            // Deletion supersedes a pending idle debounce for the same session.
+            const pendingIdle = idleTimers.get(sessionID);
+            if (pendingIdle) {
+              clearTimeout(pendingIdle);
+              idleTimers.delete(sessionID);
+            }
+            // Evidence checkpoint is best-effort above; still attempt recovery.
+            void performAutoCapture(ctx, sessionID, directory, {
+              signal: pluginLifetime.signal,
+              preferSavedEvidence: true,
+            }).catch((error) => log("Deleted-session capture deferred", { error: String(error) }));
+          }
         }
       }
 

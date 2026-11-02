@@ -1,6 +1,7 @@
 import { userPromptManager } from "./user-prompt/user-prompt-manager.js";
 import { stripPrivateContent, isFullyPrivate } from "./privacy.js";
 import { utf8ByteLength } from "../utils/context-limit.js";
+import { isCaptureEvidenceEvent } from "./capture-evidence-events.js";
 
 const MAX_BINDINGS = 128;
 const MAX_TEXT_BYTES = 65536;
@@ -11,12 +12,12 @@ interface Binding {
   textFull: boolean;
 }
 
-import { isCaptureEvidenceEvent } from "./capture-evidence-events.js";
-
 /** Stream-ordered bindings prevent a queued next prompt from stealing earlier results. */
 export class CaptureEvidenceRecorder {
   private delivered = new Map<string, string>();
   private bindings = new Map<string, Binding>();
+  /** After idle/deleted, refuse new binds until the next authored user input. */
+  private sealed = new Set<string>();
   private chain: Promise<void> = Promise.resolve();
 
   constructor(private directory: string) {}
@@ -24,14 +25,17 @@ export class CaptureEvidenceRecorder {
   observe(event: { type: string; properties?: any }): Promise<void> {
     if (!isCaptureEvidenceEvent(event.type)) return Promise.resolve();
     const next = this.chain.then(() => this.record(event));
+    // Never reject to callers: deleted-session capture must still run after a
+    // best-effort checkpoint even if one evidence write fails.
     this.chain = next.catch(() => {});
-    return next;
+    return this.chain;
   }
 
   async drain(): Promise<void> {
     await this.chain;
     this.delivered.clear();
     this.bindings.clear();
+    this.sealed.clear();
   }
 
   private trim(map: Map<string, unknown>): void {
@@ -39,6 +43,7 @@ export class CaptureEvidenceRecorder {
   }
 
   private async bind(sessionID: string, assistantID: string, messageID: string): Promise<void> {
+    if (this.sealed.has(sessionID)) return;
     const key = `${sessionID}:${assistantID}`;
     if (this.bindings.has(key)) return;
     const prompt = await userPromptManager.getPendingPromptForMessage(
@@ -118,10 +123,17 @@ export class CaptureEvidenceRecorder {
       (event.type === "session.deleted" ? data.info?.id : undefined);
     if (typeof sessionID !== "string") return;
     if (event.type === "session.inbox.delivered") {
+      // A new authored input opens the next turn after an idle/deleted seal.
+      this.sealed.delete(sessionID);
       // Always replace/clear, even for synthetic or private/untracked inputs.
       this.delivered.delete(sessionID);
       if (typeof data.inboxID === "string") this.delivered.set(sessionID, data.inboxID);
       this.trim(this.delivered);
+      return;
+    }
+    if (event.type === "message.updated" && data.info?.role === "user") {
+      // V1 has no inbox.delivered; a new user message unseals the next turn.
+      this.sealed.delete(sessionID);
       return;
     }
     if (event.type === "session.step.started") {
@@ -149,6 +161,8 @@ export class CaptureEvidenceRecorder {
       this.delivered.delete(sessionID);
       for (const key of this.bindings.keys())
         if (key.startsWith(`${sessionID}:`)) this.bindings.delete(key);
+      // Seal so buffered late parts cannot rebind and flip ready back to 0.
+      this.sealed.add(sessionID);
       return;
     }
     const part = data.part;
