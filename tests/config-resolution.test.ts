@@ -549,6 +549,59 @@ describe("project-scoped config resolution", () => {
       /Project config cannot set remote provider fields: memoryProvider/
     );
   });
+  it("resolves CloudGPU API key from CLOUDGPU_API_KEY and marks manual ready", () => {
+    const originalApiKey = process.env.CLOUDGPU_API_KEY;
+    process.env.CLOUDGPU_API_KEY = "cloudgpu-test-key";
+
+    try {
+      existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+      readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
+        const path = normalizePath(p);
+        if (path.includes(".opencode/opencode-mem")) {
+          return JSON.stringify({ autoCaptureEnabled: true }) as any;
+        }
+        return JSON.stringify({ memoryProvider: "cloudgpu" }) as any;
+      });
+
+      initConfig("/my/project");
+
+      expect(CONFIG.memoryProvider).toBe("cloudgpu");
+      expect(CONFIG.memoryModel).toBeUndefined();
+      expect(CONFIG.memoryApiUrl).toBeUndefined();
+      expect(CONFIG.memoryApiKey).toBe("cloudgpu-test-key");
+      expect(CONFIG.autoCaptureProviderStatus).toEqual({
+        ready: true,
+        mode: "manual",
+        issues: [],
+      });
+    } finally {
+      if (originalApiKey === undefined) {
+        delete process.env.CLOUDGPU_API_KEY;
+      } else {
+        process.env.CLOUDGPU_API_KEY = originalApiKey;
+      }
+    }
+  });
+
+  it("refuses a project config that switches memoryProvider to CloudGPU", () => {
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+    readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
+      const path = normalizePath(p);
+      if (path.includes(".opencode/opencode-mem")) {
+        return JSON.stringify({ memoryProvider: "cloudgpu" }) as any;
+      }
+      return JSON.stringify({
+        memoryProvider: "openai-chat",
+        memoryModel: "global-model",
+        memoryApiUrl: "https://llm.example.com/v1",
+        memoryApiKey: "global-secret",
+      }) as any;
+    });
+
+    expect(() => initConfig("/my/project")).toThrow(
+      /Project config cannot set remote provider fields: memoryProvider/
+    );
+  });
 });
 
 describe("structured-output timeout derivation", () => {

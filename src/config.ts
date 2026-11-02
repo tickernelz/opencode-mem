@@ -107,7 +107,8 @@ interface OpenCodeMemConfig {
     | "anthropic"
     | "minimax"
     | "orcarouter"
-    | "runcrate";
+    | "runcrate"
+    | "cloudgpu";
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
@@ -308,7 +309,8 @@ const DEFAULTS: Required<
     | "anthropic"
     | "minimax"
     | "orcarouter"
-    | "runcrate";
+    | "runcrate"
+    | "cloudgpu";
   memoryTemperature?: number | false;
   forceToolChoice?: boolean;
   memoryExtraParams?: Record<string, unknown>;
@@ -632,7 +634,7 @@ const CONFIG_TEMPLATE = `{
   // "updateOnCaptureSimilarityThreshold": 0.75,
   // "updateOnCaptureMaxCandidates": 5,
   
-  // Provider type: "api-route" | "atlas-cloud" | "cheaper-inference" | "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "orcarouter" | "runcrate"
+  // Provider type: "api-route" | "atlas-cloud" | "cheaper-inference" | "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "orcarouter" | "runcrate" | "cloudgpu"
   // Note: "openai-chat" is a generic OpenAI API-compatible mode.
   // Any service that follows the OpenAI Chat Completions API can use it via custom "memoryApiUrl".
   "memoryProvider": "openai-chat",
@@ -732,6 +734,16 @@ const CONFIG_TEMPLATE = `{
   //   // conversation context are sent to api.runcrate.ai.
   //   // "memoryModel": "deepseek-ai/DeepSeek-V4.1-Flash"
 
+  // CloudGPU (OpenAI-compatible Chat Completions preset, with session support):
+  //   "memoryProvider": "cloudgpu"
+  //   "memoryApiKey": "env://CLOUDGPU_API_KEY"
+  //   // memoryApiUrl and memoryModel are optional — they default to
+  //   // https://cloudgpu.app/v1 and "deepseek-v4.1-flash".
+  //   // Create a key at https://cloudgpu.app/api/console (docs: https://cloudgpu.app/api/docs).
+  //   // When selected, auto-capture/profile prompts, responses, and relevant
+  //   // conversation context are sent to cloudgpu.app.
+  //   // "memoryModel": "deepseek-v4.1-flash"
+
   // Groq (OpenAI-compatible, use openai-chat provider):
   //   "memoryProvider": "openai-chat"
   //   "memoryModel": "llama-3.3-70b-versatile"
@@ -767,7 +779,7 @@ const CONFIG_TEMPLATE = `{
   // Set to false and add "memoryTemperature": false in config when using such models
   "memoryTemperature": 0.3,
 
-  // Force tool calls on openai-chat / orcarouter / atlas-cloud / cheaper-inference / api-route / runcrate (tool_choice: "required"). Default true.
+  // Force tool calls on openai-chat / orcarouter / atlas-cloud / cheaper-inference / api-route / runcrate / cloudgpu (tool_choice: "required"). Default true.
   // Some thinking/reasoning models reject forced tool choice — set false to fall back to "auto":
   // "forceToolChoice": false,
 
@@ -1251,7 +1263,8 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     | "anthropic"
     | "minimax"
     | "orcarouter"
-    | "runcrate";
+    | "runcrate"
+    | "cloudgpu";
   const memoryApiKey =
     resolveSecretValue(fileConfig.memoryApiKey) ??
     (memoryProvider === "atlas-cloud"
@@ -1262,7 +1275,9 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
           ? process.env.API_ROUTE_API_KEY
           : memoryProvider === "runcrate"
             ? process.env.RUNCRATE_API_KEY
-            : undefined);
+            : memoryProvider === "cloudgpu"
+              ? process.env.CLOUDGPU_API_KEY
+              : undefined);
   const embeddingModel = fileConfig.embeddingModel ?? DEFAULTS.embeddingModel;
   const embeddingPreset = getEmbeddingModelPreset(embeddingModel);
   const embeddingDimensions =
@@ -1534,7 +1549,8 @@ export function getAutoCaptureProviderStatus(
     config.memoryProvider === "atlas-cloud" ||
     config.memoryProvider === "cheaper-inference" ||
     config.memoryProvider === "api-route" ||
-    config.memoryProvider === "runcrate"
+    config.memoryProvider === "runcrate" ||
+    config.memoryProvider === "cloudgpu"
   ) {
     if (!hasMemoryApiKey) issues.push("memoryApiKey is not configured");
     if (hasPlaceholderMemoryApiKey) issues.push("memoryApiKey contains a placeholder value");
