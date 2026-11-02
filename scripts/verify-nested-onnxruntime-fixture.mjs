@@ -4,10 +4,10 @@
  *
  * Installs the packed plugin into a temporary consumer without root overrides.
  * When transformers and the direct pin declare different onnxruntime versions,
- * npm may keep nested onnxruntime-node@1.24.3. When they align (both 1.30.0),
+ * npm may keep nested onnxruntime-node@1.24.3. When they align (both 1.31.1),
  * npm dedupes — this fixture then plants a synthetic nested 1.24.3 under
  * transformers so the CJS resolve shim (#184 / #210) is still exercised.
- * Then verifies the production CJS prepare+load path pins the direct 1.30.0 stack.
+ * Then verifies the production CJS prepare+load path pins the direct 1.31.1 stack.
  *
  * Unlike earlier revisions, Transformers is loaded through the production
  * `loadLocalTransformersBackend()` export (createRuntimeRequire + shim), not via
@@ -20,7 +20,7 @@
  * npm may hoist dependencies to the consumer root (fixture/node_modules/...) while
  * OpenCode keeps them under the plugin package. Both layouts are accepted as long as
  * transformers can resolve a nested 1.24.x copy (real or synthetic) and the
- * production shim pins 1.30.0.
+ * production shim pins 1.31.1.
  *
  * Usage (from a built repo checkout):
  *   node scripts/verify-nested-onnxruntime-fixture.mjs
@@ -41,7 +41,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const PINNED = "1.30.0";
+const PINNED = "1.31.1";
 const NESTED_BAD = "1.24.3";
 const runtime = typeof globalThis.Bun !== "undefined" ? "bun" : "node";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -327,7 +327,7 @@ async function main() {
     const resolvedPkg = readPkgNear(nestedResolved).pkg;
     if (resolvedPkg.version === PINNED) {
       fail(
-        "expected transformers-local resolve to prefer nested 1.24.x before shim, but got pinned 1.30.0"
+        "expected transformers-local resolve to prefer nested 1.24.x before shim, but got pinned 1.31.1"
       );
     }
     log(`pre-shim transformers resolve -> ${nestedResolved} (@${resolvedPkg.version})`);
@@ -415,7 +415,7 @@ async function main() {
 
   await verifyCompiledHost(pluginRoot);
 
-  log("PASS — nested fixture loads production CJS path on onnxruntime 1.30.0 stack");
+  log("PASS — nested fixture loads production CJS path on onnxruntime 1.31.1 stack");
 
   if (cleanup && process.env.KEEP_FIXTURE !== "1") cleanup();
 }

@@ -200,7 +200,7 @@ let _transformers: {
 
 async function ensureTransformersLoaded(): Promise<NonNullable<typeof _transformers>> {
   if (_transformers !== null) return _transformers;
-  // Pin onnxruntime-node (+ common) to our direct 1.30.0 stack before transformers
+  // Pin onnxruntime-node (+ common) to our direct 1.31.1 stack before transformers
   // resolves them (#184 / #210 / #225 / #463). Load the CJS export so Module._resolveFilename
   // shim applies — the ESM entry's static import bypasses it under OpenCode nested installs.
   //

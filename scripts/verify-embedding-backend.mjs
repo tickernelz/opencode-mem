@@ -5,7 +5,7 @@
  * crashing on the host platform.
  *
  * Mirrors the production loader: prefer the CJS export so OpenCode nested
- * installs can pin onnxruntime-node@1.30.0 via Module._resolveFilename (#210 / #225).
+ * installs can pin onnxruntime-node@1.31.1 via Module._resolveFilename (#210 / #225).
  * This script deliberately does not import prepareOnnxruntimeForTransformers()
  * because the embedding-backend workflow runs without a TypeScript build.
  *
@@ -22,7 +22,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 const MODEL = "Xenova/all-MiniLM-L6-v2";
 const EXPECTED_DIMS = 384;
-const PINNED_ONNX_VERSION = "1.30.0";
+const PINNED_ONNX_VERSION = "1.31.1";
 
 const runtime = typeof globalThis.Bun !== "undefined" ? "bun" : "node";
 console.log(

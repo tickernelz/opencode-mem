@@ -345,7 +345,7 @@ memory({ mode: "import", inputPath: "./memories.json" });
 
 更改 `embeddingModel`、维度、池化或任务前缀可能需要对已存储的记忆重新嵌入，以使存储与查询向量保持对齐。建议为给定数据目录选定一次模型（以及池化/前缀设置）并坚持使用。
 
-**不支持 — Intel Mac（`darwin/x64`）：** 本地持久化需要 `@tursodatabase/database`，其不发布 Intel Mac 原生绑定。固定版本的 `onnxruntime-node` 发行版（`1.24.1+`，包括固定的 `1.30.0`）也缺少 darwin/x64。请使用 Apple Silicon Mac、Linux 或 Windows，或通过 `embeddingApiUrl` + `embeddingApiKey` 使用远程端点（见上方示例）。在受支持平台上，`opencode-mem` 固定 `onnxruntime-node@1.30.0`（来自 `1.24.1` / #225 的 Ort::Env 拆卸修复），并通过 CJS 解析 shim 加载 transformers，以便 OpenCode 嵌套安装保留该绑定。在安装该 shim 之前，transformers 会解析为绝对路径，以免 OpenCode 的 Bun `--compile` 主机因 `Cannot find module '@huggingface/transformers' from ''` 而失败。升级后，请清除 OpenCode 的嵌套插件缓存（`~/.cache/opencode/packages/opencode-mem@*`）并重新安装。
+**不支持 — Intel Mac（`darwin/x64`）：** 本地持久化需要 `@tursodatabase/database`，其不发布 Intel Mac 原生绑定。固定版本的 `onnxruntime-node` 发行版（`1.24.1+`，包括固定的 `1.31.1`）也缺少 darwin/x64。请使用 Apple Silicon Mac、Linux 或 Windows，或通过 `embeddingApiUrl` + `embeddingApiKey` 使用远程端点（见上方示例）。在受支持平台上，`opencode-mem` 固定 `onnxruntime-node@1.31.1`（来自 `1.24.1` / #225 的 Ort::Env 拆卸修复），并通过 CJS 解析 shim 加载 transformers，以便 OpenCode 嵌套安装保留该绑定。在安装该 shim 之前，transformers 会解析为绝对路径，以免 OpenCode 的 Bun `--compile` 主机因 `Cannot find module '@huggingface/transformers' from ''` 而失败。升级后，请清除 OpenCode 的嵌套插件缓存（`~/.cache/opencode/packages/opencode-mem@*`）并重新安装。
 
 ### 记忆范围
 
@@ -566,7 +566,7 @@ memory({ mode: "import", inputPath: "./memories.json" });
 - 对于拒绝强制工具调用（`tool_choice: "required"`，例如某些思考模式）的模型，在使用 `openai-chat` / `orcarouter` / `atlas-cloud` / `cheaper-inference` / `api-route` / `runcrate` 时添加 `"forceToolChoice": false`。
 - 对于 `opencodeProvider` / `opencodeModel`（例如 DeepSeek V4 thinking），OpenCode 仍会为结构化输出发送强制的 `tool_choice`。opencode-mem 在内部 `opencode-mem-structured` 代理上禁用思考（并在变体合并后在 `chat.params` 中重新应用），以便自动捕获与画像学习可以完成。你的交互式聊天代理不变。若捕获仍因 thinking/`tool_choice` 错误失败，请为 `opencodeModel` 选择非思考模型，或配置完整的手动回退（`memoryModel` + `memoryApiUrl`）。
 - **`opencode-claude-auth` / Claude Code：** 自动捕获使用带有你已认证 `anthropic` 提供商的 OpenCode。强制的 `format: json_schema` 常与 Claude-auth 循环，因此 opencode-mem 对 `opencodeProvider: "anthropic"` 使用保留认证的 **text-JSON** 路径（无强制 `StructuredOutput` 工具；用 Zod 解析回复）。步骤看门狗仍会在 2 步后中止失控的内部会话。若捕获仍失败，请配置完整的手动 Anthropic API 密钥回退（`memoryProvider: "anthropic"` + `memoryModel` + `memoryApiUrl` + `memoryApiKey`）— Claude Pro/Max OAuth 无法在 OpenCode 外重用。
-- **不支持的平台：** 不支持 Intel Mac（`darwin/x64`） — `@tursodatabase/database` 与固定版本的 `onnxruntime-node` 发行版（固定 `1.30.0`）不提供 x64 原生绑定。请使用 Apple Silicon、Linux 或 Windows，或通过 `embeddingApiUrl` + `embeddingApiKey` 使用远程嵌入端点。不支持 MLX。
+- **不支持的平台：** 不支持 Intel Mac（`darwin/x64`） — `@tursodatabase/database` 与固定版本的 `onnxruntime-node` 发行版（固定 `1.31.1`）不提供 x64 原生绑定。请使用 Apple Silicon、Linux 或 Windows，或通过 `embeddingApiUrl` + `embeddingApiKey` 使用远程嵌入端点。不支持 MLX。
 
 ## 公共子路径导出
 
