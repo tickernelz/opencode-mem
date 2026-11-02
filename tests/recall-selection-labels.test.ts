@@ -18,6 +18,7 @@ describe("recall selection labels", () => {
       );
       expect(result[mode].context).not.toContain("retrieval_score=");
       expect(result[mode].context).not.toContain("relevance=");
+      expect(result[mode].context).not.toContain("ranking signals");
     });
   }
   it("preserves genuine scores without turning them into confidence percentages", () => {

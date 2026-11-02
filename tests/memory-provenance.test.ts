@@ -95,6 +95,7 @@ describe("memory provenance formatting", () => {
       });
       expect(result).toContain("<memory>\nUnscored body\n</memory>");
       expect(result).not.toContain("retrieval_score=");
+      expect(result).not.toContain("ranking signals");
     }
     expect(
       await formatContextForPrompt(null, {
@@ -104,11 +105,19 @@ describe("memory provenance formatting", () => {
   });
 
   it("does not expose a legacy synthetic score for known recent selections", async () => {
+    const result = await formatContextForPrompt(null, {
+      results: [{ selection: "recent", similarity: 1, memory: "Recent body" }],
+    });
+    expect(result).toContain('<memory selection="recent">\nRecent body\n</memory>');
+    expect(result).not.toContain("ranking signals");
+  });
+
+  it("formats boosted float noise without IEEE artifacts", async () => {
     expect(
       await formatContextForPrompt(null, {
-        results: [{ selection: "recent", similarity: 1, memory: "Recent body" }],
+        results: [{ selection: "semantic", similarity: 0.1 + 0.05, memory: "Boosted body" }],
       })
-    ).toContain('<memory selection="recent">\nRecent body\n</memory>');
+    ).toContain('<memory selection="semantic" retrieval_score="0.15">');
   });
 
   it("returns empty string when project memories are empty and no profile applies", async () => {
