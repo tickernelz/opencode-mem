@@ -79,11 +79,16 @@ describe("plugin Turso refcount (#443)", () => {
     const id = await userPromptManager.savePrompt("sess-b", "msg-b", "/tmp/p", "world");
 
     // Fake a warmed local model so the close path has something to release.
+    // Provide dispose explicitly: earlier suite mocks may replace embeddingService
+    // with a stub that lacks the real EmbeddingService methods.
     const { embeddingService } = await import("../src/services/embedding.js");
     const released: string[] = [];
     Object.assign(embeddingService, {
       pipe: { dispose: async () => released.push("dispose") },
       isWarmedUp: true,
+      async dispose() {
+        await (this as { pipe?: { dispose?: () => Promise<void> } }).pipe?.dispose?.();
+      },
     });
 
     await memoryClient.close();
