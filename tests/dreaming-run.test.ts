@@ -227,7 +227,7 @@ console.log(JSON.stringify({ out, state }));
       state: { lastRunAt: number } | null;
     };
     expect(parsed.out.groupsConsidered).toBeGreaterThanOrEqual(1);
-    expect(parsed.out.groupsFailed).toBeGreaterThanOrEqual(1);
+    expect(parsed.out.groupsFailed).toBe(parsed.out.groupsConsidered);
     expect(parsed.out.groupsSkipped).toBe(0);
     expect(parsed.out.groupsMerged).toBe(0);
     // Total provider failure must not advance the idle schedule.

@@ -334,6 +334,7 @@ export class DreamingService {
       }
 
       const { generateStructuredOutput } = await import("./ai/opencode-provider.js");
+      let abortedForProvider = false;
 
       for (const group of batch) {
         try {
@@ -413,7 +414,15 @@ export class DreamingService {
           log("dreaming: group failed", { error: errMsg });
           // Auth / provider outages will fail every remaining group the same way.
           if (/ProviderRequestError|API_KEY is not set|401|Unauthorized/i.test(errMsg)) {
-            log("dreaming: aborting remaining groups after provider failure");
+            const processed =
+              result.groupsMerged +
+              result.groupsSkipped +
+              result.groupsFlagged +
+              result.groupsFailed;
+            const remaining = Math.max(0, result.groupsConsidered - processed);
+            result.groupsFailed += remaining;
+            abortedForProvider = true;
+            log("dreaming: aborting remaining groups after provider failure", { remaining });
             break;
           }
         }
@@ -421,10 +430,11 @@ export class DreamingService {
 
       const onlyFailures =
         result.groupsConsidered > 0 &&
-        result.groupsFailed === result.groupsConsidered &&
         result.groupsMerged === 0 &&
         result.groupsFlagged === 0 &&
-        result.groupsSkipped === 0;
+        result.groupsSkipped === 0 &&
+        result.groupsFailed > 0 &&
+        (abortedForProvider || result.groupsFailed === result.groupsConsidered);
       if (onlyFailures) {
         // Do not advance the schedule when nothing could be processed.
         log("dreaming: run complete with only failures; not advancing lastRunAt", result);

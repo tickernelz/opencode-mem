@@ -519,8 +519,9 @@ export function createMemoriesExplorer() {
         const considered = result.data?.groupsConsidered ?? 0;
         const merged = result.data?.groupsMerged ?? 0;
         const partialMsg = t("toast-dreaming-partial", { failed, considered });
-        // Total failure (nothing merged) is an error; mixed results stay a warning.
-        if (merged === 0 && failed >= considered) {
+        // Nothing merged + any failures: treat as error (includes provider abort).
+        // Mixed merge+fail stays a warning.
+        if (merged === 0) {
           toast.error(partialMsg);
         } else {
           toast.warning(partialMsg);

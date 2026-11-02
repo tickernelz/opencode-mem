@@ -349,9 +349,36 @@ export class TursoVectorSearch {
       // Only treat as success when the row is actually gone. IdxDelete with the
       // row still present means the DELETE rolled back — callers must not count
       // a delete or decrement vector counts.
-      const remaining = await db.get(`SELECT id FROM memories WHERE id = ?`, [memoryId]);
+      const remaining = await db.get(`SELECT id, deleted_at FROM memories WHERE id = ?`, [
+        memoryId,
+      ]);
       if (!remaining) return;
-      log("deleteVector: IdxDelete with row still present", { memoryId, error: String(error) });
+
+      // Quarantine active rows so age-based cleanup stops re-hitting the same
+      // broken index key every run. Soft-deleted orphans stay for trash purge.
+      if (remaining.deleted_at == null) {
+        const now = Date.now();
+        try {
+          await db.run(
+            `UPDATE memories SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
+            [now, now, memoryId]
+          );
+          log("deleteVector: IdxDelete quarantined active row via soft-delete", {
+            memoryId,
+            error: String(error),
+          });
+        } catch (quarantineError) {
+          log("deleteVector: IdxDelete quarantine failed", {
+            memoryId,
+            error: String(quarantineError),
+          });
+        }
+      } else {
+        log("deleteVector: IdxDelete with soft-deleted row still present", {
+          memoryId,
+          error: String(error),
+        });
+      }
       throw error;
     }
   }
