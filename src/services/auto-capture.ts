@@ -44,6 +44,12 @@ export interface PerformAutoCaptureOptions {
    * requests were never cancellable and keep their original semantics.
    */
   signal?: AbortSignal;
+  /**
+   * Prefer durable ready evidence over a live host transcript lookup.
+   * Used after session deletion and same-project startup replay, where the
+   * host session is already gone. Normal idle capture keeps the live path.
+   */
+  preferSavedEvidence?: boolean;
 }
 
 export async function performAutoCapture(
@@ -54,7 +60,7 @@ export async function performAutoCapture(
 ): Promise<void> {
   const run = async () => {
     if (options.signal?.aborted) return;
-    await runAutoCapture(ctx, sessionID, directory);
+    await runAutoCapture(ctx, sessionID, directory, options.preferSavedEvidence === true);
   };
 
   const next = captureChain.then(run, run);
@@ -76,7 +82,8 @@ export function awaitCaptureDrain(): Promise<void> {
 async function runAutoCapture(
   ctx: PluginInput,
   sessionID: string,
-  directory: string
+  directory: string,
+  preferSavedEvidence = false
 ): Promise<void> {
   const prompts = await userPromptManager.getUncapturedPromptsForSession(sessionID);
   if (prompts.length === 0) {
@@ -88,7 +95,7 @@ async function runAutoCapture(
   }
 
   const maxRetries = CONFIG.autoCaptureMaxRetries ?? 3;
-  let hostUnavailable = false;
+  const host = { unavailable: false };
   for (const prompt of prompts) {
     if (
       prompt.projectPath &&
@@ -96,14 +103,9 @@ async function runAutoCapture(
     )
       continue;
     // One missing host must not starve a later prompt with durable ready evidence.
-    if (hostUnavailable && !(await userPromptManager.getCaptureEvidence(prompt.id, directory)))
+    if (host.unavailable && !(await userPromptManager.getCaptureEvidence(prompt.id, directory)))
       continue;
-    if (
-      (await capturePrompt(ctx, sessionID, directory, prompt, maxRetries, hostUnavailable)) ===
-      "session-unavailable"
-    ) {
-      hostUnavailable = true;
-    }
+    await capturePrompt(ctx, sessionID, directory, prompt, maxRetries, host, preferSavedEvidence);
   }
 }
 
@@ -113,14 +115,28 @@ function isMissingSessionError(error: unknown): boolean {
   return value.name === "Session.NotFoundError" || value._tag === "Session.NotFoundError";
 }
 
+function buildEvidenceContext(prompt: UserPrompt, savedEvidence: string): string {
+  return buildMarkdownContext(
+    stripPrivateContent(prompt.content),
+    [
+      "Preserved observations from this request. Evidence may be bounded or partial; describe only observed outcomes, not inferred completion.\n" +
+        savedEvidence,
+    ],
+    [],
+    null,
+    getAutoCaptureMarkdownBudget()
+  );
+}
+
 async function capturePrompt(
   ctx: PluginInput,
   sessionID: string,
   directory: string,
   prompt: UserPrompt,
   maxRetries: number,
-  hostUnavailable = false
-): Promise<"session-unavailable" | void> {
+  host: { unavailable: boolean },
+  preferSavedEvidence = false
+): Promise<void> {
   let claimedPromptId: string | null = null;
   let attempt = prompt.capture_attempts || 0;
   let phase: "claim" | "context" | "summary" | "persist" = "claim";
@@ -139,70 +155,97 @@ async function capturePrompt(
         }
 
         phase = "context";
-        const savedEvidence = await userPromptManager.getCaptureEvidence(prompt.id, directory);
-        if (!savedEvidence && hostUnavailable) return "session-unavailable";
         const tags = getTags(directory);
-        let context: string;
-        if (savedEvidence) {
-          context = buildMarkdownContext(
-            stripPrivateContent(prompt.content),
-            [
-              "Preserved observations from this request. Evidence may be bounded or partial; describe only observed outcomes, not inferred completion.\n" +
-                savedEvidence,
-            ],
-            [],
-            null,
-            getAutoCaptureMarkdownBudget()
-          );
-        } else {
-          let response: Awaited<ReturnType<typeof ctx.client.session.messages>>;
+        const savedEvidence = await userPromptManager.getCaptureEvidence(prompt.id, directory);
+        let context: string | undefined;
+
+        // Deleted-session / startup replay: durable evidence is authoritative.
+        // Normal idle keeps the richer live transcript and only falls back when
+        // the host reports the session is gone.
+        if (preferSavedEvidence && savedEvidence) {
+          context = buildEvidenceContext(prompt, savedEvidence);
+        } else if (preferSavedEvidence && !savedEvidence) {
+          host.unavailable = true;
+          log("Auto-capture skipped: session context unavailable; prompt retained", {
+            phase,
+            outcome: "skipped",
+            reason: "session_not_found",
+            promptId: prompt.id,
+            sessionID,
+            error: "Session.NotFoundError",
+            name: "Session.NotFoundError",
+          });
+          return;
+        } else if (!host.unavailable) {
           try {
-            response = await ctx.client.session.messages({
+            const response = await ctx.client.session.messages({
               path: { id: sessionID },
             });
             if ("error" in response && isMissingSessionError(response.error)) throw response.error;
+
+            if (!response.data) {
+              return;
+            }
+
+            const messages = response.data;
+            const aiMessages = getAIResponseMessages(messages, prompt.messageId);
+            if (aiMessages === null) {
+              return;
+            }
+            if (aiMessages.length === 0) {
+              return;
+            }
+
+            const { textResponses, toolCalls } = extractAIContent(aiMessages);
+            if (textResponses.length === 0 && toolCalls.length === 0) {
+              return;
+            }
+
+            const latestMemory = await getLatestProjectMemory(tags.project.tag);
+            context = buildMarkdownContext(
+              prompt.content,
+              textResponses,
+              toolCalls,
+              latestMemory,
+              getAutoCaptureMarkdownBudget()
+            );
           } catch (error) {
             if (!isMissingSessionError(error)) throw error;
-            // A session absent from this host may still exist in another desktop
-            // or CLI instance. Keep the prompt eligible for a later idle event;
-            // finally releases the claim without spending the capture retry budget.
-            log("Auto-capture skipped: session context unavailable; prompt retained", {
-              phase,
-              outcome: "skipped",
-              reason: "session_not_found",
-              promptId: prompt.id,
-              sessionID,
-              ...serializeError(error),
-            });
-            return "session-unavailable";
+            host.unavailable = true;
+            if (savedEvidence) {
+              context = buildEvidenceContext(prompt, savedEvidence);
+            } else {
+              // A session absent from this host may still exist in another desktop
+              // or CLI instance. Keep the prompt eligible for a later idle event;
+              // finally releases the claim without spending the capture retry budget.
+              log("Auto-capture skipped: session context unavailable; prompt retained", {
+                phase,
+                outcome: "skipped",
+                reason: "session_not_found",
+                promptId: prompt.id,
+                sessionID,
+                ...serializeError(error),
+              });
+              return;
+            }
           }
+        } else if (savedEvidence) {
+          context = buildEvidenceContext(prompt, savedEvidence);
+        } else {
+          log("Auto-capture skipped: session context unavailable; prompt retained", {
+            phase,
+            outcome: "skipped",
+            reason: "session_not_found",
+            promptId: prompt.id,
+            sessionID,
+            error: "Session.NotFoundError",
+            name: "Session.NotFoundError",
+          });
+          return;
+        }
 
-          if (!response.data) {
-            return;
-          }
-
-          const messages = response.data;
-          const aiMessages = getAIResponseMessages(messages, prompt.messageId);
-          if (aiMessages === null) {
-            return;
-          }
-          if (aiMessages.length === 0) {
-            return;
-          }
-
-          const { textResponses, toolCalls } = extractAIContent(aiMessages);
-          if (textResponses.length === 0 && toolCalls.length === 0) {
-            return;
-          }
-
-          const latestMemory = await getLatestProjectMemory(tags.project.tag);
-          context = buildMarkdownContext(
-            prompt.content,
-            textResponses,
-            toolCalls,
-            latestMemory,
-            getAutoCaptureMarkdownBudget()
-          );
+        if (!context) {
+          return;
         }
 
         phase = "summary";

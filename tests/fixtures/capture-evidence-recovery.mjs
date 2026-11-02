@@ -70,6 +70,27 @@ const ctx = {
     session: {
       messages: async () => {
         counters.fetch++;
+        if (scenario.liveHost) {
+          return {
+            data: [
+              {
+                info: { id: "u", role: "user" },
+                parts: [{ type: "text", text: "Fix synthetic regression" }],
+              },
+              {
+                info: { id: "a", role: "assistant" },
+                parts: [
+                  { type: "text", text: "Live host transcript with full tool inputs" },
+                  {
+                    type: "tool",
+                    tool: "test",
+                    state: { status: "completed", input: { file: "live.ts" }, output: "ok" },
+                  },
+                ],
+              },
+            ],
+          };
+        }
         throw Object.assign(new Error(""), { name: "Session.NotFoundError" });
       },
     },
@@ -167,8 +188,14 @@ try {
     restoredSessions = await restored.getPendingCaptureSessions(project);
     recorder = new CaptureEvidenceRecorder(project);
   }
-  await performAutoCapture(ctx, "s", project);
-  if (scenario.duplicate) await performAutoCapture(ctx, "s", project);
+  // Prefer durable evidence for deleted-session recovery. The olderPending
+  // starvation case and liveHost preference leave preferSavedEvidence off so
+  // the live transcript path runs first.
+  const captureOpts = {
+    preferSavedEvidence: !scenario.olderPending && !scenario.liveHost,
+  };
+  await performAutoCapture(ctx, "s", project, captureOpts);
+  if (scenario.duplicate) await performAutoCapture(ctx, "s", project, captureOpts);
   const prompt = await mgr.getPromptById(id);
   const olderPrompt = olderId ? await mgr.getPromptById(olderId) : null;
   const afterEvidence = await mgr.getCaptureEvidence(id, project);

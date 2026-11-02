@@ -74,6 +74,14 @@ describe("deleted-session durable evidence recovery", () => {
   it("uses deletion as a checkpoint for already observed evidence", () => {
     expect(run({ deletedCheckpoint: true }).counters).toEqual({ fetch: 0, summary: 1, persist: 1 });
   });
+  it("prefers the live host transcript over ready evidence when the session still exists", () => {
+    const r = run({ liveHost: true });
+    expect(r.counters).toEqual({ fetch: 1, summary: 1, persist: 1 });
+    expect(r.summaryInputs[0]).toContain("Live host transcript with full tool inputs");
+    expect(r.summaryInputs[0]).toContain('file: "live.ts"');
+    expect(r.summaryInputs[0]).not.toContain("Preserved observations from this request");
+    expect(r.prompt.captured).toBe(true);
+  });
   for (const scenario of [{ otherProject: true }, { unknownInbox: true }, { noEvidence: true }]) {
     it(`never guesses missing evidence or prompt ownership: ${JSON.stringify(scenario)}`, () => {
       const r = run(scenario);

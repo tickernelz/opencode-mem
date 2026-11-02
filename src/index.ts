@@ -384,7 +384,10 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     try {
       for (const sessionID of await userPromptManager.getPendingCaptureSessions(directory)) {
         if (cleanedUp) break;
-        await performAutoCapture(ctx, sessionID, directory, { signal: pluginLifetime.signal });
+        await performAutoCapture(ctx, sessionID, directory, {
+          signal: pluginLifetime.signal,
+          preferSavedEvidence: true,
+        });
       }
     } catch (error) {
       log("Pending capture recovery deferred", { error: String(error) });
@@ -1265,6 +1268,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
               // Evidence is already durable and terminal. No deleted-host lookup.
               void performAutoCapture(ctx, sessionID, directory, {
                 signal: pluginLifetime.signal,
+                preferSavedEvidence: true,
               }).catch((error) =>
                 log("Deleted-session capture deferred", { error: String(error) })
               );

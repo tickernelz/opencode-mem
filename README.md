@@ -592,8 +592,9 @@ Troubleshooting:
 
 - Auto-capture failures do not block manual `memory` tool usage.
 - Auto-capture preserves bounded final assistant text and terminal tool outcomes from
-  delivered V1/V2 events before the delayed summarization runs. Ready pending evidence
-  survives session deletion and plugin restart; recovery is scoped to the same project
+  delivered V1/V2 events before the delayed summarization runs. Normal idle capture still
+  prefers the live host transcript; ready pending evidence is the fallback when the session
+  is already gone (deletion or startup replay). Recovery is scoped to the same project
   and uses the normal capture provider and claim queue. It does not infer completed work
   from the request alone. Deleting an OpenCode session does **not** delete this pending
   memory evidence or already captured memories.
@@ -612,11 +613,12 @@ Troubleshooting:
   before that terminal checkpoint leaves the partial evidence deferred until a later
   checkpoint; restart does not assume unfinished work is complete. V1 uses explicit assistant parent IDs; V2 freezes the
   delivered input at step start rather than guessing the latest queued prompt.
-- If no ready evidence exists and the host reports `Session.NotFoundError`, capture logs
-  `skipped` / `session_not_found`, releases its claim without backoff or consuming
-  retries, and skips further host-dependent lookups in that batch. Later prompts with
-  ready saved evidence still proceed. A later independent idle may retry. Already exhausted
-  prompts are not revived. Other failures retain their existing retry behavior.
+- If the live host reports `Session.NotFoundError` (or deletion/startup replay has no
+  ready evidence), capture logs `skipped` / `session_not_found`, releases its claim
+  without backoff or consuming retries, and skips further host-dependent lookups in that
+  batch. Later prompts with ready saved evidence still proceed. A later independent idle
+  may retry. Already exhausted prompts are not revived. Other failures retain their
+  existing retry behavior.
 - Auto-capture additions use a stable per-project/prompt ID so sequential crash/restart
   replay reuses the prior memory, including soft-deleted records, instead of inserting or
   resurrecting it. This does not claim distributed exactly-once semantics for optional
