@@ -289,6 +289,10 @@ export class DreamingService {
         log("dreaming: skipped due to lock contention", { error: message });
         return null;
       }
+      if (message === "dreaming_provider_unavailable") {
+        log("dreaming: skipped (provider unavailable)", { error: message });
+        return null;
+      }
       throw error;
     }
   }
@@ -405,12 +409,29 @@ export class DreamingService {
           }
         } catch (error) {
           result.groupsFailed++;
-          log("dreaming: group failed", { error: String(error) });
+          const errMsg = error instanceof Error ? error.message : String(error);
+          log("dreaming: group failed", { error: errMsg });
+          // Auth / provider outages will fail every remaining group the same way.
+          if (/ProviderRequestError|API_KEY is not set|401|Unauthorized/i.test(errMsg)) {
+            log("dreaming: aborting remaining groups after provider failure");
+            break;
+          }
         }
       }
 
-      writeState({ lastRunAt: Date.now() });
-      log("dreaming: run complete", result);
+      const onlyFailures =
+        result.groupsConsidered > 0 &&
+        result.groupsFailed === result.groupsConsidered &&
+        result.groupsMerged === 0 &&
+        result.groupsFlagged === 0 &&
+        result.groupsSkipped === 0;
+      if (onlyFailures) {
+        // Do not advance the schedule when nothing could be processed.
+        log("dreaming: run complete with only failures; not advancing lastRunAt", result);
+      } else {
+        writeState({ lastRunAt: Date.now() });
+        log("dreaming: run complete", result);
+      }
       return result;
     } finally {
       this.isRunning = false;

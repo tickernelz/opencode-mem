@@ -467,8 +467,11 @@ export class UserPromptManager {
           deleted++;
         } catch (rowError) {
           if (isIdxDeleteMismatchError(rowError)) {
-            deleted++;
-            continue;
+            const remaining = await db.get(`SELECT id FROM user_prompts WHERE id = ?`, [promptId]);
+            if (!remaining) {
+              deleted++;
+              continue;
+            }
           }
           log("deleteOldPrompts: per-row delete failed", {
             promptId,

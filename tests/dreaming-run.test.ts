@@ -207,22 +207,31 @@ mock.module(${JSON.stringify(opencodeProviderUrl)}, () => ({
 }));
 
 const { DreamingService } = await import(${JSON.stringify(dreamingServiceUrl)});
+const { existsSync, readFileSync } = await import("node:fs");
+const { join } = await import("node:path");
 const service = new DreamingService();
 const out = await service.run();
-console.log(JSON.stringify(out));
+const statePath = join(storagePath, "dreaming-state.json");
+const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : null;
+console.log(JSON.stringify({ out, state }));
 `);
     expect(result.stderr).toBe("");
     expect(result.exitCode).toBe(0);
-    const out = result.parsed as {
-      groupsConsidered: number;
-      groupsFailed: number;
-      groupsSkipped: number;
-      groupsMerged: number;
+    const parsed = result.parsed as {
+      out: {
+        groupsConsidered: number;
+        groupsFailed: number;
+        groupsSkipped: number;
+        groupsMerged: number;
+      };
+      state: { lastRunAt: number } | null;
     };
-    expect(out.groupsConsidered).toBeGreaterThanOrEqual(1);
-    expect(out.groupsFailed).toBeGreaterThanOrEqual(1);
-    expect(out.groupsSkipped).toBe(0);
-    expect(out.groupsMerged).toBe(0);
+    expect(parsed.out.groupsConsidered).toBeGreaterThanOrEqual(1);
+    expect(parsed.out.groupsFailed).toBeGreaterThanOrEqual(1);
+    expect(parsed.out.groupsSkipped).toBe(0);
+    expect(parsed.out.groupsMerged).toBe(0);
+    // Total provider failure must not advance the idle schedule.
+    expect(parsed.state).toBeNull();
   });
 
   it("throws when already running", () => {

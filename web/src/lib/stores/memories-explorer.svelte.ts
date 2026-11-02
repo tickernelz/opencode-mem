@@ -515,12 +515,16 @@ export function createMemoriesExplorer() {
         return;
       }
       if (result.success && (result.data?.groupsFailed ?? 0) > 0) {
-        toast.warning(
-          t("toast-dreaming-partial", {
-            failed: result.data?.groupsFailed ?? 0,
-            considered: result.data?.groupsConsidered ?? 0,
-          })
-        );
+        const failed = result.data?.groupsFailed ?? 0;
+        const considered = result.data?.groupsConsidered ?? 0;
+        const merged = result.data?.groupsMerged ?? 0;
+        const partialMsg = t("toast-dreaming-partial", { failed, considered });
+        // Total failure (nothing merged) is an error; mixed results stay a warning.
+        if (merged === 0 && failed >= considered) {
+          toast.error(partialMsg);
+        } else {
+          toast.warning(partialMsg);
+        }
         await reloadAll();
         return;
       }

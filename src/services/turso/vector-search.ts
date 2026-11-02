@@ -345,10 +345,13 @@ export class TursoVectorSearch {
     try {
       await db.run(`DELETE FROM memories WHERE id = ?`, [memoryId]);
     } catch (error) {
-      if (isIdxDeleteMismatchError(error)) {
-        // Index entry already gone; treat as idempotent success.
-        return;
-      }
+      if (!isIdxDeleteMismatchError(error)) throw error;
+      // Only treat as success when the row is actually gone. IdxDelete with the
+      // row still present means the DELETE rolled back — callers must not count
+      // a delete or decrement vector counts.
+      const remaining = await db.get(`SELECT id FROM memories WHERE id = ?`, [memoryId]);
+      if (!remaining) return;
+      log("deleteVector: IdxDelete with row still present", { memoryId, error: String(error) });
       throw error;
     }
   }
