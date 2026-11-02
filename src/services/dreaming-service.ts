@@ -110,6 +110,7 @@ export interface DreamingRunResult {
   groupsConsidered: number;
   groupsMerged: number;
   groupsSkipped: number;
+  groupsFailed: number;
   groupsFlagged: number;
   memoriesSoftDeleted: number;
 }
@@ -306,6 +307,7 @@ export class DreamingService {
       groupsConsidered: 0,
       groupsMerged: 0,
       groupsSkipped: 0,
+      groupsFailed: 0,
       groupsFlagged: 0,
       memoriesSoftDeleted: 0,
     };
@@ -324,7 +326,7 @@ export class DreamingService {
       const v2Client = getV2Client();
       if (!v2Client || !CONFIG.opencodeProvider || !CONFIG.opencodeModel) {
         log("dreaming: skipped (no opencode structured-output client)");
-        return result;
+        throw new Error("dreaming_provider_unavailable");
       }
 
       const { generateStructuredOutput } = await import("./ai/opencode-provider.js");
@@ -402,7 +404,7 @@ export class DreamingService {
             result.groupsSkipped++;
           }
         } catch (error) {
-          result.groupsSkipped++;
+          result.groupsFailed++;
           log("dreaming: group failed", { error: String(error) });
         }
       }

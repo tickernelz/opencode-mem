@@ -1,5 +1,6 @@
 import { tursoConnectionManager } from "./connection-manager.js";
 import { tursoShardManager } from "./shard-manager.js";
+import { isIdxDeleteMismatchError } from "./error-classifiers.js";
 import { log } from "../logger.js";
 import type { MemoryListFilters, MemoryRecord, SearchResult, ShardInfo } from "./types.js";
 import {
@@ -341,7 +342,15 @@ export class TursoVectorSearch {
   }
 
   async deleteVector(db: TursoDb, memoryId: string): Promise<void> {
-    await db.run(`DELETE FROM memories WHERE id = ?`, [memoryId]);
+    try {
+      await db.run(`DELETE FROM memories WHERE id = ?`, [memoryId]);
+    } catch (error) {
+      if (isIdxDeleteMismatchError(error)) {
+        // Index entry already gone; treat as idempotent success.
+        return;
+      }
+      throw error;
+    }
   }
 
   async softDeleteVector(
@@ -406,11 +415,17 @@ export class TursoVectorSearch {
       `SELECT id FROM memories WHERE deleted_at IS NOT NULL AND deleted_at < ?`,
       [cutoffMs]
     );
-    const ids = rows.map((r) => String(r.id));
-    for (const id of ids) {
-      await this.deleteVector(db, id);
+    const purged: string[] = [];
+    for (const row of rows) {
+      const id = String(row.id);
+      try {
+        await this.deleteVector(db, id);
+        purged.push(id);
+      } catch (error) {
+        log("purgeDeletedBefore: delete error", { memoryId: id, error: String(error) });
+      }
     }
-    return ids;
+    return purged;
   }
 
   async updateVector(

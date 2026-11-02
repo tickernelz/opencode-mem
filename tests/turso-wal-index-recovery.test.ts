@@ -509,14 +509,22 @@ describe("turso WAL index recovery", () => {
       await import("../src/services/turso/connection-manager.js");
     try {
       CONFIG.tursoMultiprocessWal = false;
-      expect(tursoExperimentalFeatures("linux")).toEqual(["encryption"]);
-      expect(buildConnectOptions()).toEqual({ experimental: ["encryption"] });
+      expect(tursoExperimentalFeatures("linux")).toEqual(["encryption", "vacuum"]);
+      expect(buildConnectOptions()).toEqual({ experimental: ["encryption", "vacuum"] });
     } finally {
       CONFIG.tursoMultiprocessWal = true;
     }
 
-    expect(tursoExperimentalFeatures("linux")).toEqual(["encryption", "multiprocess_wal"]);
-    expect(tursoExperimentalFeatures("linux", false)).toEqual(["encryption"]);
-    expect(tursoExperimentalFeatures("linux", true)).toEqual(["encryption", "multiprocess_wal"]);
+    expect(tursoExperimentalFeatures("linux")).toEqual([
+      "encryption",
+      "vacuum",
+      "multiprocess_wal",
+    ]);
+    expect(tursoExperimentalFeatures("linux", false)).toEqual(["encryption", "vacuum"]);
+    expect(tursoExperimentalFeatures("linux", true)).toEqual([
+      "encryption",
+      "vacuum",
+      "multiprocess_wal",
+    ]);
   });
 });

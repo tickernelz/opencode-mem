@@ -1,7 +1,9 @@
 import { join } from "node:path";
 import { tursoConnectionManager } from "../turso/connection-manager.js";
+import { isIdxDeleteMismatchError } from "../turso/error-classifiers.js";
 import { CONFIG } from "../../config.js";
 import type { SqlValue, TursoDb, TursoTx } from "../turso/turso-db.js";
+import { log } from "../logger.js";
 
 import { stripPrivateContent, isFullyPrivate } from "../privacy.js";
 import { truncateToMaxBytes } from "../../utils/context-limit.js";
@@ -438,14 +440,44 @@ export class UserPromptManager {
       .map((row) => row.linked_memory_id)
       .filter((id): id is string => Boolean(id));
 
-    const deleted = await db.transaction("write", async (tx) => {
-      await tx.run(
-        `DELETE FROM pending_capture_evidence WHERE prompt_id IN (SELECT id FROM user_prompts WHERE created_at < ?)`,
-        [cutoffTime]
-      );
-      return tx.run(`DELETE FROM user_prompts WHERE created_at < ?`, [cutoffTime]);
-    });
-    return { deleted, linkedMemoryIds };
+    try {
+      const deleted = await db.transaction("write", async (tx) => {
+        await tx.run(
+          `DELETE FROM pending_capture_evidence WHERE prompt_id IN (SELECT id FROM user_prompts WHERE created_at < ?)`,
+          [cutoffTime]
+        );
+        return tx.run(`DELETE FROM user_prompts WHERE created_at < ?`, [cutoffTime]);
+      });
+      return { deleted, linkedMemoryIds };
+    } catch (error) {
+      if (!isIdxDeleteMismatchError(error)) throw error;
+      // Batch DELETE hit a desynced index entry; fall back to per-row deletes.
+      log("deleteOldPrompts: IdxDelete on batch, falling back to per-row deletes", {
+        error: String(error),
+      });
+      const rows = await db.all(`SELECT id FROM user_prompts WHERE created_at < ?`, [cutoffTime]);
+      let deleted = 0;
+      for (const row of rows) {
+        const promptId = String(row.id);
+        try {
+          await db.transaction("write", async (tx) => {
+            await tx.run(`DELETE FROM pending_capture_evidence WHERE prompt_id = ?`, [promptId]);
+            await tx.run(`DELETE FROM user_prompts WHERE id = ?`, [promptId]);
+          });
+          deleted++;
+        } catch (rowError) {
+          if (isIdxDeleteMismatchError(rowError)) {
+            deleted++;
+            continue;
+          }
+          log("deleteOldPrompts: per-row delete failed", {
+            promptId,
+            error: String(rowError),
+          });
+        }
+      }
+      return { deleted, linkedMemoryIds };
+    }
   }
 
   async vacuum(): Promise<void> {

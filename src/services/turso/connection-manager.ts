@@ -16,7 +16,7 @@ import {
 export type ConnectFactory = (path: string, opts?: DatabaseOpts) => Promise<Database>;
 
 /** Always-on experimental flags for every Turso open. */
-export const TURSO_BASE_EXPERIMENTAL_FEATURES = ["encryption"] as const;
+export const TURSO_BASE_EXPERIMENTAL_FEATURES = ["encryption", "vacuum"] as const;
 
 /**
  * Multiprocess WAL is Unix-only. On Windows/WASM/32-bit the flag is accepted but

@@ -70,6 +70,8 @@ export const translations = {
     "toast-restore-failed": "Failed to restore memory",
     "toast-dreaming-success": "Dreaming completed",
     "toast-dreaming-failed": "Dreaming failed",
+    "toast-dreaming-already-running": "Dreaming is already running",
+    "toast-dreaming-partial": "Dreaming finished with {failed} of {considered} groups failed",
     "confirm-dreaming-title": "Run Dreaming",
     "confirm-dreaming":
       "Merge near-duplicate memories with the configured LLM? Superseded rows go to trash.",
@@ -337,6 +339,8 @@ export const translations = {
     "toast-restore-failed": "Wiederherstellen fehlgeschlagen",
     "toast-dreaming-success": "Dreaming abgeschlossen",
     "toast-dreaming-failed": "Dreaming fehlgeschlagen",
+    "toast-dreaming-already-running": "Dreaming läuft bereits",
+    "toast-dreaming-partial": "Dreaming beendet: {failed} von {considered} Gruppen fehlgeschlagen",
     "confirm-dreaming-title": "Dreaming starten",
     "confirm-dreaming":
       "Nahe Duplikate per LLM zusammenführen? Ersetzte Einträge landen im Papierkorb.",
@@ -608,6 +612,8 @@ export const translations = {
     "toast-restore-failed": "恢复记忆失败",
     "toast-dreaming-success": "Dreaming 完成",
     "toast-dreaming-failed": "Dreaming 失败",
+    "toast-dreaming-already-running": "Dreaming 已在运行",
+    "toast-dreaming-partial": "Dreaming 完成，{failed}/{considered} 组失败",
     "confirm-dreaming-title": "运行 Dreaming",
     "confirm-dreaming": "用已配置的 LLM 合并近似重复记忆？被替换的条目会进入回收站。",
     "status-dreaming": "正在运行 Dreaming…",
@@ -874,6 +880,8 @@ export const translations = {
     "toast-restore-failed": "فشلت استعادة الذاكرة",
     "toast-dreaming-success": "اكتمل Dreaming",
     "toast-dreaming-failed": "فشل Dreaming",
+    "toast-dreaming-already-running": "Dreaming قيد التشغيل بالفعل",
+    "toast-dreaming-partial": "انتهى Dreaming مع فشل {failed} من {considered} مجموعات",
     "confirm-dreaming-title": "تشغيل Dreaming",
     "confirm-dreaming":
       "دمج الذكريات شبه المكررة عبر النموذج المضبوط؟ تنتقل الصفوف المستبدلة إلى المهملات.",
@@ -1178,6 +1186,8 @@ export const translations = {
     "toast-restore-failed": "Bellek geri yüklenemedi",
     "toast-dreaming-success": "Dreaming tamamlandı",
     "toast-dreaming-failed": "Dreaming başarısız",
+    "toast-dreaming-already-running": "Dreaming zaten çalışıyor",
+    "toast-dreaming-partial": "Dreaming bitti: {failed}/{considered} grup başarısız",
     "confirm-dreaming-title": "Dreaming çalıştır",
     "confirm-dreaming":
       "Yapılandırılmış LLM ile yakın yinelenen bellekleri birleştir? Değiştirilen satırlar çöp kutusuna gider.",
@@ -1447,6 +1457,8 @@ export const translations = {
     "toast-restore-failed": "Herstellen mislukt",
     "toast-dreaming-success": "Dreaming voltooid",
     "toast-dreaming-failed": "Dreaming mislukt",
+    "toast-dreaming-already-running": "Dreaming is al bezig",
+    "toast-dreaming-partial": "Dreaming klaar: {failed} van {considered} groepen mislukt",
     "confirm-dreaming-title": "Dreaming starten",
     "confirm-dreaming":
       "Bijna-duplicaten samenvoegen met het geconfigureerde LLM? Vervangen rijen gaan naar de prullenbak.",
