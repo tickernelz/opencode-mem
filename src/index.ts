@@ -9,6 +9,7 @@ import { buildMemoryProvenanceSuffix } from "./services/memory-provenance.js";
 import { getTags } from "./services/tags.js";
 import { stripPrivateContent, isFullyPrivate } from "./services/privacy.js";
 import { awaitCaptureDrain, performAutoCapture } from "./services/auto-capture.js";
+import { CaptureEvidenceRecorder } from "./services/capture-evidence.js";
 import { performUserProfileLearning } from "./services/user-memory-learning.js";
 import { userPromptManager } from "./services/user-prompt/user-prompt-manager.js";
 import { startWebServer, WebServer } from "./services/web-server.js";
@@ -377,6 +378,18 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   // skipped; in-flight work keeps its original (uncancellable) semantics.
   const pluginLifetime = new AbortController();
   let cleanedUp = false;
+  const captureEvidence = new CaptureEvidenceRecorder(directory);
+  const resumePendingCaptures = async () => {
+    if (cleanedUp || !isConfigured() || !CONFIG.autoCaptureEnabled) return;
+    try {
+      for (const sessionID of await userPromptManager.getPendingCaptureSessions(directory)) {
+        if (cleanedUp) break;
+        await performAutoCapture(ctx, sessionID, directory, { signal: pluginLifetime.signal });
+      }
+    } catch (error) {
+      log("Pending capture recovery deferred", { error: String(error) });
+    }
+  };
 
   // Lease the shared Turso pool for this plugin instance. Several OpenCode
   // sessions share one process; dispose must not closeAll while siblings live (#443).
@@ -435,6 +448,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       while (refreshQueued && !cleanedUp) {
         refreshQueued = false;
         await refreshConnectedProviders();
+        void resumePendingCaptures();
       }
     })().finally(() => {
       refreshInFlight = undefined;
@@ -604,6 +618,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     idleTimers.clear();
     // Drain in-flight (and already-queued-before-abort) captures before
     // closing storage: abort only skips not-yet-started jobs.
+    await captureEvidence.drain();
     await awaitCaptureDrain();
     try {
       const { stopMarkdownBackend } = await import("./services/markdown/backend.js");
@@ -659,6 +674,8 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     CHILD_SESSION_LOOKUPS.clear();
     await cleanupPlugin();
   };
+
+  void resumePendingCaptures();
 
   // Capture remains tied to authored prompts. V2 can rebuild request context
   // independently when its in-memory session cache is lost on host/plugin reload.
@@ -732,6 +749,11 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     dispose: disposePlugin,
     // Internal V2 bridge; V1 still injects synthetic parts through chat.message.
     memoryContext: {
+      ownsPendingCaptureSession: async (sessionID: string) =>
+        !cleanedUp &&
+        isConfigured() &&
+        CONFIG.autoCaptureEnabled &&
+        userPromptManager.hasPendingCaptureSession(sessionID, directory),
       enabled: () => isConfigured() && CONFIG.chatMessage.enabled,
       refreshOnPrompt: () =>
         shouldRefreshRecallOnPrompt(
@@ -1234,6 +1256,24 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
     event: async (input: { event: { type: string; properties?: any } }) => {
       const event = input.event;
+      if (!cleanedUp && isConfigured() && CONFIG.autoCaptureEnabled) {
+        try {
+          await captureEvidence.observe(event);
+          if (event.type === "session.deleted") {
+            const sessionID = event.properties?.sessionID ?? event.properties?.info?.id;
+            if (typeof sessionID === "string") {
+              // Evidence is already durable and terminal. No deleted-host lookup.
+              void performAutoCapture(ctx, sessionID, directory, {
+                signal: pluginLifetime.signal,
+              }).catch((error) =>
+                log("Deleted-session capture deferred", { error: String(error) })
+              );
+            }
+          }
+        } catch (error) {
+          log("Capture evidence preservation failed", { error: String(error) });
+        }
+      }
 
       // Late host provider registration: user-config providers can appear
       // (or disappear) after plugin setup; refresh the connectivity snapshot.

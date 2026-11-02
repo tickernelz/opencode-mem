@@ -117,6 +117,9 @@ const promptRows = [
 
 mock.module(moduleUrl("services/user-prompt/user-prompt-manager"), () => ({
   userPromptManager: {
+    getCaptureEvidence: async () => null,
+    getPendingCaptureSessions: async () => [],
+    markCaptureEvidenceReady: async () => {},
     savePrompt: async () => {},
     setPromptModel: async () => {},
     getUncapturedPromptsForSession: async () => (claimed ? [] : promptRows),

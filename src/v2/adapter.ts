@@ -6,6 +6,7 @@ import { getTags } from "../services/tags.js";
 import { eventBelongsToLocation, legacyToolResult, toLegacyEvent } from "./legacy-client.js";
 
 interface MemoryContextHooks {
+  ownsPendingCaptureSession?(sessionID: string): Promise<boolean>;
   enabled(): boolean;
   refreshOnPrompt(): boolean;
   capturePrompt(
@@ -211,7 +212,7 @@ export async function registerV2Adapter(ctx: Context, legacy: any) {
     if (!legacy.event) return;
     try {
       for await (const raw of ctx.event.subscribe({ signal: controller.signal })) {
-        if (await eventBelongsToLocation(ctx, raw)) {
+        if (await eventBelongsToLocation(ctx, raw, memoryContext?.ownsPendingCaptureSession)) {
           const event = toLegacyEvent(raw);
           if (event.type === "session.compacted" && event.properties?.sessionID) {
             contexts.delete(event.properties.sessionID);

@@ -99,6 +99,9 @@ const prompt = {
 
 mock.module(${JSON.stringify(promptManagerUrl)}, () => ({
   userPromptManager: {
+    getCaptureEvidence: async () => null,
+    getPendingCaptureSessions: async () => [],
+    markCaptureEvidenceReady: async () => {},
     getLastUncapturedPrompt() { return prompt; },
     getUncapturedPromptsForSession() { return [prompt]; },
     claimPrompt() { return true; },

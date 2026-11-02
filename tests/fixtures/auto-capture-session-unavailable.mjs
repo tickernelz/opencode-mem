@@ -52,6 +52,9 @@ if (scenario.otherSession)
   });
 mock.module(u("services/user-prompt/user-prompt-manager"), () => ({
   userPromptManager: {
+    getCaptureEvidence: async () => null,
+    getPendingCaptureSessions: async () => [],
+    markCaptureEvidenceReady: async () => {},
     async getUncapturedPromptsForSession(sid) {
       return prompts.filter(
         (p) => p.sessionId === sid && p.captured === 0 && p.capture_attempts < 3

@@ -217,6 +217,25 @@ export const USER_PROMPTS_MIGRATIONS: SchemaMigration[] = [
       },
     ],
   },
+  {
+    version: 2,
+    description: "Bounded pending capture evidence",
+    statements: [
+      {
+        sql: `CREATE TABLE IF NOT EXISTS pending_capture_evidence (
+        prompt_id TEXT NOT NULL,
+        part_key TEXT NOT NULL,
+        content TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        ready INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (prompt_id, part_key)
+      )`,
+      },
+      {
+        sql: "CREATE INDEX IF NOT EXISTS idx_pending_capture_updated ON pending_capture_evidence(updated_at)",
+      },
+    ],
+  },
 ];
 
 export const USER_PROFILES_MIGRATIONS: SchemaMigration[] = [

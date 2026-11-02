@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { memoryClient } from "./client.js";
 import { getTags } from "./tags.js";
 import { log, serializeError } from "./logger.js";
+import { stripPrivateContent } from "./privacy.js";
 import { CONFIG } from "../config.js";
 import { userPromptManager, type UserPrompt } from "./user-prompt/user-prompt-manager.js";
 import { loadOpencodeProvider } from "./ai/opencode-provider-loader.js";
@@ -87,13 +88,21 @@ async function runAutoCapture(
   }
 
   const maxRetries = CONFIG.autoCaptureMaxRetries ?? 3;
+  let hostUnavailable = false;
   for (const prompt of prompts) {
     if (
-      (await capturePrompt(ctx, sessionID, directory, prompt, maxRetries)) === "session-unavailable"
+      prompt.projectPath &&
+      prompt.projectPath.replace(/\\/g, "/") !== directory.replace(/\\/g, "/")
+    )
+      continue;
+    // One missing host must not starve a later prompt with durable ready evidence.
+    if (hostUnavailable && !(await userPromptManager.getCaptureEvidence(prompt.id, directory)))
+      continue;
+    if (
+      (await capturePrompt(ctx, sessionID, directory, prompt, maxRetries, hostUnavailable)) ===
+      "session-unavailable"
     ) {
-      // The connected host cannot provide this session's context. Do not repeat
-      // the same lookup for every pending prompt in this batch.
-      break;
+      hostUnavailable = true;
     }
   }
 }
@@ -109,7 +118,8 @@ async function capturePrompt(
   sessionID: string,
   directory: string,
   prompt: UserPrompt,
-  maxRetries: number
+  maxRetries: number,
+  hostUnavailable = false
 ): Promise<"session-unavailable" | void> {
   let claimedPromptId: string | null = null;
   let attempt = prompt.capture_attempts || 0;
@@ -129,55 +139,71 @@ async function capturePrompt(
         }
 
         phase = "context";
-        let response: Awaited<ReturnType<typeof ctx.client.session.messages>>;
-        try {
-          response = await ctx.client.session.messages({
-            path: { id: sessionID },
-          });
-          if ("error" in response && isMissingSessionError(response.error)) throw response.error;
-        } catch (error) {
-          if (!isMissingSessionError(error)) throw error;
-          // A session absent from this host may still exist in another desktop
-          // or CLI instance. Keep the prompt eligible for a later idle event;
-          // finally releases the claim without spending the capture retry budget.
-          log("Auto-capture skipped: session context unavailable; prompt retained", {
-            phase,
-            outcome: "skipped",
-            reason: "session_not_found",
-            promptId: prompt.id,
-            sessionID,
-            ...serializeError(error),
-          });
-          return "session-unavailable";
-        }
-
-        if (!response.data) {
-          return;
-        }
-
-        const messages = response.data;
-        const aiMessages = getAIResponseMessages(messages, prompt.messageId);
-        if (aiMessages === null) {
-          return;
-        }
-        if (aiMessages.length === 0) {
-          return;
-        }
-
-        const { textResponses, toolCalls } = extractAIContent(aiMessages);
-        if (textResponses.length === 0 && toolCalls.length === 0) {
-          return;
-        }
-
+        const savedEvidence = await userPromptManager.getCaptureEvidence(prompt.id, directory);
+        if (!savedEvidence && hostUnavailable) return "session-unavailable";
         const tags = getTags(directory);
-        const latestMemory = await getLatestProjectMemory(tags.project.tag);
-        const context = buildMarkdownContext(
-          prompt.content,
-          textResponses,
-          toolCalls,
-          latestMemory,
-          getAutoCaptureMarkdownBudget()
-        );
+        let context: string;
+        if (savedEvidence) {
+          context = buildMarkdownContext(
+            stripPrivateContent(prompt.content),
+            [
+              "Preserved observations from this request. Evidence may be bounded or partial; describe only observed outcomes, not inferred completion.\n" +
+                savedEvidence,
+            ],
+            [],
+            null,
+            getAutoCaptureMarkdownBudget()
+          );
+        } else {
+          let response: Awaited<ReturnType<typeof ctx.client.session.messages>>;
+          try {
+            response = await ctx.client.session.messages({
+              path: { id: sessionID },
+            });
+            if ("error" in response && isMissingSessionError(response.error)) throw response.error;
+          } catch (error) {
+            if (!isMissingSessionError(error)) throw error;
+            // A session absent from this host may still exist in another desktop
+            // or CLI instance. Keep the prompt eligible for a later idle event;
+            // finally releases the claim without spending the capture retry budget.
+            log("Auto-capture skipped: session context unavailable; prompt retained", {
+              phase,
+              outcome: "skipped",
+              reason: "session_not_found",
+              promptId: prompt.id,
+              sessionID,
+              ...serializeError(error),
+            });
+            return "session-unavailable";
+          }
+
+          if (!response.data) {
+            return;
+          }
+
+          const messages = response.data;
+          const aiMessages = getAIResponseMessages(messages, prompt.messageId);
+          if (aiMessages === null) {
+            return;
+          }
+          if (aiMessages.length === 0) {
+            return;
+          }
+
+          const { textResponses, toolCalls } = extractAIContent(aiMessages);
+          if (textResponses.length === 0 && toolCalls.length === 0) {
+            return;
+          }
+
+          const latestMemory = await getLatestProjectMemory(tags.project.tag);
+          context = buildMarkdownContext(
+            prompt.content,
+            textResponses,
+            toolCalls,
+            latestMemory,
+            getAutoCaptureMarkdownBudget()
+          );
+        }
 
         phase = "summary";
         let summaryResult: { summary: string; type: string; tags: string[] } | null;

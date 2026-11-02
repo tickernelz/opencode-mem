@@ -510,3 +510,60 @@ describe("OpenCode v2 legacy client bridge", () => {
     expect(result).toEqual({ data: false });
   });
 });
+
+describe("buffered capture evidence after session deletion", () => {
+  it("normalizes v2 terminal event versions and sync envelopes", () => {
+    expect(
+      toLegacyEvent({
+        type: "sync",
+        syncEvent: { type: "session.tool.success.2", data: { sessionID: "s" } },
+      })
+    ).toEqual({ type: "session.tool.success", properties: { sessionID: "s" } });
+  });
+  it("uses pending project ownership only for recognized evidence events after lookup failure", async () => {
+    const ctx = {
+      location: { directory: "/project" },
+      session: {
+        get: async () => {
+          throw new Error("gone");
+        },
+      },
+    } as any;
+    const own = async (id: string) => id === "ours";
+    expect(
+      await eventBelongsToLocation(
+        ctx,
+        { type: "session.text.ended.1", data: { sessionID: "ours" } },
+        own
+      )
+    ).toBe(true);
+    expect(
+      await eventBelongsToLocation(
+        ctx,
+        { type: "session.text.ended.1", data: { sessionID: "other" } },
+        own
+      )
+    ).toBe(false);
+    expect(
+      await eventBelongsToLocation(
+        ctx,
+        { type: "session.permissions.1", data: { sessionID: "ours" } },
+        own
+      )
+    ).toBe(false);
+    expect(
+      await eventBelongsToLocation(
+        ctx,
+        { directory: "/other", type: "session.text.ended.1", data: { sessionID: "ours" } },
+        own
+      )
+    ).toBe(false);
+    expect(
+      await eventBelongsToLocation(
+        ctx,
+        { type: "message.part.updated", properties: { part: { sessionID: "ours" } } },
+        own
+      )
+    ).toBe(true);
+  });
+});

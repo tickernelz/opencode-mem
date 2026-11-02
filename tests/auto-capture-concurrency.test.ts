@@ -142,6 +142,9 @@ mock.module(${JSON.stringify(u("src/services/tags.js"))}, () => ({
 const captureSIDs = [];
 mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"))}, () => ({
   userPromptManager: {
+    getCaptureEvidence: async () => null,
+    getPendingCaptureSessions: async () => [],
+    markCaptureEvidenceReady: async () => {},
     savePrompt() {},
     async getUncapturedPromptsForSession(sid) { captureSIDs.push(sid + ":query"); return []; },
   },
@@ -280,6 +283,9 @@ const counts = { query: {}, claim: {}, llm: {}, capture: {} };
 const bump = (m, k) => { m[k] = (m[k] ?? 0) + 1; };
 mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"))}, () => ({
   userPromptManager: {
+    getCaptureEvidence: async () => null,
+    getPendingCaptureSessions: async () => [],
+    markCaptureEvidenceReady: async () => {},
     async getUncapturedPromptsForSession(sid) { bump(counts.query, sid); return prompts.filter((p) => p.sessionId === sid && !p.captured && !p.claimed); },
     async claimPrompt(id) { const p = prompts.find((x) => x.id === id); if (!p || p.captured || p.claimed) return false; p.claimed = true; bump(counts.claim, p.sessionId); return true; },
     async recordFailedAttempt(id) { const p = prompts.find((x) => x.id === id); if (p) p.capture_attempts += 1; },
@@ -404,6 +410,9 @@ const counts = { query: {}, llm: {} };
 const bump = (m, k) => { m[k] = (m[k] ?? 0) + 1; };
 mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"))}, () => ({
   userPromptManager: {
+    getCaptureEvidence: async () => null,
+    getPendingCaptureSessions: async () => [],
+    markCaptureEvidenceReady: async () => {},
     async getUncapturedPromptsForSession(sid) { bump(counts.query, sid); return prompts.filter((p) => p.sessionId === sid && !p.captured && !p.claimed); },
     async claimPrompt(id) { const p = prompts.find((x) => x.id === id); if (!p || p.captured || p.claimed) return false; p.claimed = true; return true; },
     async recordFailedAttempt() {},
@@ -479,6 +488,9 @@ const prompts = [
 const captured = [];
 mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"))}, () => ({
   userPromptManager: {
+    getCaptureEvidence: async () => null,
+    getPendingCaptureSessions: async () => [],
+    markCaptureEvidenceReady: async () => {},
     async getUncapturedPromptsForSession(sid) { return prompts.filter((p) => p.sessionId === sid && !p.captured && !p.claimed); },
     async claimPrompt(id) { const p = prompts.find((x) => x.id === id); if (!p || p.captured || p.claimed) return false; p.claimed = true; return true; },
     async recordFailedAttempt() {},
@@ -539,6 +551,9 @@ await Promise.all([aPromise, bPromise]);
 // job still runs.
 mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"))}, () => ({
   userPromptManager: {
+    getCaptureEvidence: async () => null,
+    getPendingCaptureSessions: async () => [],
+    markCaptureEvidenceReady: async () => {},
     async getUncapturedPromptsForSession(sid) { if (sid === "sess-C") throw new Error("db down"); return []; },
     async claimPrompt() { return true; },
     async recordFailedAttempt() {},
@@ -584,6 +599,9 @@ const counts = { query: {}, claim: {}, llm: {}, capture: {} };
 const bump = (m, k) => { m[k] = (m[k] ?? 0) + 1; };
 mock.module(${JSON.stringify(u("src/services/user-prompt/user-prompt-manager.js"))}, () => ({
   userPromptManager: {
+    getCaptureEvidence: async () => null,
+    getPendingCaptureSessions: async () => [],
+    markCaptureEvidenceReady: async () => {},
     async getUncapturedPromptsForSession(sid) { bump(counts.query, sid); return prompts.filter((p) => p.sessionId === sid && !p.captured && !p.claimed); },
     async claimPrompt(id) { const p = prompts.find((x) => x.id === id); if (!p || p.captured || p.claimed) return false; p.claimed = true; bump(counts.claim, p.sessionId); return true; },
     async recordFailedAttempt() {},
