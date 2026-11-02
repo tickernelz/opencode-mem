@@ -341,21 +341,25 @@ export class TursoVectorSearch {
     };
   }
 
-  async deleteVector(db: TursoDb, memoryId: string): Promise<void> {
+  /**
+   * Hard-delete a memory row. Returns true when the row is gone (deleted now or
+   * already missing). Returns false when IdxDelete leaves the row in place —
+   * callers must not decrement vector counts. Active stuck rows are soft-deleted
+   * once so age cleanup stops retrying the same broken index key.
+   */
+  async deleteVector(db: TursoDb, memoryId: string): Promise<boolean> {
     try {
       await db.run(`DELETE FROM memories WHERE id = ?`, [memoryId]);
+      return true;
     } catch (error) {
       if (!isIdxDeleteMismatchError(error)) throw error;
-      // Only treat as success when the row is actually gone. IdxDelete with the
-      // row still present means the DELETE rolled back — callers must not count
-      // a delete or decrement vector counts.
+      // IdxDelete with the row still present means the DELETE rolled back.
       const remaining = await db.get(`SELECT id, deleted_at FROM memories WHERE id = ?`, [
         memoryId,
       ]);
-      if (!remaining) return;
+      if (!remaining) return true;
 
-      // Quarantine active rows so age-based cleanup stops re-hitting the same
-      // broken index key every run. Soft-deleted orphans stay for trash purge.
+      // Quarantine active rows so age-based cleanup stops re-hitting the same key.
       if (remaining.deleted_at == null) {
         const now = Date.now();
         try {
@@ -374,12 +378,14 @@ export class TursoVectorSearch {
           });
         }
       } else {
-        log("deleteVector: IdxDelete with soft-deleted row still present", {
+        // Soft-deleted orphan that cannot be hard-purged without REINDEX — leave
+        // it and return false so trash purge does not spam or fake-count deletes.
+        log("deleteVector: IdxDelete leaving soft-deleted orphan in place", {
           memoryId,
           error: String(error),
         });
       }
-      throw error;
+      return false;
     }
   }
 
@@ -449,8 +455,9 @@ export class TursoVectorSearch {
     for (const row of rows) {
       const id = String(row.id);
       try {
-        await this.deleteVector(db, id);
-        purged.push(id);
+        if (await this.deleteVector(db, id)) {
+          purged.push(id);
+        }
       } catch (error) {
         log("purgeDeletedBefore: delete error", { memoryId: id, error: String(error) });
       }

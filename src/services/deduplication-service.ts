@@ -70,7 +70,8 @@ export class DeduplicationService {
 
             for (const dup of toDelete) {
               try {
-                await tursoVectorSearch.deleteVector(db, String(dup.id));
+                const hardDeleted = await tursoVectorSearch.deleteVector(db, String(dup.id));
+                if (!hardDeleted) continue;
                 await tursoShardManager.decrementVectorCount(shard.id);
                 exactDeleted++;
               } catch (error) {

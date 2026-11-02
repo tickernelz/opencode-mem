@@ -68,7 +68,8 @@ async function deleteMemoryById(id: string): Promise<boolean> {
   const found = await findMemoryAcrossShards(id);
   if (!found) return false;
   const db = await tursoConnectionManager.getConnection(found.dbPath);
-  await tursoVectorSearch.deleteVector(db, id);
+  const hardDeleted = await tursoVectorSearch.deleteVector(db, id);
+  if (!hardDeleted) return false;
   await tursoShardManager.decrementVectorCount(found.shardId);
   return true;
 }

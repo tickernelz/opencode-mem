@@ -132,7 +132,11 @@ export class CleanupService {
               continue;
             }
 
-            await tursoVectorSearch.deleteVector(db, String(memory.id));
+            const hardDeleted = await tursoVectorSearch.deleteVector(db, String(memory.id));
+            if (!hardDeleted) {
+              // IdxDelete quarantine (soft-delete) — do not count as hard-deleted.
+              continue;
+            }
             await tursoShardManager.decrementVectorCount(shard.id);
             totalDeleted++;
 
