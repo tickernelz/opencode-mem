@@ -80,6 +80,20 @@ describe("v2 memory context lifecycle", () => {
     expect(result.authored).toBe("authored first prompt");
   });
 
+  it("caches failed-semantic recent fallback for model steps and retries on authored turns", () => {
+    expect(result.fallbackFirst).toEqual(context("fallback session A"));
+    expect(result.fallbackModelStep).toEqual(result.fallbackFirst);
+    expect(result.fallbackInitialCounts).toEqual({ search: 1, list: 1 });
+    expect(result.fallbackOtherSession).toEqual(context("fallback session B"));
+    expect(result.fallbackOriginalSession).toEqual(result.fallbackFirst);
+    expect(result.fallbackNextTurn).toEqual(context("fresh fallback A"));
+    expect(result.fallbackNextStep).toEqual(result.fallbackNextTurn);
+    expect(result.fallbackNextCounts).toEqual({ search: 3, list: 3 });
+    expect(result.fallbackRecoveredEmpty).toEqual([]);
+    expect(result.fallbackOtherAfterRecovery).toEqual(result.fallbackOtherSession);
+    expect(result.fallbackFinalCounts).toEqual({ search: 4, list: 3 });
+  });
+
   it("preserves V1 synthetic-part injection and first-turn history policy", () => {
     expect(result.v1First).toHaveLength(2);
     expect(result.v1First[0].synthetic).toBe(true);

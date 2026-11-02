@@ -280,12 +280,19 @@ memories do not consume slots that could hold eligible memories. Setting
 the user profile to be injected when enabled.
 
 Injected memory tags identify `selection="recent"` or `selection="semantic"`.
-Recent selections (including missing-query fallback and recent fill in `both`) have no
+Recent selections (including fallback and recent fill in `both`) have no
 numeric score. Semantic selections carry a finite `retrieval_score` when available;
 this is a ranking signal that can include the current-project boost, not a probability
 of relevance or factual correctness. Missing or invalid scores are omitted. This
 replaces the former `relevance="...%"` prompt attribute without changing memory
 selection, ordering, content, or provenance. Compaction retains its existing format.
+
+When semantic recall fails (for example, embedding is unavailable), `relevant` and
+`both` fall back to the existing recent listing with the same scope, count, session,
+and age restrictions. A successful search with no eligible matches stays empty in
+`relevant`; `both` still fills from recent as usual. Partial-shard warnings do not
+trigger failure fallback. If recent fallback also fails, recall remains empty and
+nonfatal. Missing-query fallback and per-turn refresh behavior are unchanged.
 
 ### Update-on-capture (optional)
 

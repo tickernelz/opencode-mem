@@ -24,6 +24,8 @@ let configured = true;
 let memories = [{ summary: "original project knowledge", createdAt: new Date().toISOString() }];
 let failLookup = false;
 let lookupCount = 0;
+let searchCount = 0;
+let failSearch = true;
 const captures = [];
 const histories = new Map();
 const titles = new Map();
@@ -34,6 +36,12 @@ mock.module(moduleUrl("config"), () => ({
 }));
 mock.module(moduleUrl("services/client"), () => ({
   memoryClient: {
+    searchMemories: async () => {
+      searchCount++;
+      return failSearch
+        ? { success: false, error: "synthetic semantic outage", results: [], total: 0 }
+        : { success: true, results: [], total: 0 };
+    },
     warmup: async () => {},
     close: async () => {},
     listMemories: async (_tag, limit, _scope, filters = {}) => {
@@ -225,6 +233,34 @@ const later = {
 };
 await plugin["chat.message"]({ sessionID: "v1" }, later);
 output.v1Later = later.parts;
+// Relevant-mode failure fallback uses the same per-turn cache as semantic recall.
+config.chatMessage.recall = "relevant";
+const lookupsBeforeFallback = lookupCount;
+memories = [
+  { id: "fallback-a", summary: "fallback session A", createdAt: new Date().toISOString() },
+];
+await host.prompt("fallback-a", "first fallback prompt", "msg-fallback-a1");
+output.fallbackFirst = await host.context("fallback-a");
+output.fallbackModelStep = await host.context("fallback-a");
+output.fallbackInitialCounts = { search: searchCount, list: lookupCount - lookupsBeforeFallback };
+memories = [
+  { id: "fallback-b", summary: "fallback session B", createdAt: new Date().toISOString() },
+];
+await host.prompt("fallback-b", "another session prompt", "msg-fallback-b1");
+output.fallbackOtherSession = await host.context("fallback-b");
+output.fallbackOriginalSession = await host.context("fallback-a");
+memories = [
+  { id: "fallback-new", summary: "fresh fallback A", createdAt: new Date().toISOString() },
+];
+await host.prompt("fallback-a", "next authored prompt retries", "msg-fallback-a2");
+output.fallbackNextTurn = await host.context("fallback-a");
+output.fallbackNextStep = await host.context("fallback-a");
+output.fallbackNextCounts = { search: searchCount, list: lookupCount - lookupsBeforeFallback };
+failSearch = false;
+await host.prompt("fallback-a", "successful empty retrieval", "msg-fallback-a3");
+output.fallbackRecoveredEmpty = await host.context("fallback-a");
+output.fallbackOtherAfterRecovery = await host.context("fallback-b");
+output.fallbackFinalCounts = { search: searchCount, list: lookupCount - lookupsBeforeFallback };
 await host.cleanup();
 await plugin.dispose();
 console.log(JSON.stringify(output));

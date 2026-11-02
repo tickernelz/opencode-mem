@@ -7,6 +7,11 @@ import { fileURLToPath } from "node:url";
 const directory = mkdtempSync(join(tmpdir(), "opencode-mem-injection-eligibility-"));
 let result: {
   loaded: string[];
+  failedRecallLoaded: string;
+  failedRecallV1: string;
+  failedRecallSearchCalls: number;
+  thrownRecallEligible: string[];
+  thrownRecallOtherSession: string[];
   v1: string[];
   readSizes: number[];
   ordinaryList: string[];
@@ -43,6 +48,22 @@ describe("memory injection eligibility", () => {
 
   it("fills V1 synthetic context using the same eligible memories", () => {
     expect(result.v1).toEqual(["eligible-0", "eligible-1", "eligible-2"]);
+  });
+
+  it("recovers V1 and the V2 shared loader through real eligible recent listing", () => {
+    for (const context of [result.failedRecallLoaded, result.failedRecallV1]) {
+      expect(context).toContain('selection="recent" id="eligible-0"');
+      expect(context).toContain('selection="recent" id="eligible-1"');
+      expect(context).toContain('selection="recent" id="eligible-2"');
+      expect(context).not.toContain('id="excluded-');
+      expect(context).not.toContain("retrieval_score=");
+    }
+    expect(result.failedRecallSearchCalls).toBe(2);
+  });
+
+  it("preserves project, age, and session isolation after a thrown semantic failure", () => {
+    expect(result.thrownRecallEligible).toEqual(["eligible-a", "eligible-c", "eligible-b"]);
+    expect(result.thrownRecallOtherSession).toEqual(["current-pinned", "eligible-a", "eligible-c"]);
   });
 
   it("leaves ordinary listing and disabled session exclusion unchanged", () => {

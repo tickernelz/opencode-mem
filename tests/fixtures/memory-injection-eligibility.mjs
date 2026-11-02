@@ -39,9 +39,18 @@ mock.module(moduleUrl("config"), () => ({
   initConfig() {},
   isConfigured: () => true,
 }));
+let failedSearchCalls = 0;
 mock.module(moduleUrl("services/embedding"), () => ({
   EmbeddingService: class {},
-  embeddingService: { isWarmedUp: true, warmup: async () => {}, dispose: async () => {} },
+  embeddingService: {
+    isWarmedUp: true,
+    warmup: async () => {},
+    dispose: async () => {},
+    embedWithTimeout: async () => {
+      failedSearchCalls++;
+      throw new Error("synthetic semantic embedding outage");
+    },
+  },
 }));
 mock.module(moduleUrl("services/turso/ready"), () => ({
   ensureTursoReady: async () => {},
@@ -166,6 +175,23 @@ const result = {
   ),
   readSizes: [...readSizes],
 };
+// The real V1 injection and V2 shared loader must both recover via the real
+// client/database recent path when semantic retrieval is unavailable.
+const originalSearch = memoryClient.searchMemories;
+config.chatMessage.recall = "relevant";
+result.failedRecallLoaded = await plugin.memoryContext.load(sessionID);
+const failureMessage = {
+  message: { id: "fixture-failure-message" },
+  parts: [{ type: "text", text: "A fresh real user request" }],
+};
+await plugin["chat.message"]({ sessionID }, failureMessage);
+result.failedRecallV1 = failureMessage.parts
+  .filter((part) => part.synthetic)
+  .map((part) => part.text)
+  .join("\n");
+result.failedRecallSearchCalls = failedSearchCalls;
+config.chatMessage.recall = "recent";
+memoryClient.searchMemories = originalSearch;
 result.ordinaryList = (await memoryClient.listMemories(projectTag, 3)).memories.map((m) => m.id);
 config.chatMessage.excludeCurrentSession = false;
 result.unfiltered = ids(await plugin.memoryContext.load(sessionID));
@@ -183,6 +209,14 @@ await add("eligible-c", 200, undefined, 1);
 await add("eligible-d", 400, undefined, 1);
 result.multishard = ids(await plugin.memoryContext.load(sessionID));
 result.multishardReadSizes = [...readSizes];
+config.chatMessage.recall = "relevant";
+memoryClient.searchMemories = async () => {
+  throw new Error("synthetic semantic transport outage");
+};
+result.thrownRecallEligible = ids(await plugin.memoryContext.load(sessionID));
+result.thrownRecallOtherSession = ids(await plugin.memoryContext.load("different-session"));
+config.chatMessage.recall = "recent";
+memoryClient.searchMemories = originalSearch;
 
 // Preserve the strict age cutoff, even when an older pinned row is ahead of it.
 await clear();
