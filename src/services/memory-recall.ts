@@ -156,7 +156,8 @@ export interface LoadRecallOptions {
 /**
  * Select memories for chat auto-injection according to chatMessage.recall.
  * Falls back to recent listing when relevant/both is requested but no query text
- * is available (e.g. V2 context rehydrate without a fresh prompt).
+ * is available (e.g. V2 context rehydrate without a fresh prompt), or semantic
+ * search fails. Successful searches with no eligible matches are not failures.
  */
 export async function loadRecallMemories(opts: LoadRecallOptions): Promise<RecallMemory[]> {
   const scope = resolveRecallScope(opts.recallScope, opts.defaultScope);
@@ -189,15 +190,21 @@ export async function loadRecallMemories(opts: LoadRecallOptions): Promise<Recal
     return listResult.memories.map(listRowToRecall);
   };
 
-  const loadRelevant = async (): Promise<RecallMemory[]> => {
+  const loadRelevant = async (): Promise<RecallMemory[] | null> => {
     const query = opts.queryText!.trim();
     // Over-fetch so session/age filters and project boost can still fill the slot budget.
     const fetchLimit = Math.max(opts.maxMemories * 3, opts.maxMemories);
-    const searchRes = await memoryClient.searchMemories(query, opts.containerTag, scope, {
-      limit: fetchLimit,
-      similarityThreshold: opts.similarityThreshold,
-    });
-    if (!searchRes.success) return [];
+    let searchRes;
+    try {
+      searchRes = await memoryClient.searchMemories(query, opts.containerTag, scope, {
+        limit: fetchLimit,
+        similarityThreshold: opts.similarityThreshold,
+      });
+    } catch {
+      return null;
+    }
+    // Partial-shard warnings remain successful searches, even with no matches.
+    if (!searchRes.success) return null;
     let results = searchRes.results.map(searchResultToRecall);
     results = filterRecallResults(results, filters);
     if (scope === "all-projects") {
@@ -212,12 +219,24 @@ export async function loadRecallMemories(opts: LoadRecallOptions): Promise<Recal
     return loadRecent();
   }
 
-  if (mode === "relevant") {
-    return loadRelevant();
+  const relevant = await loadRelevant();
+  if (relevant === null) {
+    log("memory recall: semantic search failed, falling back to recent", {
+      sessionID: opts.sessionID,
+      requested: mode,
+    });
+    // Return directly so both mode never repeats a short or failed recent load.
+    try {
+      return await loadRecent();
+    } catch {
+      log("memory recall: recent fallback failed", { sessionID: opts.sessionID });
+      return [];
+    }
   }
 
+  if (mode === "relevant") return relevant;
+
   // both
-  const relevant = await loadRelevant();
   if (relevant.length >= opts.maxMemories) return relevant.slice(0, opts.maxMemories);
   const recent = await loadRecent();
   return mergeBoth(relevant, recent, opts.maxMemories);
