@@ -279,6 +279,14 @@ memories do not consume slots that could hold eligible memories. Setting
 `chatMessage.maxMemories` to `0` disables project-memory injection while still allowing
 the user profile to be injected when enabled.
 
+Injected memory tags identify `selection="recent"` or `selection="semantic"`.
+Recent selections (including missing-query fallback and recent fill in `both`) have no
+numeric score. Semantic selections carry a finite `retrieval_score` when available;
+this is a ranking signal that can include the current-project boost, not a probability
+of relevance or factual correctness. Missing or invalid scores are omitted. This
+replaces the former `relevance="...%"` prompt attribute without changing memory
+selection, ordering, content, or provenance. Compaction retains its existing format.
+
 ### Update-on-capture (optional)
 
 Opt-in path that keeps memories current as facts change. When `updateOnCaptureEnabled` is

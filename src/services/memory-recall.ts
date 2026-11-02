@@ -9,7 +9,8 @@ export type RecallScopeSetting = "project" | "all-projects" | "default";
 export interface RecallMemory {
   id: string;
   memory: string;
-  similarity: number;
+  similarity?: number;
+  selection?: "recent" | "semantic";
   createdAt?: number | string;
   projectName?: string;
   containerTag?: string;
@@ -47,12 +48,15 @@ export function applyProjectBoost(
   return results
     .map((r) => ({
       ...r,
-      similarity: Math.min(
-        1,
-        r.similarity + (r.containerTag && r.containerTag === currentContainerTag ? boost : 0)
-      ),
+      similarity:
+        r.similarity === undefined
+          ? undefined
+          : Math.min(
+              1,
+              r.similarity + (r.containerTag && r.containerTag === currentContainerTag ? boost : 0)
+            ),
     }))
-    .sort((a, b) => b.similarity - a.similarity);
+    .sort((a, b) => (b.similarity ?? -Infinity) - (a.similarity ?? -Infinity));
 }
 
 export function filterRecallResults(
@@ -108,6 +112,7 @@ function searchResultToRecall(r: SearchResult): RecallMemory {
     id: r.id,
     memory: r.memory,
     similarity: r.similarity,
+    selection: "semantic",
     createdAt: r.createdAt,
     projectName: r.projectName,
     containerTag: (r as { containerTag?: string }).containerTag,
@@ -127,7 +132,7 @@ function listRowToRecall(m: {
   return {
     id: m.id,
     memory: m.summary,
-    similarity: 1.0,
+    selection: "recent",
     createdAt: m.createdAt,
     projectName: m.projectName,
     metadata: m.metadata,

@@ -714,6 +714,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     const projectMemories = {
       results: memories.map((m) => ({
         similarity: m.similarity,
+        selection: m.selection,
         memory: m.memory,
         id: m.id,
         createdAt: m.createdAt,
