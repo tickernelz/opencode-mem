@@ -79,26 +79,45 @@ describe("plugin Turso refcount (#443)", () => {
     const id = await userPromptManager.savePrompt("sess-b", "msg-b", "/tmp/p", "world");
 
     // Fake a warmed local model so the close path has something to release.
-    // Provide dispose explicitly: earlier suite mocks may replace embeddingService
-    // with a stub that lacks the real EmbeddingService methods.
+    // Restore afterwards: leaving a stub `pipe` object poisons later suite embeds
+    // (`pipe is not a function` in profile-write).
     const { embeddingService } = await import("../src/services/embedding.js");
     const released: string[] = [];
-    Object.assign(embeddingService, {
-      pipe: { dispose: async () => released.push("dispose") },
-      isWarmedUp: true,
-      async dispose() {
-        await (this as { pipe?: { dispose?: () => Promise<void> } }).pipe?.dispose?.();
-      },
-    });
+    const previous = {
+      pipe: embeddingService.pipe,
+      isWarmedUp: embeddingService.isWarmedUp,
+      dispose: embeddingService.dispose,
+    };
+    try {
+      Object.assign(embeddingService, {
+        pipe: { dispose: async () => released.push("dispose") },
+        isWarmedUp: true,
+      });
+      // Earlier suite mocks may replace embeddingService without dispose.
+      if (typeof embeddingService.dispose !== "function") {
+        Object.assign(embeddingService, {
+          async dispose() {
+            const pipe = this.pipe as { dispose?: () => Promise<void> } | null;
+            this.pipe = null;
+            this.isWarmedUp = false;
+            await pipe?.dispose?.();
+          },
+        });
+      }
 
-    await memoryClient.close();
-    expect(pluginTursoRefCount()).toBe(1);
-    expect((await userPromptManager.getPromptById(id))?.content).toBe("world");
-    // Sibling instance still live: the process-wide model must stay loaded.
-    expect(released).toEqual([]);
+      await memoryClient.close();
+      expect(pluginTursoRefCount()).toBe(1);
+      expect((await userPromptManager.getPromptById(id))?.content).toBe("world");
+      // Sibling instance still live: the process-wide model must stay loaded.
+      expect(released).toEqual([]);
 
-    await memoryClient.close();
-    expect(pluginTursoRefCount()).toBe(0);
-    expect(released).toEqual(["dispose"]);
+      await memoryClient.close();
+      expect(pluginTursoRefCount()).toBe(0);
+      expect(released).toEqual(["dispose"]);
+    } finally {
+      embeddingService.pipe = previous.pipe;
+      embeddingService.isWarmedUp = previous.isWarmedUp;
+      embeddingService.dispose = previous.dispose;
+    }
   });
 });
