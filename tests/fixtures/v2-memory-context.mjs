@@ -60,6 +60,11 @@ mock.module(moduleUrl("services/context"), () => ({
   // Mirror production: empty project memories yield "" unless a profile block exists.
   formatContextForPrompt: async (_user, data) => {
     const results = data?.results ?? [];
+    for (const memory of results) {
+      if (memory.selection !== "recent" || memory.similarity !== undefined) {
+        throw new Error("Shared V1/V2 loader lost the unscored recent selection metadata");
+      }
+    }
     if (results.length === 0) return "";
     return "<memory_context>" + results.map((m) => m.memory).join("|") + "</memory_context>";
   },
