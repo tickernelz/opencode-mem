@@ -591,6 +591,14 @@ Manual `memoryProvider` modes:
 Troubleshooting:
 
 - Auto-capture failures do not block manual `memory` tool usage.
+- If the connected host reports `Session.NotFoundError` while loading capture context,
+  auto-capture logs a skipped `session_not_found` outcome and stops that session's
+  current batch without backoff or consuming capture attempts. Pending prompts are
+  retained and claims released, so a later idle event can capture them if the session
+  becomes accessible (for example, in the owning desktop/CLI instance). Normal prompt
+  retention still applies. This does not recreate deleted transcripts, recover prompts
+  whose retry budget was already exhausted, or infer completed work from a request alone.
+  Other context, provider, and persistence errors retain their existing retry behavior.
 - If auto-capture reports that a provider is not connected, confirm the provider name with `opencode providers list` and configure that provider in opencode first.
 - If a proxy or custom provider returns plain text instead of structured/tool output, choose another model/provider or use one of the manual provider modes above.
 - For models that reject `temperature`, add `"memoryTemperature": false` when using manual API configuration.

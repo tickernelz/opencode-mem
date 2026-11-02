@@ -88,8 +88,20 @@ async function runAutoCapture(
 
   const maxRetries = CONFIG.autoCaptureMaxRetries ?? 3;
   for (const prompt of prompts) {
-    await capturePrompt(ctx, sessionID, directory, prompt, maxRetries);
+    if (
+      (await capturePrompt(ctx, sessionID, directory, prompt, maxRetries)) === "session-unavailable"
+    ) {
+      // The connected host cannot provide this session's context. Do not repeat
+      // the same lookup for every pending prompt in this batch.
+      break;
+    }
   }
+}
+
+function isMissingSessionError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { name?: unknown; _tag?: unknown };
+  return value.name === "Session.NotFoundError" || value._tag === "Session.NotFoundError";
 }
 
 async function capturePrompt(
@@ -98,7 +110,7 @@ async function capturePrompt(
   directory: string,
   prompt: UserPrompt,
   maxRetries: number
-): Promise<void> {
+): Promise<"session-unavailable" | void> {
   let claimedPromptId: string | null = null;
   let attempt = prompt.capture_attempts || 0;
   let phase: "claim" | "context" | "summary" | "persist" = "claim";
@@ -117,9 +129,27 @@ async function capturePrompt(
         }
 
         phase = "context";
-        const response = await ctx.client.session.messages({
-          path: { id: sessionID },
-        });
+        let response: Awaited<ReturnType<typeof ctx.client.session.messages>>;
+        try {
+          response = await ctx.client.session.messages({
+            path: { id: sessionID },
+          });
+          if ("error" in response && isMissingSessionError(response.error)) throw response.error;
+        } catch (error) {
+          if (!isMissingSessionError(error)) throw error;
+          // A session absent from this host may still exist in another desktop
+          // or CLI instance. Keep the prompt eligible for a later idle event;
+          // finally releases the claim without spending the capture retry budget.
+          log("Auto-capture skipped: session context unavailable; prompt retained", {
+            phase,
+            outcome: "skipped",
+            reason: "session_not_found",
+            promptId: prompt.id,
+            sessionID,
+            ...serializeError(error),
+          });
+          return "session-unavailable";
+        }
 
         if (!response.data) {
           return;
@@ -261,7 +291,7 @@ async function capturePrompt(
       }
     }
   } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error);
+    const errMsg = serializeError(error).error;
     log(`Auto-capture final error after ${attempt} attempts`, {
       phase,
       ...serializeError(error),

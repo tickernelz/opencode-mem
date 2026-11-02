@@ -117,6 +117,18 @@ function ensureLoggerInitialized() {
   (globalThis as any)[GLOBAL_LOGGER_KEY] = logDir;
 }
 
+/** Read only diagnostic fields; never dump arbitrary error payloads. */
+function errorDescription(error: unknown): string {
+  if (error && typeof error === "object") {
+    const value = error as { message?: unknown; name?: unknown; _tag?: unknown };
+    const name = value.name === "Error" ? value._tag : value.name;
+    for (const field of [value.message, name, value._tag, value.name]) {
+      if (typeof field === "string" && field.trim()) return field;
+    }
+  }
+  return error instanceof Error ? "Error" : String(error);
+}
+
 /** Structured fields for log payloads so callers keep `error` + stack/cause. */
 export function serializeError(error: unknown): {
   error: string;
@@ -125,20 +137,15 @@ export function serializeError(error: unknown): {
   cause?: string;
 } {
   if (error instanceof Error) {
-    const cause =
-      error.cause instanceof Error
-        ? error.cause.message
-        : error.cause !== undefined
-          ? String(error.cause)
-          : undefined;
+    const cause = error.cause !== undefined ? errorDescription(error.cause) : undefined;
     return {
-      error: error.message,
+      error: errorDescription(error),
       name: error.name,
       ...(error.stack ? { stack: error.stack } : {}),
       ...(cause !== undefined ? { cause } : {}),
     };
   }
-  return { error: String(error) };
+  return { error: errorDescription(error) };
 }
 
 /**
