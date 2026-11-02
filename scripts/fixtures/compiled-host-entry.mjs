@@ -12,7 +12,7 @@
  *   OPENCODE_MEM_EMBEDDING_MODEL — optional feature-extraction model id
  *   OPENCODE_MEM_EMBEDDING_DIMS — expected trailing embedding dimension
  */
-const PINNED = "1.30.0";
+const PINNED = "1.31.1";
 const MODEL = process.env.OPENCODE_MEM_EMBEDDING_MODEL || "Xenova/all-MiniLM-L6-v2";
 const EXPECTED_DIMS = Number(process.env.OPENCODE_MEM_EMBEDDING_DIMS || "384");
 

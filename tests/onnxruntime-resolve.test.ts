@@ -96,7 +96,7 @@ describe("onnxruntime resolve shim (#184 / #210)", () => {
     expect(message).toContain("darwin/x64");
     expect(message).toContain("embeddingApiUrl");
     expect(message).toContain("embeddingApiKey");
-    expect(message).toContain("1.30.0");
+    expect(message).toContain("1.31.1");
     expect(message).toContain("unsupported");
   });
 
