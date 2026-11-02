@@ -377,14 +377,9 @@ export class TursoVectorSearch {
             error: String(quarantineError),
           });
         }
-      } else {
-        // Soft-deleted orphan that cannot be hard-purged without REINDEX — leave
-        // it and return false so trash purge does not spam or fake-count deletes.
-        log("deleteVector: IdxDelete leaving soft-deleted orphan in place", {
-          memoryId,
-          error: String(error),
-        });
       }
+      // Soft-deleted / quarantined row that cannot be hard-purged without REINDEX.
+      // Return false quietly so trash purge neither fake-counts nor log-spams.
       return false;
     }
   }
