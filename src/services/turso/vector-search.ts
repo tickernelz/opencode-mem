@@ -1,5 +1,6 @@
 import { tursoConnectionManager } from "./connection-manager.js";
 import { tursoShardManager } from "./shard-manager.js";
+import { isIdxDeleteMismatchError } from "./error-classifiers.js";
 import { log } from "../logger.js";
 import type { MemoryListFilters, MemoryRecord, SearchResult, ShardInfo } from "./types.js";
 import {
@@ -340,8 +341,47 @@ export class TursoVectorSearch {
     };
   }
 
-  async deleteVector(db: TursoDb, memoryId: string): Promise<void> {
-    await db.run(`DELETE FROM memories WHERE id = ?`, [memoryId]);
+  /**
+   * Hard-delete a memory row. Returns true when the row is gone (deleted now or
+   * already missing). Returns false when IdxDelete leaves the row in place —
+   * callers must not decrement vector counts. Active stuck rows are soft-deleted
+   * once so age cleanup stops retrying the same broken index key.
+   */
+  async deleteVector(db: TursoDb, memoryId: string): Promise<boolean> {
+    try {
+      await db.run(`DELETE FROM memories WHERE id = ?`, [memoryId]);
+      return true;
+    } catch (error) {
+      if (!isIdxDeleteMismatchError(error)) throw error;
+      // IdxDelete with the row still present means the DELETE rolled back.
+      const remaining = await db.get(`SELECT id, deleted_at FROM memories WHERE id = ?`, [
+        memoryId,
+      ]);
+      if (!remaining) return true;
+
+      // Quarantine active rows so age-based cleanup stops re-hitting the same key.
+      if (remaining.deleted_at == null) {
+        const now = Date.now();
+        try {
+          await db.run(
+            `UPDATE memories SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
+            [now, now, memoryId]
+          );
+          log("deleteVector: IdxDelete quarantined active row via soft-delete", {
+            memoryId,
+            error: String(error),
+          });
+        } catch (quarantineError) {
+          log("deleteVector: IdxDelete quarantine failed", {
+            memoryId,
+            error: String(quarantineError),
+          });
+        }
+      }
+      // Soft-deleted / quarantined row that cannot be hard-purged without REINDEX.
+      // Return false quietly so trash purge neither fake-counts nor log-spams.
+      return false;
+    }
   }
 
   async softDeleteVector(
@@ -406,11 +446,18 @@ export class TursoVectorSearch {
       `SELECT id FROM memories WHERE deleted_at IS NOT NULL AND deleted_at < ?`,
       [cutoffMs]
     );
-    const ids = rows.map((r) => String(r.id));
-    for (const id of ids) {
-      await this.deleteVector(db, id);
+    const purged: string[] = [];
+    for (const row of rows) {
+      const id = String(row.id);
+      try {
+        if (await this.deleteVector(db, id)) {
+          purged.push(id);
+        }
+      } catch (error) {
+        log("purgeDeletedBefore: delete error", { memoryId: id, error: String(error) });
+      }
     }
-    return ids;
+    return purged;
   }
 
   async updateVector(

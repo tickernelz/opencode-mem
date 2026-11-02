@@ -115,7 +115,10 @@ export class LocalMemoryClient {
     const closed = await releasePluginTurso();
     if (closed) {
       // Process-wide like the pool: only the last instance may drop the model.
-      await embeddingService.dispose("client-close");
+      // Optional: test stubs for embeddingService may omit dispose.
+      if (typeof embeddingService.dispose === "function") {
+        await embeddingService.dispose("client-close");
+      }
       this.reset();
     }
   }

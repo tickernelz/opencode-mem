@@ -1067,6 +1067,13 @@ export async function handleRunDreaming(
     const result = await dreamingService.run(directory);
     return { success: true, data: result };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("already running")) {
+      return { success: false, error: "already_running" };
+    }
+    if (message === "dreaming_provider_unavailable") {
+      return { success: false, error: "dreaming_provider_unavailable" };
+    }
     log("handleRunDreaming: error", { error: String(error) });
     return { success: false, error: String(error) };
   }

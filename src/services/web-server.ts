@@ -656,6 +656,9 @@ export class WebServer {
 
       if (path === "/api/dreaming/run" && method === "POST") {
         const result = await handleRunDreaming();
+        if (!result.success && result.error === "already_running") {
+          return this.jsonResponse(result, 409);
+        }
         return this.jsonResponse(result);
       }
 

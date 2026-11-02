@@ -51,6 +51,7 @@ export function createMemoriesExplorer() {
       containerTag: string;
     }>
   >([]);
+  let dreamingBusy = $state(false);
 
   function snapshot() {
     return { currentPage, isSearching, searchQuery, selectedTags };
@@ -489,6 +490,7 @@ export function createMemoriesExplorer() {
   }
 
   async function runDreaming() {
+    if (dreamingBusy) return;
     const ok = await askConfirm({
       title: t("confirm-dreaming-title"),
       detail: t("confirm-dreaming"),
@@ -496,13 +498,45 @@ export function createMemoriesExplorer() {
       tone: "danger",
     });
     if (!ok) return;
+    dreamingBusy = true;
     toast.info(t("status-dreaming"));
-    const result = await fetchAPI("/api/dreaming/run", { method: "POST" });
-    await toastApiResult(result, {
-      successKey: "toast-dreaming-success",
-      failKey: "toast-dreaming-failed",
-      onSuccess: () => reloadAll(),
-    });
+    try {
+      const result = await fetchAPI<{
+        groupsFailed?: number;
+        groupsConsidered?: number;
+        groupsMerged?: number;
+      }>("/api/dreaming/run", { method: "POST" });
+      if (!result.success && result.error === "already_running") {
+        toast.info(t("toast-dreaming-already-running"));
+        return;
+      }
+      if (!result.success && result.error === "dreaming_provider_unavailable") {
+        toast.error(t("toast-dreaming-failed"));
+        return;
+      }
+      if (result.success && (result.data?.groupsFailed ?? 0) > 0) {
+        const failed = result.data?.groupsFailed ?? 0;
+        const considered = result.data?.groupsConsidered ?? 0;
+        const merged = result.data?.groupsMerged ?? 0;
+        const partialMsg = t("toast-dreaming-partial", { failed, considered });
+        // Nothing merged + any failures: treat as error (includes provider abort).
+        // Mixed merge+fail stays a warning.
+        if (merged === 0) {
+          toast.error(partialMsg);
+        } else {
+          toast.warning(partialMsg);
+        }
+        await reloadAll();
+        return;
+      }
+      await toastApiResult(result, {
+        successKey: "toast-dreaming-success",
+        failKey: "toast-dreaming-failed",
+        onSuccess: () => reloadAll(),
+      });
+    } finally {
+      dreamingBusy = false;
+    }
   }
 
   async function runMigration(strategy: "fresh-start" | "re-embed") {
@@ -663,6 +697,9 @@ export function createMemoriesExplorer() {
     },
     get trashItems() {
       return trashItems;
+    },
+    get dreamingBusy() {
+      return dreamingBusy;
     },
     get knownTags() {
       const set = new Set<string>();

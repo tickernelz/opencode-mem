@@ -347,7 +347,12 @@
               <Button type="button" variant="outline" onclick={explorer.openTrash}>
                 {i18n.t("btn-trash")}
               </Button>
-              <Button type="button" variant="outline" onclick={explorer.runDreaming}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={explorer.dreamingBusy}
+                onclick={explorer.runDreaming}
+              >
                 {i18n.t("btn-dreaming")}
               </Button>
               <Button

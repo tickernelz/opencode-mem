@@ -1,6 +1,7 @@
 import { tursoShardManager } from "./turso/shard-manager.js";
 import { tursoVectorSearch } from "./turso/vector-search.js";
 import { tursoConnectionManager } from "./turso/connection-manager.js";
+import { isVacuumUnsupportedError } from "./turso/error-classifiers.js";
 import { ensureTursoReady } from "./turso/ready.js";
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
@@ -15,6 +16,9 @@ interface CleanupResult {
   pinnedMemoriesSkipped: number;
   aiSessionsDeleted: number;
 }
+
+/** Process-lifetime: Turso rejected VACUUM; do not retry every cleanup. */
+let vacuumUnsupported = false;
 
 export class CleanupService {
   private lastCleanupTime: number = 0;
@@ -46,18 +50,36 @@ export class CleanupService {
       await ensureTursoReady();
       const cutoffTime = Date.now() - CONFIG.autoCleanupRetentionDays * 24 * 60 * 60 * 1000;
 
-      const userShards = await tursoShardManager.getAllShards("user", "");
-      const projectShards = await tursoShardManager.getAllShards("project", "");
-      const allShards = [...userShards, ...projectShards];
+      let allShards: Awaited<ReturnType<typeof tursoShardManager.getAllShards>> = [];
+      try {
+        const userShards = await tursoShardManager.getAllShards("user", "");
+        const projectShards = await tursoShardManager.getAllShards("project", "");
+        allShards = [...userShards, ...projectShards];
+      } catch (error) {
+        log("Cleanup: step failed", { step: "list-shards", error: String(error) });
+      }
 
       const pinnedMemoryIds = new Set<string>();
       for (const shard of allShards) {
-        const db = await tursoConnectionManager.getConnection(shard.dbPath);
-        const pinned = await db.all(`SELECT id FROM memories WHERE is_pinned = 1`);
-        pinned.forEach((row) => pinnedMemoryIds.add(String(row.id)));
+        try {
+          const db = await tursoConnectionManager.getConnection(shard.dbPath);
+          const pinned = await db.all(`SELECT id FROM memories WHERE is_pinned = 1`);
+          pinned.forEach((row) => pinnedMemoryIds.add(String(row.id)));
+        } catch (error) {
+          log("Cleanup: step failed", {
+            step: "pins",
+            shardId: shard.id,
+            error: String(error),
+          });
+        }
       }
 
-      const promptCleanupResult = await userPromptManager.deleteOldPrompts(cutoffTime);
+      let promptCleanupResult = { deleted: 0, linkedMemoryIds: [] as string[] };
+      try {
+        promptCleanupResult = await userPromptManager.deleteOldPrompts(cutoffTime);
+      } catch (error) {
+        log("Cleanup: step failed", { step: "deleteOldPrompts", error: String(error) });
+      }
       const linkedMemoryIds = new Set(promptCleanupResult.linkedMemoryIds);
       const protectedMemoryIds = new Set([...pinnedMemoryIds, ...linkedMemoryIds]);
 
@@ -68,16 +90,36 @@ export class CleanupService {
       let pinnedSkipped = 0;
 
       for (const shard of allShards) {
-        const db = await tursoConnectionManager.getConnection(shard.dbPath);
-        // Ensure deleted_at (v3) exists before filtering on it.
-        await tursoShardManager.ensureShardSchema(db);
-        const oldMemories = await db.all(
-          `
+        let db;
+        try {
+          db = await tursoConnectionManager.getConnection(shard.dbPath);
+          await tursoShardManager.ensureShardSchema(db);
+        } catch (error) {
+          log("Cleanup: step failed", {
+            step: "shard-schema",
+            shardId: shard.id,
+            error: String(error),
+          });
+          continue;
+        }
+
+        let oldMemories: Array<Record<string, unknown>> = [];
+        try {
+          oldMemories = await db.all(
+            `
           SELECT id, container_tag, is_pinned FROM memories
           WHERE updated_at < ? AND deleted_at IS NULL
         `,
-          [cutoffTime]
-        );
+            [cutoffTime]
+          );
+        } catch (error) {
+          log("Cleanup: step failed", {
+            step: "age-select",
+            shardId: shard.id,
+            error: String(error),
+          });
+          continue;
+        }
 
         for (const memory of oldMemories) {
           try {
@@ -90,7 +132,11 @@ export class CleanupService {
               continue;
             }
 
-            await tursoVectorSearch.deleteVector(db, String(memory.id));
+            const hardDeleted = await tursoVectorSearch.deleteVector(db, String(memory.id));
+            if (!hardDeleted) {
+              // IdxDelete quarantine (soft-delete) — do not count as hard-deleted.
+              continue;
+            }
             await tursoShardManager.decrementVectorCount(shard.id);
             totalDeleted++;
 
@@ -122,11 +168,20 @@ export class CleanupService {
 
       const promptsDeleted = promptCleanupResult.deleted - linkedMemoryIds.size;
 
-      try {
-        await userPromptManager.vacuum();
-        log("Cleanup: VACUUM done", { db: "user-prompts.db" });
-      } catch (err) {
-        log("Cleanup: VACUUM skipped (DB busy)", { error: String(err) });
+      if (!vacuumUnsupported) {
+        try {
+          await userPromptManager.vacuum();
+          log("Cleanup: VACUUM done", { db: "user-prompts.db" });
+        } catch (err) {
+          if (isVacuumUnsupportedError(err)) {
+            vacuumUnsupported = true;
+            log("Cleanup: VACUUM skipped (unsupported by Turso backend)", {
+              error: String(err),
+            });
+          } else {
+            log("Cleanup: VACUUM skipped (DB busy)", { error: String(err) });
+          }
+        }
       }
 
       let aiSessionsDeleted = 0;
@@ -163,3 +218,8 @@ export class CleanupService {
 }
 
 export const cleanupService = new CleanupService();
+
+/** Test helper: reset process-lifetime VACUUM unsupported flag. */
+export function resetVacuumUnsupportedForTests(): void {
+  vacuumUnsupported = false;
+}

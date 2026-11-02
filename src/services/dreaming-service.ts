@@ -110,6 +110,7 @@ export interface DreamingRunResult {
   groupsConsidered: number;
   groupsMerged: number;
   groupsSkipped: number;
+  groupsFailed: number;
   groupsFlagged: number;
   memoriesSoftDeleted: number;
 }
@@ -288,6 +289,10 @@ export class DreamingService {
         log("dreaming: skipped due to lock contention", { error: message });
         return null;
       }
+      if (message === "dreaming_provider_unavailable") {
+        log("dreaming: skipped (provider unavailable)", { error: message });
+        return null;
+      }
       throw error;
     }
   }
@@ -306,6 +311,7 @@ export class DreamingService {
       groupsConsidered: 0,
       groupsMerged: 0,
       groupsSkipped: 0,
+      groupsFailed: 0,
       groupsFlagged: 0,
       memoriesSoftDeleted: 0,
     };
@@ -324,10 +330,11 @@ export class DreamingService {
       const v2Client = getV2Client();
       if (!v2Client || !CONFIG.opencodeProvider || !CONFIG.opencodeModel) {
         log("dreaming: skipped (no opencode structured-output client)");
-        return result;
+        throw new Error("dreaming_provider_unavailable");
       }
 
       const { generateStructuredOutput } = await import("./ai/opencode-provider.js");
+      let abortedForProvider = false;
 
       for (const group of batch) {
         try {
@@ -402,13 +409,39 @@ export class DreamingService {
             result.groupsSkipped++;
           }
         } catch (error) {
-          result.groupsSkipped++;
-          log("dreaming: group failed", { error: String(error) });
+          result.groupsFailed++;
+          const errMsg = error instanceof Error ? error.message : String(error);
+          log("dreaming: group failed", { error: errMsg });
+          // Auth / provider outages will fail every remaining group the same way.
+          if (/ProviderRequestError|API_KEY is not set|401|Unauthorized/i.test(errMsg)) {
+            const processed =
+              result.groupsMerged +
+              result.groupsSkipped +
+              result.groupsFlagged +
+              result.groupsFailed;
+            const remaining = Math.max(0, result.groupsConsidered - processed);
+            result.groupsFailed += remaining;
+            abortedForProvider = true;
+            log("dreaming: aborting remaining groups after provider failure", { remaining });
+            break;
+          }
         }
       }
 
-      writeState({ lastRunAt: Date.now() });
-      log("dreaming: run complete", result);
+      const onlyFailures =
+        result.groupsConsidered > 0 &&
+        result.groupsMerged === 0 &&
+        result.groupsFlagged === 0 &&
+        result.groupsSkipped === 0 &&
+        result.groupsFailed > 0 &&
+        (abortedForProvider || result.groupsFailed === result.groupsConsidered);
+      if (onlyFailures) {
+        // Do not advance the schedule when nothing could be processed.
+        log("dreaming: run complete with only failures; not advancing lastRunAt", result);
+      } else {
+        writeState({ lastRunAt: Date.now() });
+        log("dreaming: run complete", result);
+      }
       return result;
     } finally {
       this.isRunning = false;

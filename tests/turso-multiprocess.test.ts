@@ -15,9 +15,17 @@ describe("turso multiprocess_wal", () => {
   it("buildConnectOptions enables encryption and multiprocess_wal on Unix only", async () => {
     const { buildConnectOptions, tursoExperimentalFeatures, supportsTursoMultiprocessWal } =
       await import("../src/services/turso/connection-manager.js");
-    expect(tursoExperimentalFeatures("linux")).toEqual(["encryption", "multiprocess_wal"]);
-    expect(tursoExperimentalFeatures("darwin")).toEqual(["encryption", "multiprocess_wal"]);
-    expect(tursoExperimentalFeatures("win32")).toEqual(["encryption"]);
+    expect(tursoExperimentalFeatures("linux")).toEqual([
+      "encryption",
+      "vacuum",
+      "multiprocess_wal",
+    ]);
+    expect(tursoExperimentalFeatures("darwin")).toEqual([
+      "encryption",
+      "vacuum",
+      "multiprocess_wal",
+    ]);
+    expect(tursoExperimentalFeatures("win32")).toEqual(["encryption", "vacuum"]);
     expect(supportsTursoMultiprocessWal("win32")).toBe(false);
     expect(buildConnectOptions()).toEqual({
       experimental: tursoExperimentalFeatures(),
