@@ -24,21 +24,32 @@ describe("schema migrations", () => {
     const native = await connect(dbPath);
     const db = new TursoDb(native);
 
+    await applySchemaMigrations(db, USER_PROMPTS_MIGRATIONS.slice(0, 1), { dbPath, label: "v1" });
+    await db.run(
+      "INSERT INTO user_prompts (id, session_id, message_id, content, created_at) VALUES (?, ?, ?, ?, ?)",
+      ["existing", "session", "message", "Existing request", 1]
+    );
     const version = await applySchemaMigrations(db, USER_PROMPTS_MIGRATIONS, {
       dbPath,
       label: "test",
     });
-    expect(version).toBe(1);
+    expect(version).toBe(2);
     await ensureUserPromptColumns(db);
 
     const again = await applySchemaMigrations(db, USER_PROMPTS_MIGRATIONS, {
       dbPath,
       label: "test",
     });
-    expect(again).toBe(1);
+    expect(again).toBe(2);
 
     const row = await db.get<{ user_version?: number }>("PRAGMA user_version");
-    expect(Number(row?.user_version)).toBe(1);
+    expect(Number(row?.user_version)).toBe(2);
+    expect((await db.get("SELECT content FROM user_prompts WHERE id = 'existing'"))?.content).toBe(
+      "Existing request"
+    );
+    expect(await db.get("SELECT COUNT(*) AS n FROM pending_capture_evidence")).toMatchObject({
+      n: 0,
+    });
     await db.close();
   });
 

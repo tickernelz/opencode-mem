@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { embeddingService } from "./embedding.js";
 import { tursoShardManager } from "./turso/shard-manager.js";
 import { tursoVectorSearch } from "./turso/vector-search.js";
@@ -206,9 +207,29 @@ export class LocalMemoryClient {
 
       phase = "write";
       return await tursoShardManager.withScopeWriteLock(scope, hash, async () => {
+        const promptId = metadata?.promptId;
+        const replayId =
+          metadata?.source === "auto-capture" && typeof promptId === "string" && promptId.trim()
+            ? `mem_capture_${createHash("sha256")
+                .update(JSON.stringify([containerTag, promptId]))
+                .digest("hex")}`
+            : null;
+        if (replayId) {
+          // A crash can leave the memory committed before its prompt is marked captured.
+          // Search older rotated shards too, and retain soft deletion as an explicit decision.
+          const shards = await tursoShardManager.getAllShards(scope, hash);
+          for (const existingShard of shards) {
+            const db = await tursoConnectionManager.getConnection(existingShard.dbPath);
+            const existing = await db.get(
+              "SELECT id FROM memories WHERE id = ? AND container_tag = ? LIMIT 1",
+              [replayId, containerTag]
+            );
+            if (existing) return { success: true as const, id: replayId };
+          }
+        }
         const shard = await tursoShardManager.getWriteShard(scope, hash);
 
-        const id = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+        const id = replayId ?? `mem_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
         const now = Date.now();
 
         const {

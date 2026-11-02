@@ -1,6 +1,7 @@
 import type { Context } from "@opencode/plugin/promise/plugin";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
+import { isCaptureEvidenceEvent } from "../services/capture-evidence-events.js";
 import type { MemToastPayload } from "./toast-rpc.js";
 
 type LegacyPart = { type?: string; text?: string; metadata?: unknown };
@@ -385,7 +386,8 @@ const LEGACY_EVENT_ALIASES: Record<string, string> = {
 export function toLegacyEvent(raw: any): { type: string; properties: any } {
   const envelope = raw?.payload ?? raw;
   const source = envelope?.type === "sync" && envelope.syncEvent ? envelope.syncEvent : envelope;
-  const rawType = typeof source?.type === "string" ? source.type.replace(/\.1$/, "") : source?.type;
+  const rawType =
+    typeof source?.type === "string" ? source.type.replace(/\.\d+$/, "") : source?.type;
   const type = typeof rawType === "string" ? (LEGACY_EVENT_ALIASES[rawType] ?? rawType) : rawType;
   const data = source?.data ?? {};
   if (source && typeof source === "object" && "properties" in source) {
@@ -397,7 +399,11 @@ export function toLegacyEvent(raw: any): { type: string; properties: any } {
   return { type, properties: data };
 }
 
-export async function eventBelongsToLocation(ctx: Context, raw: any): Promise<boolean> {
+export async function eventBelongsToLocation(
+  ctx: Context,
+  raw: any,
+  ownsPendingSession?: (sessionID: string) => Promise<boolean>
+): Promise<boolean> {
   const directory =
     raw?.location?.directory ??
     raw?.directory ??
@@ -408,8 +414,14 @@ export async function eventBelongsToLocation(ctx: Context, raw: any): Promise<bo
     return resolve(directory) === resolve(ctx.location.directory);
   }
 
-  const data = raw?.data ?? raw?.payload?.data ?? raw?.properties;
-  const sessionID = data?.sessionID ?? data?.session?.id ?? data?.info?.id;
+  const event = toLegacyEvent(raw);
+  const data = event.properties;
+  const sessionID =
+    data?.sessionID ??
+    data?.part?.sessionID ??
+    data?.info?.sessionID ??
+    data?.session?.id ??
+    (event.type.startsWith("session.") ? data?.info?.id : undefined);
   if (sessionID) {
     try {
       const session: any = await ctx.session.get({ sessionID });
@@ -420,6 +432,19 @@ export async function eventBelongsToLocation(ctx: Context, raw: any): Promise<bo
         resolve(sessionDirectory) === resolve(ctx.location.directory)
       );
     } catch {
+      // A buffered final event can outlive its host session. Only a pending,
+      // authored prompt in this project permits forwarding its evidence.
+      if (
+        typeof sessionID === "string" &&
+        isCaptureEvidenceEvent(event.type) &&
+        ownsPendingSession
+      ) {
+        try {
+          return await ownsPendingSession(sessionID);
+        } catch {
+          return false;
+        }
+      }
       return false;
     }
   }
@@ -429,6 +454,6 @@ export async function eventBelongsToLocation(ctx: Context, raw: any): Promise<bo
   // still forward them so connectivity snapshots can refresh on late registration.
   const envelope = raw?.payload ?? raw;
   const source = envelope?.type === "sync" && envelope.syncEvent ? envelope.syncEvent : envelope;
-  const rawType = typeof source?.type === "string" ? source.type.replace(/\.1$/, "") : undefined;
+  const rawType = typeof source?.type === "string" ? source.type.replace(/\.\d+$/, "") : undefined;
   return rawType === "provider.updated" || rawType === "model.updated";
 }

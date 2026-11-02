@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { memoryClient } from "./client.js";
 import { getTags } from "./tags.js";
 import { log, serializeError } from "./logger.js";
+import { stripPrivateContent } from "./privacy.js";
 import { CONFIG } from "../config.js";
 import { userPromptManager, type UserPrompt } from "./user-prompt/user-prompt-manager.js";
 import { loadOpencodeProvider } from "./ai/opencode-provider-loader.js";
@@ -43,6 +44,12 @@ export interface PerformAutoCaptureOptions {
    * requests were never cancellable and keep their original semantics.
    */
   signal?: AbortSignal;
+  /**
+   * Prefer durable ready evidence over a live host transcript lookup.
+   * Used after session deletion and same-project startup replay, where the
+   * host session is already gone. Normal idle capture keeps the live path.
+   */
+  preferSavedEvidence?: boolean;
 }
 
 export async function performAutoCapture(
@@ -53,7 +60,7 @@ export async function performAutoCapture(
 ): Promise<void> {
   const run = async () => {
     if (options.signal?.aborted) return;
-    await runAutoCapture(ctx, sessionID, directory);
+    await runAutoCapture(ctx, sessionID, directory, options.preferSavedEvidence === true);
   };
 
   const next = captureChain.then(run, run);
@@ -75,7 +82,8 @@ export function awaitCaptureDrain(): Promise<void> {
 async function runAutoCapture(
   ctx: PluginInput,
   sessionID: string,
-  directory: string
+  directory: string,
+  preferSavedEvidence = false
 ): Promise<void> {
   const prompts = await userPromptManager.getUncapturedPromptsForSession(sessionID);
   if (prompts.length === 0) {
@@ -87,9 +95,37 @@ async function runAutoCapture(
   }
 
   const maxRetries = CONFIG.autoCaptureMaxRetries ?? 3;
+  const host = { unavailable: false };
   for (const prompt of prompts) {
-    await capturePrompt(ctx, sessionID, directory, prompt, maxRetries);
+    if (
+      prompt.projectPath &&
+      prompt.projectPath.replace(/\\/g, "/") !== directory.replace(/\\/g, "/")
+    )
+      continue;
+    // One missing host must not starve a later prompt with durable ready evidence.
+    if (host.unavailable && !(await userPromptManager.getCaptureEvidence(prompt.id, directory)))
+      continue;
+    await capturePrompt(ctx, sessionID, directory, prompt, maxRetries, host, preferSavedEvidence);
   }
+}
+
+function isMissingSessionError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { name?: unknown; _tag?: unknown };
+  return value.name === "Session.NotFoundError" || value._tag === "Session.NotFoundError";
+}
+
+function buildEvidenceContext(prompt: UserPrompt, savedEvidence: string): string {
+  return buildMarkdownContext(
+    stripPrivateContent(prompt.content),
+    [
+      "Preserved observations from this request. Evidence may be bounded or partial; describe only observed outcomes, not inferred completion.\n" +
+        savedEvidence,
+    ],
+    [],
+    null,
+    getAutoCaptureMarkdownBudget()
+  );
 }
 
 async function capturePrompt(
@@ -97,7 +133,9 @@ async function capturePrompt(
   sessionID: string,
   directory: string,
   prompt: UserPrompt,
-  maxRetries: number
+  maxRetries: number,
+  host: { unavailable: boolean },
+  preferSavedEvidence = false
 ): Promise<void> {
   let claimedPromptId: string | null = null;
   let attempt = prompt.capture_attempts || 0;
@@ -117,37 +155,98 @@ async function capturePrompt(
         }
 
         phase = "context";
-        const response = await ctx.client.session.messages({
-          path: { id: sessionID },
-        });
-
-        if (!response.data) {
-          return;
-        }
-
-        const messages = response.data;
-        const aiMessages = getAIResponseMessages(messages, prompt.messageId);
-        if (aiMessages === null) {
-          return;
-        }
-        if (aiMessages.length === 0) {
-          return;
-        }
-
-        const { textResponses, toolCalls } = extractAIContent(aiMessages);
-        if (textResponses.length === 0 && toolCalls.length === 0) {
-          return;
-        }
-
         const tags = getTags(directory);
-        const latestMemory = await getLatestProjectMemory(tags.project.tag);
-        const context = buildMarkdownContext(
-          prompt.content,
-          textResponses,
-          toolCalls,
-          latestMemory,
-          getAutoCaptureMarkdownBudget()
-        );
+        const savedEvidence = await userPromptManager.getCaptureEvidence(prompt.id, directory);
+        let context: string | undefined;
+
+        // Deleted-session / startup replay: durable evidence is authoritative.
+        // Normal idle keeps the richer live transcript and only falls back when
+        // the host reports the session is gone.
+        if (preferSavedEvidence && savedEvidence) {
+          context = buildEvidenceContext(prompt, savedEvidence);
+        } else if (preferSavedEvidence && !savedEvidence) {
+          host.unavailable = true;
+          log("Auto-capture skipped: session context unavailable; prompt retained", {
+            phase,
+            outcome: "skipped",
+            reason: "session_not_found",
+            promptId: prompt.id,
+            sessionID,
+            error: "Session.NotFoundError",
+            name: "Session.NotFoundError",
+          });
+          return;
+        } else if (!host.unavailable) {
+          try {
+            const response = await ctx.client.session.messages({
+              path: { id: sessionID },
+            });
+            if ("error" in response && isMissingSessionError(response.error)) throw response.error;
+
+            if (!response.data) {
+              return;
+            }
+
+            const messages = response.data;
+            const aiMessages = getAIResponseMessages(messages, prompt.messageId);
+            if (aiMessages === null) {
+              return;
+            }
+            if (aiMessages.length === 0) {
+              return;
+            }
+
+            const { textResponses, toolCalls } = extractAIContent(aiMessages);
+            if (textResponses.length === 0 && toolCalls.length === 0) {
+              return;
+            }
+
+            const latestMemory = await getLatestProjectMemory(tags.project.tag);
+            context = buildMarkdownContext(
+              prompt.content,
+              textResponses,
+              toolCalls,
+              latestMemory,
+              getAutoCaptureMarkdownBudget()
+            );
+          } catch (error) {
+            if (!isMissingSessionError(error)) throw error;
+            host.unavailable = true;
+            if (savedEvidence) {
+              context = buildEvidenceContext(prompt, savedEvidence);
+            } else {
+              // A session absent from this host may still exist in another desktop
+              // or CLI instance. Keep the prompt eligible for a later idle event;
+              // finally releases the claim without spending the capture retry budget.
+              log("Auto-capture skipped: session context unavailable; prompt retained", {
+                phase,
+                outcome: "skipped",
+                reason: "session_not_found",
+                promptId: prompt.id,
+                sessionID,
+                ...serializeError(error),
+              });
+              return;
+            }
+          }
+        } else if (savedEvidence) {
+          context = buildEvidenceContext(prompt, savedEvidence);
+        } else {
+          log("Auto-capture skipped: session context unavailable; prompt retained", {
+            phase,
+            outcome: "skipped",
+            reason: "session_not_found",
+            promptId: prompt.id,
+            sessionID,
+            error: "Session.NotFoundError",
+            name: "Session.NotFoundError",
+          });
+          return;
+        }
+
+        if (!context) {
+          return;
+        }
 
         phase = "summary";
         let summaryResult: { summary: string; type: string; tags: string[] } | null;
@@ -261,7 +360,7 @@ async function capturePrompt(
       }
     }
   } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error);
+    const errMsg = serializeError(error).error;
     log(`Auto-capture final error after ${attempt} attempts`, {
       phase,
       ...serializeError(error),

@@ -106,6 +106,9 @@ mock.module(${JSON.stringify(tagsUrl)}, () => ({
 
 mock.module(${JSON.stringify(promptManagerUrl)}, () => ({
   userPromptManager: {
+    getCaptureEvidence: async () => null,
+    getPendingCaptureSessions: async () => [],
+    markCaptureEvidenceReady: async () => {},
     getLastUncapturedPrompt(sessionId) {
       return [...pendingForSession(sessionId)].pop() ?? null;
     },
@@ -263,6 +266,9 @@ mock.module(${JSON.stringify(tagsUrl)}, () => ({
 
 mock.module(${JSON.stringify(promptManagerUrl)}, () => ({
   userPromptManager: {
+    getCaptureEvidence: async () => null,
+    getPendingCaptureSessions: async () => [],
+    markCaptureEvidenceReady: async () => {},
     getUncapturedPromptsForSession: async () => [{
       id: "prompt-error",
       sessionId: "session-error",
@@ -399,6 +405,9 @@ mock.module(${JSON.stringify(tagsUrl)}, () => ({
 
 mock.module(${JSON.stringify(promptManagerUrl)}, () => ({
   userPromptManager: {
+    getCaptureEvidence: async () => null,
+    getPendingCaptureSessions: async () => [],
+    markCaptureEvidenceReady: async () => {},
     getLastUncapturedPrompt: (sessionId) =>
       prompts.find((p) => p.sessionId === sessionId && !p.captured && !p.claimed) ?? null,
     getUncapturedPromptsForSession: (sessionId) =>

@@ -605,6 +605,42 @@ Manual `memoryProvider` modes:
 Troubleshooting:
 
 - Auto-capture failures do not block manual `memory` tool usage.
+- Auto-capture preserves bounded final assistant text and terminal tool outcomes from
+  delivered V1/V2 events before the delayed summarization runs. Normal idle capture still
+  prefers the live host transcript; ready pending evidence is the fallback when the session
+  is already gone (deletion or startup replay). Recovery is scoped to the same project
+  and uses the normal capture provider and claim queue. It does not infer completed work
+  from the request alone. Deleting an OpenCode session does **not** delete this pending
+  memory evidence or already captured memories.
+- Pending evidence is private-tag redacted before persistence (including tags spanning
+  final text parts within one assistant message); reasoning, attachments, raw provider
+  metadata, streaming deltas, and tool arguments are excluded. Limits are 16 KiB per
+  part, 16 parts per prompt, 256 parts globally (at most 4 MiB of text), and 64 KiB per
+  capture. Truncation is marked; oldest parts are evicted when the budget is exceeded.
+  Evidence expires after 24 hours and is pruned on subsequent store access. It is cleared
+  when capture finishes/skips or its prompt is removed by existing deletion/retention
+  paths. These are logical retention limits, not secure erasure of SQLite/WAL backups.
+- V2 events are a volatile stream: disconnected/missed events, unresolvable prompt
+  association, and evidence lost to expiry/eviction cannot be recovered. The guarantee
+  is capture from evidence received, saved, and checkpointed ready by an idle/deleted
+  event, not reconstruction of unseen or previously deleted transcripts. After that
+  checkpoint the session is sealed against late rebinds until the next authored user
+  input (V2 `session.inbox.delivered`, V1 user `message.updated`), so buffered parts
+  cannot flip ready evidence back to unreadiness. A disconnect before the terminal
+  checkpoint leaves the partial evidence deferred until a later checkpoint; restart
+  does not assume unfinished work is complete. V1 uses explicit assistant parent IDs;
+  V2 freezes the delivered input at step start rather than guessing the latest queued
+  prompt.
+- If the live host reports `Session.NotFoundError` (or deletion/startup replay has no
+  ready evidence), capture logs `skipped` / `session_not_found`, releases its claim
+  without backoff or consuming retries, and skips further host-dependent lookups in that
+  batch. Later prompts with ready saved evidence still proceed. A later independent idle
+  may retry. Already exhausted prompts are not revived. Other failures retain their
+  existing retry behavior.
+- Auto-capture additions use a stable per-project/prompt ID so sequential crash/restart
+  replay reuses the prior memory, including soft-deleted records, instead of inserting or
+  resurrecting it. This does not claim distributed exactly-once semantics for optional
+  semantic update/supersede operations or every multi-process crash interleaving.
 - If auto-capture reports that a provider is not connected, confirm the provider name with `opencode providers list` and configure that provider in opencode first.
 - If a proxy or custom provider returns plain text instead of structured/tool output, choose another model/provider or use one of the manual provider modes above.
 - For models that reject `temperature`, add `"memoryTemperature": false` when using manual API configuration.

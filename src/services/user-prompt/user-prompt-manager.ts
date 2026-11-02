@@ -1,8 +1,12 @@
 import { join } from "node:path";
 import { tursoConnectionManager } from "../turso/connection-manager.js";
 import { CONFIG } from "../../config.js";
-import type { SqlValue, TursoDb } from "../turso/turso-db.js";
+import type { SqlValue, TursoDb, TursoTx } from "../turso/turso-db.js";
 
+import { stripPrivateContent, isFullyPrivate } from "../privacy.js";
+import { truncateToMaxBytes } from "../../utils/context-limit.js";
+
+const CAPTURE_EVIDENCE_TTL = 24 * 60 * 60 * 1000;
 const USER_PROMPTS_DB_NAME = "user-prompts.db";
 
 export interface UserPrompt {
@@ -85,6 +89,7 @@ export class UserPromptManager {
     });
     await ensureUserPromptColumns(db);
     await db.run("UPDATE user_prompts SET captured = 0 WHERE captured = 2");
+    await this.pruneCaptureEvidence(db);
   }
 
   async savePrompt(
@@ -118,6 +123,133 @@ export class UserPromptManager {
     if (existing?.id) return String(existing.id);
 
     throw new Error("Failed to save or locate user prompt");
+  }
+
+  private async pruneCaptureEvidence(db: TursoDb | TursoTx): Promise<void> {
+    await db.run(
+      `DELETE FROM pending_capture_evidence WHERE updated_at <= ?
+      OR NOT EXISTS (SELECT 1 FROM user_prompts p
+        WHERE p.id = pending_capture_evidence.prompt_id AND p.captured IN (0, 2))`,
+      [Date.now() - CAPTURE_EVIDENCE_TTL]
+    );
+  }
+
+  /** Store only completed text/tool evidence, never raw event payloads. */
+  async saveCaptureEvidence(
+    promptId: string,
+    projectPath: string,
+    partKey: string,
+    content: string
+  ): Promise<boolean> {
+    if (!partKey || partKey.length > 256 || !projectPath) return false;
+    const sanitized = stripPrivateContent(content);
+    const bounded = truncateToMaxBytes(sanitized, 16 * 1024);
+    const db = await this.ready();
+    return db.transaction("write", async (tx) => {
+      await this.pruneCaptureEvidence(tx);
+      if (isFullyPrivate(sanitized)) {
+        // A redacted replacement must not leave the previous version replayable.
+        await tx.run(
+          `DELETE FROM pending_capture_evidence WHERE prompt_id = ? AND part_key = ?
+          AND EXISTS (SELECT 1 FROM user_prompts WHERE id = ? AND captured IN (0, 2)
+            AND REPLACE(project_path, '\\', '/') = ?)`,
+          [promptId, partKey, promptId, projectPath.replace(/\\/g, "/")]
+        );
+        return false;
+      }
+      const changed = await tx.run(
+        `INSERT INTO pending_capture_evidence
+        (prompt_id, part_key, content, updated_at, ready)
+        SELECT id, ?, ?, ?, 0 FROM user_prompts
+        WHERE id = ? AND captured IN (0, 2) AND REPLACE(project_path, '\\', '/') = ?
+        ON CONFLICT (prompt_id, part_key) DO UPDATE SET
+          ready = CASE WHEN pending_capture_evidence.content = excluded.content THEN pending_capture_evidence.ready ELSE 0 END,
+          content = excluded.content, updated_at = excluded.updated_at`,
+        [partKey, bounded, Date.now(), promptId, projectPath.replace(/\\/g, "/")]
+      );
+      if (!changed) return false;
+      // Retain the most recently updated parts. Ties are deterministic across restarts.
+      await tx.run(
+        `DELETE FROM pending_capture_evidence WHERE prompt_id = ? AND part_key IN (
+        SELECT part_key FROM pending_capture_evidence WHERE prompt_id = ?
+        ORDER BY updated_at DESC, part_key DESC LIMIT -1 OFFSET 16)`,
+        [promptId, promptId]
+      );
+      await tx.run(`DELETE FROM pending_capture_evidence WHERE rowid IN (
+        SELECT rowid FROM pending_capture_evidence
+        ORDER BY updated_at DESC, prompt_id DESC, part_key DESC LIMIT -1 OFFSET 256)`);
+      return !!(await tx.get(
+        `SELECT 1 FROM pending_capture_evidence WHERE prompt_id = ? AND part_key = ?`,
+        [promptId, partKey]
+      ));
+    });
+  }
+
+  async markCaptureEvidenceReady(sessionId: string, projectPath: string): Promise<void> {
+    const db = await this.ready();
+    await this.pruneCaptureEvidence(db);
+    await db.run(
+      `UPDATE pending_capture_evidence SET ready = 1 WHERE prompt_id IN (
+      SELECT id FROM user_prompts WHERE session_id = ? AND captured IN (0, 2)
+      AND REPLACE(project_path, '\\', '/') = ?)`,
+      [sessionId, projectPath.replace(/\\/g, "/")]
+    );
+  }
+
+  async getCaptureEvidence(promptId: string, projectPath: string): Promise<string | null> {
+    const db = await this.ready();
+    await this.pruneCaptureEvidence(db);
+    const rows = await db.all(
+      `SELECT e.content FROM pending_capture_evidence e
+      JOIN user_prompts p ON p.id = e.prompt_id
+      WHERE p.id = ? AND p.captured IN (0, 2) AND REPLACE(p.project_path, '\\', '/') = ?
+        AND e.ready = 1 AND e.updated_at > ?
+      ORDER BY e.updated_at ASC, e.part_key ASC`,
+      [promptId, projectPath.replace(/\\/g, "/"), Date.now() - CAPTURE_EVIDENCE_TTL]
+    );
+    return rows.length
+      ? truncateToMaxBytes(rows.map((r) => String(r.content)).join("\n\n"), 64 * 1024)
+      : null;
+  }
+
+  async getPendingCaptureSessions(projectPath: string): Promise<string[]> {
+    const db = await this.ready();
+    await this.pruneCaptureEvidence(db);
+    const rows = await db.all(
+      `SELECT DISTINCT p.session_id FROM user_prompts p
+      JOIN pending_capture_evidence e ON e.prompt_id = p.id
+      WHERE p.captured = 0 AND p.capture_attempts < ? AND REPLACE(p.project_path, '\\', '/') = ?
+        AND e.ready = 1 AND e.updated_at > ? ORDER BY p.session_id`,
+      [
+        CONFIG.autoCaptureMaxRetries ?? 3,
+        projectPath.replace(/\\/g, "/"),
+        Date.now() - CAPTURE_EVIDENCE_TTL,
+      ]
+    );
+    return rows.map((r) => String(r.session_id));
+  }
+
+  async getPendingPromptForMessage(
+    sessionId: string,
+    messageId: string,
+    projectPath: string
+  ): Promise<UserPrompt | null> {
+    const db = await this.ready();
+    const row = await db.get(
+      `SELECT * FROM user_prompts WHERE session_id = ? AND message_id = ?
+      AND captured IN (0, 2) AND REPLACE(project_path, '\\', '/') = ? ORDER BY created_at ASC LIMIT 1`,
+      [sessionId, messageId, projectPath.replace(/\\/g, "/")]
+    );
+    return row ? this.rowToPrompt(row) : null;
+  }
+
+  async hasPendingCaptureSession(sessionId: string, projectPath: string): Promise<boolean> {
+    const db = await this.ready();
+    return !!(await db.get(
+      `SELECT 1 FROM user_prompts WHERE session_id = ? AND captured IN (0, 2)
+      AND REPLACE(project_path, '\\', '/') = ? LIMIT 1`,
+      [sessionId, projectPath.replace(/\\/g, "/")]
+    ));
   }
 
   async setPromptModel(messageId: string, providerId: string, modelId: string): Promise<void> {
@@ -177,12 +309,18 @@ export class UserPromptManager {
 
   async deletePrompt(promptId: string): Promise<void> {
     const db = await this.ready();
-    await db.run(`DELETE FROM user_prompts WHERE id = ?`, [promptId]);
+    await db.transaction("write", async (tx) => {
+      await tx.run(`DELETE FROM pending_capture_evidence WHERE prompt_id = ?`, [promptId]);
+      await tx.run(`DELETE FROM user_prompts WHERE id = ?`, [promptId]);
+    });
   }
 
   async markAsCaptured(promptId: string): Promise<void> {
     const db = await this.ready();
-    await db.run(`UPDATE user_prompts SET captured = 1 WHERE id = ?`, [promptId]);
+    await db.transaction("write", async (tx) => {
+      await tx.run(`UPDATE user_prompts SET captured = 1 WHERE id = ?`, [promptId]);
+      await tx.run(`DELETE FROM pending_capture_evidence WHERE prompt_id = ?`, [promptId]);
+    });
   }
 
   async claimPrompt(promptId: string): Promise<boolean> {
@@ -239,7 +377,13 @@ export class UserPromptManager {
     if (promptIds.length === 0) return;
     const db = await this.ready();
     const placeholders = promptIds.map(() => "?").join(",");
-    await db.run(`UPDATE user_prompts SET captured = 1 WHERE id IN (${placeholders})`, promptIds);
+    await db.transaction("write", async (tx) => {
+      await tx.run(`UPDATE user_prompts SET captured = 1 WHERE id IN (${placeholders})`, promptIds);
+      await tx.run(
+        `DELETE FROM pending_capture_evidence WHERE prompt_id IN (${placeholders})`,
+        promptIds
+      );
+    });
   }
 
   async countUnanalyzedForUserLearning(): Promise<number> {
@@ -294,7 +438,13 @@ export class UserPromptManager {
       .map((row) => row.linked_memory_id)
       .filter((id): id is string => Boolean(id));
 
-    const deleted = await db.run(`DELETE FROM user_prompts WHERE created_at < ?`, [cutoffTime]);
+    const deleted = await db.transaction("write", async (tx) => {
+      await tx.run(
+        `DELETE FROM pending_capture_evidence WHERE prompt_id IN (SELECT id FROM user_prompts WHERE created_at < ?)`,
+        [cutoffTime]
+      );
+      return tx.run(`DELETE FROM user_prompts WHERE created_at < ?`, [cutoffTime]);
+    });
     return { deleted, linkedMemoryIds };
   }
 
