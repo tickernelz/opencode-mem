@@ -85,6 +85,8 @@ mock.module(${JSON.stringify(tagsUrl)}, () => ({
 mock.module(${JSON.stringify(contextUrl)}, () => ({ formatContextForPrompt: () => "" }));
 mock.module(${JSON.stringify(privacyUrl)}, () => ({
   stripPrivateContent: (value) => value,
+  sanitizeMemoryContent: (value) => value,
+  sanitizeMemoryField: (_key, value) => value,
   isFullyPrivate: () => false,
 }));
 mock.module(${JSON.stringify(promptManagerUrl)}, () => ({ userPromptManager: { savePrompt() {} } }));

@@ -5,7 +5,7 @@ import { CONFIG } from "../../config.js";
 import type { SqlValue, TursoDb, TursoTx } from "../turso/turso-db.js";
 import { log } from "../logger.js";
 
-import { stripPrivateContent, isFullyPrivate } from "../privacy.js";
+import { sanitizeMemoryContent, isFullyPrivate } from "../privacy.js";
 import { truncateToMaxBytes } from "../../utils/context-limit.js";
 
 const CAPTURE_EVIDENCE_TTL = 24 * 60 * 60 * 1000;
@@ -111,7 +111,16 @@ export class UserPromptManager {
         SELECT 1 FROM user_prompts WHERE session_id = ? AND message_id = ?
       )
     `,
-      [id, sessionId, messageId, projectPath, content, now, sessionId, messageId]
+      [
+        id,
+        sessionId,
+        messageId,
+        projectPath,
+        sanitizeMemoryContent(content),
+        now,
+        sessionId,
+        messageId,
+      ]
     );
     if (changes > 0) return id;
 
@@ -144,7 +153,7 @@ export class UserPromptManager {
     content: string
   ): Promise<boolean> {
     if (!partKey || partKey.length > 256 || !projectPath) return false;
-    const sanitized = stripPrivateContent(content);
+    const sanitized = sanitizeMemoryContent(content);
     const bounded = truncateToMaxBytes(sanitized, 16 * 1024);
     const db = await this.ready();
     return db.transaction("write", async (tx) => {

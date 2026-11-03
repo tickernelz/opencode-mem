@@ -15,6 +15,37 @@ A persistent memory system for AI coding agents that enables long-term context r
 
 Local Turso/libSQL database with native vector search, persistent project memories, automatic user profile learning, unified memory-prompt timeline, full-featured web UI, intelligent prompt-based memory extraction, multi-provider AI support (OpenAI, Anthropic), 12+ local embedding models, smart deduplication, and built-in privacy protection.
 
+## Memory credential redaction
+
+Before auto-capture sends context to its configured summarization provider (including fallback),
+the plugin removes recognizable credentials from user text, assistant text, tool inputs,
+preserved tool-result evidence and prior-memory context. Pending prompts/evidence are sanitized
+before persistence; generated summaries and tags are sanitized again before embedding and new
+memory writes. The explicit memory `add` tool uses the same write boundary. This applies to
+both Turso and plugin-created Markdown memories, without an extra model call or dependency.
+
+Recognized formats include supported GitHub tokens, OpenAI/Anthropic/OpenRouter/Google API key
+shapes, Slack tokens, AWS access key IDs, bearer credentials and PEM private keys, plus
+conservative credential assignments. Replacements retain useful surrounding context. Existing
+`<private>...</private>` protection remains: nested or unclosed regions fail closed. An unclosed
+PEM private-key opener similarly redacts to the end of that text. Sanitization precedes capture
+length limits so a cutoff does not leave part of a recognized credential behind. Plugin diagnostic
+strings use the same sanitizer; matches are never reported separately.
+
+**Limits:** this is best-effort protection for the plugin's memory copies, not OpenCode's original
+conversation, main-model requests or tool traffic. Arbitrary passwords, all-letter bearer values,
+custom/encoded tokens,
+obfuscated values and credentials split across separate messages may not be recognized. Use
+`<private>` for other sensitive text. Hashes, UUIDs and arbitrary long strings are not treated as
+secrets. Existing stored memories are not scanned or rewritten. Web/API additions, imports,
+user-edited Markdown reconciliation, migrations and profile/dreaming generation have separate
+paths and are not covered by this capture/add guarantee. Content and tag edits through the
+shared memory client are sanitized when supplied, but untouched historical fields are preserved
+(and can still be re-embedded by existing edit behavior).
+New capture/add content is already redacted when later searched, displayed or injected; this is
+not a read-time scrub of historical data. Keep credentials out of memory input where possible,
+and rotate any credential already disclosed.
+
 ## Prerequisites
 
 This plugin uses embedded Turso (`@tursodatabase/database`) with `F32_BLOB` vectors and exact cosine search via `vector_distance_cos`. No separate vector database or custom SQLite build is required.

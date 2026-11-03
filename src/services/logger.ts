@@ -1,3 +1,4 @@
+import { sanitizeMemoryContent, sanitizeMemoryField } from "./privacy.js";
 import {
   appendFileSync,
   writeFileSync,
@@ -139,13 +140,13 @@ export function serializeError(error: unknown): {
   if (error instanceof Error) {
     const cause = error.cause !== undefined ? errorDescription(error.cause) : undefined;
     return {
-      error: errorDescription(error),
-      name: error.name,
-      ...(error.stack ? { stack: error.stack } : {}),
-      ...(cause !== undefined ? { cause } : {}),
+      error: sanitizeMemoryContent(errorDescription(error)),
+      name: sanitizeMemoryContent(error.name),
+      ...(error.stack ? { stack: sanitizeMemoryContent(error.stack) } : {}),
+      ...(cause !== undefined ? { cause: sanitizeMemoryContent(cause) } : {}),
     };
   }
-  return { error: errorDescription(error) };
+  return { error: sanitizeMemoryContent(errorDescription(error)) };
 }
 
 /**
@@ -172,9 +173,15 @@ export function log(message: string, data?: unknown) {
 
   const logFile = getLogFilePath();
   const timestamp = formatTimestamp(new Date());
-  const line = data
-    ? `[${timestamp}] ${message}: ${JSON.stringify(data)}\n`
-    : `[${timestamp}] ${message}\n`;
+  // Sanitize strings before JSON escaping (notably multiline PEM blocks).
+  // The replacer does not modify caller-owned diagnostic objects.
+  message = sanitizeMemoryContent(message);
+  // Also cover recognizable credentials used as diagnostic object keys.
+  const line = sanitizeMemoryContent(
+    data
+      ? `[${timestamp}] ${message}: ${JSON.stringify(data, sanitizeMemoryField)}\n`
+      : `[${timestamp}] ${message}\n`
+  );
   try {
     appendFileSync(logFile, line);
   } catch (error) {

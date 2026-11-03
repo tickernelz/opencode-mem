@@ -87,7 +87,7 @@ mock.module(${JSON.stringify(u("src/services/client.js"))}, () => ({
 }));
 mock.module(${JSON.stringify(u("src/services/context.js"))}, () => ({ formatContextForPrompt: () => "" }));
 mock.module(${JSON.stringify(u("src/services/privacy.js"))}, () => ({
-  stripPrivateContent: (v) => v, isFullyPrivate: () => false,
+  stripPrivateContent: (v) => v, sanitizeMemoryContent: (v) => v, sanitizeMemoryField: (_key, v) => v, isFullyPrivate: () => false,
 }));
 mock.module(${JSON.stringify(u("src/services/logger.js"))}, () => ({ log: () => {}, safeLog: () => {}, serializeError: (error) => ({ error: error instanceof Error ? error.message : String(error) }) }));
 mock.module(${JSON.stringify(u("src/services/language-detector.js"))}, () => ({
