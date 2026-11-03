@@ -7,7 +7,7 @@ import { formatContextForPrompt } from "./services/context.js";
 import { shouldRefreshRecallOnPrompt } from "./services/memory-recall.js";
 import { buildMemoryProvenanceSuffix } from "./services/memory-provenance.js";
 import { getTags } from "./services/tags.js";
-import { stripPrivateContent, isFullyPrivate } from "./services/privacy.js";
+import { stripPrivateContent, isFullyPrivate, sanitizeMemoryContent } from "./services/privacy.js";
 import { awaitCaptureDrain, performAutoCapture } from "./services/auto-capture.js";
 import { CaptureEvidenceRecorder } from "./services/capture-evidence.js";
 import { performUserProfileLearning } from "./services/user-memory-learning.js";
@@ -1029,7 +1029,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
                   return JSON.stringify({ success: false, error: "Private content blocked" });
                 const tagInfo = tags.project;
                 const parsedTags = args.tags
-                  ? args.tags.split(",").map((t) => t.trim().toLowerCase())
+                  ? args.tags.split(",").map((t) => sanitizeMemoryContent(t).trim().toLowerCase())
                   : undefined;
                 const result = await memoryClient.addMemory(sanitizedContent, tagInfo.tag, {
                   type: args.type,

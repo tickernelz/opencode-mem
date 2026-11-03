@@ -1,3 +1,4 @@
+import { sanitizeMemoryContent } from "./privacy.js";
 import { createHash } from "node:crypto";
 import { embeddingService } from "./embedding.js";
 import { tursoShardManager } from "./turso/shard-manager.js";
@@ -194,7 +195,8 @@ export class LocalMemoryClient {
     try {
       await this.initialize();
 
-      const tags = metadata?.tags || [];
+      content = sanitizeMemoryContent(content);
+      const tags = (metadata?.tags || []).map(sanitizeMemoryContent);
       phase = "embed";
       const vector = await embeddingService.embedWithTimeout(content, { task: "document" });
       let tagsVector: Float32Array | undefined = undefined;
@@ -336,10 +338,15 @@ export class LocalMemoryClient {
         return { success: false as const, error: "Memory not found" };
       }
 
-      const newContent = data.content || String(existingMemory.content);
+      // Only a supplied content write is in scope; do not rewrite historical
+      // rows merely because another field is edited.
+      const newContent = data.content
+        ? sanitizeMemoryContent(data.content)
+        : String(existingMemory.content);
       const existingTags = existingMemory.tags ? String(existingMemory.tags) : "";
       const tags =
-        data.tags || (existingTags ? existingTags.split(",").map((t: string) => t.trim()) : []);
+        data.tags?.map(sanitizeMemoryContent) ||
+        (existingTags ? existingTags.split(",").map((t: string) => t.trim()) : []);
       const vector = await embeddingService.embedWithTimeout(newContent, { task: "document" });
       let tagsVector: Float32Array | undefined = undefined;
       if (tags.length > 0) {

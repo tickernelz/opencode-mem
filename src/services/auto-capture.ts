@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { memoryClient } from "./client.js";
 import { getTags } from "./tags.js";
 import { log, serializeError } from "./logger.js";
-import { stripPrivateContent } from "./privacy.js";
+import { sanitizeMemoryContent, sanitizeMemoryField } from "./privacy.js";
 import { CONFIG } from "../config.js";
 import { userPromptManager, type UserPrompt } from "./user-prompt/user-prompt-manager.js";
 import { loadOpencodeProvider } from "./ai/opencode-provider-loader.js";
@@ -117,7 +117,7 @@ function isMissingSessionError(error: unknown): boolean {
 
 function buildEvidenceContext(prompt: UserPrompt, savedEvidence: string): string {
   return buildMarkdownContext(
-    stripPrivateContent(prompt.content),
+    sanitizeMemoryContent(prompt.content),
     [
       "Preserved observations from this request. Evidence may be bounded or partial; describe only observed outcomes, not inferred completion.\n" +
         savedEvidence,
@@ -437,12 +437,15 @@ export function extractAIContent(messages: any[]): {
         } else if (typeof inputObj === "object") {
           const params = [];
           for (const [key, value] of Object.entries(inputObj)) {
-            params.push(`${key}: ${JSON.stringify(value)}`);
+            params.push(
+              `${key}: ${JSON.stringify(sanitizeMemoryField(key, value), sanitizeMemoryField)}`
+            );
           }
           input = params.join(", ");
         }
       }
 
+      input = sanitizeMemoryContent(input);
       if (input.length > MAX_TOOL_INPUT_LENGTH) {
         input = input.substring(0, MAX_TOOL_INPUT_LENGTH) + "...";
       }
@@ -466,7 +469,7 @@ async function getLatestProjectMemory(containerTag: string): Promise<string | nu
       return null;
     }
 
-    const content = latest.summary;
+    const content = sanitizeMemoryContent(latest.summary);
 
     if (content.length <= 500) {
       return content;
@@ -560,6 +563,15 @@ export function buildMarkdownContext(
   maxContextBytes: number = CONFIG.autoCaptureMaxContextBytes ??
     DEFAULT_AUTO_CAPTURE_MAX_CONTEXT_BYTES
 ): string {
+  // Redact complete available text before any length budget can cut a credential
+  // (or its private-tag/PEM opener) away from the rest of its value.
+  userPrompt = sanitizeMemoryContent(userPrompt);
+  textResponses = textResponses.map(sanitizeMemoryContent);
+  toolCalls = toolCalls.map((tool) => ({
+    name: sanitizeMemoryContent(tool.name),
+    input: sanitizeMemoryContent(tool.input),
+  }));
+  latestMemory = latestMemory === null ? null : sanitizeMemoryContent(latestMemory);
   const memorySections: string[] = [];
   if (latestMemory) {
     memorySections.push(`## Previous Memory Context`);
@@ -703,7 +715,7 @@ async function resolveCaptureLanguage(userPrompt: string): Promise<string> {
 
 function showFallbackToast(ctx: PluginInput, failedChannel: CaptureChannel, error: unknown): void {
   if (!CONFIG.showErrorToasts) return;
-  const errMsg = error instanceof Error ? error.message : String(error);
+  const errMsg = serializeError(error).error;
   const shortReason = errMsg.length > 100 ? errMsg.substring(0, 100) + "..." : errMsg;
   const label = failedChannel === "opencode" ? "OpenCode provider" : "External API";
   ctx.client?.tui
@@ -778,9 +790,9 @@ async function tryOpencodeSummary(
   });
 
   return {
-    summary: result.summary,
-    type: result.type,
-    tags: (result.tags || []).map((t: string) => t.toLowerCase().trim()),
+    summary: sanitizeMemoryContent(result.summary),
+    type: sanitizeMemoryContent(result.type),
+    tags: (result.tags || []).map((t: string) => sanitizeMemoryContent(t).toLowerCase().trim()),
   };
 }
 
@@ -840,9 +852,11 @@ async function tryExternalSummary(
   }
 
   return {
-    summary: result.data.summary,
-    type: result.data.type,
-    tags: (result.data.tags || []).map((t: string) => t.toLowerCase().trim()),
+    summary: sanitizeMemoryContent(result.data.summary),
+    type: sanitizeMemoryContent(result.data.type),
+    tags: (result.data.tags || []).map((t: string) =>
+      sanitizeMemoryContent(t).toLowerCase().trim()
+    ),
   };
 }
 

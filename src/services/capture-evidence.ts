@@ -1,5 +1,5 @@
 import { userPromptManager } from "./user-prompt/user-prompt-manager.js";
-import { stripPrivateContent, isFullyPrivate } from "./privacy.js";
+import { sanitizeMemoryContent, isFullyPrivate } from "./privacy.js";
 import { utf8ByteLength } from "../utils/context-limit.js";
 import { isCaptureEvidenceEvent } from "./capture-evidence-events.js";
 
@@ -76,7 +76,7 @@ export class CaptureEvidenceRecorder {
     if (parts.size > 32 || utf8ByteLength([...parts.values()].join("\n")) > MAX_TEXT_BYTES) {
       binding.textFull = true;
       binding.texts.clear();
-      const clean = stripPrivateContent([...parts.values()].join("\n"));
+      const clean = sanitizeMemoryContent([...parts.values()].join("\n"));
       await userPromptManager.saveCaptureEvidence(
         binding.promptId,
         this.directory,
@@ -86,7 +86,7 @@ export class CaptureEvidenceRecorder {
       return;
     }
     binding.texts = parts;
-    const clean = stripPrivateContent([...parts.values()].join("\n"));
+    const clean = sanitizeMemoryContent([...parts.values()].join("\n"));
     await userPromptManager.saveCaptureEvidence(
       binding.promptId,
       this.directory,
@@ -108,8 +108,8 @@ export class CaptureEvidenceRecorder {
       binding.promptId,
       this.directory,
       `${assistantID}:tool:${id}`,
-      stripPrivateContent(
-        `Tool ${(typeof name === "string" ? name : "tool").slice(0, 128)} (${status}):\n${text}`
+      sanitizeMemoryContent(
+        `Tool ${sanitizeMemoryContent(typeof name === "string" ? name : "tool").slice(0, 128)} (${status}):\n${text}`
       )
     );
   }

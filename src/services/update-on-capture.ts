@@ -1,3 +1,4 @@
+import { sanitizeMemoryContent } from "./privacy.js";
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
 import type { MemoryType } from "../types/index.js";
@@ -80,11 +81,15 @@ export function buildUpdateOnCaptureDecisionPrompt(
   summary: string,
   candidates: UpdateOnCaptureCandidate[]
 ): string {
-  const items = candidates.map((c) => ({
-    id: c.id,
-    similarity: Number(c.similarity.toFixed(3)),
-    content: c.content.length > 800 ? `${c.content.slice(0, 800)}…` : c.content,
-  }));
+  summary = sanitizeMemoryContent(summary);
+  const items = candidates.map((candidate) => {
+    const c = { ...candidate, content: sanitizeMemoryContent(candidate.content) };
+    return {
+      id: c.id,
+      similarity: Number(c.similarity.toFixed(3)),
+      content: c.content.length > 800 ? `${c.content.slice(0, 800)}…` : c.content,
+    };
+  });
   return `You decide how to store a new auto-captured memory relative to similar existing memories.
 
 New memory draft:

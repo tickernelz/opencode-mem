@@ -61,16 +61,18 @@ describe("deleted-session durable evidence recovery", () => {
     expect(r.afterEvidence).toBeNull();
     expect(r.evidence.match(/Changed synthetic implementation/g)).toHaveLength(1);
   });
+  // These subprocess scenarios can exceed 5s on Windows while reopening or
+  // revisiting the real Turso database. Keep the larger budget local to them.
   it("recovers ready evidence across closed connections/new manager and recorder", () => {
     const r = run({ restart: true });
     expect(r.restoredSessions).toEqual(["s"]);
     expect(r.counters).toEqual({ fetch: 0, summary: 1, persist: 1 });
-  });
+  }, 15_000);
   it("deduplicates final events and repeat capture", () => {
     const r = run({ duplicate: true });
     expect(r.evidence.match(/Changed synthetic implementation/g)).toHaveLength(1);
     expect(r.counters).toEqual({ fetch: 0, summary: 1, persist: 1 });
-  });
+  }, 15_000);
   it("uses deletion as a checkpoint for already observed evidence", () => {
     expect(run({ deletedCheckpoint: true }).counters).toEqual({ fetch: 0, summary: 1, persist: 1 });
   });
