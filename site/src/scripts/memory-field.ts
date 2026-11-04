@@ -140,8 +140,16 @@ class Field {
     }
   }
 
-  addNode(node: MemoryNode, links: number): number {
-    const index = this.nodes.push(node) - 1;
+  addNode(node: MemoryNode, links: number, reuse?: number): number {
+    const index = reuse ?? this.nodes.push(node) - 1;
+    if (reuse !== undefined) {
+      this.nodes[index] = node;
+      this.energy[index] = 0;
+      for (let e = this.edges.length - 1; e >= 0; e--) {
+        const [a, b] = this.edges[e]!;
+        if (a === index || b === index) this.edges.splice(e, 1);
+      }
+    }
     if (this.energy.length < this.nodes.length) {
       const grown = new Float32Array(this.nodes.length + 16);
       grown.set(this.energy);
@@ -149,7 +157,7 @@ class Field {
     }
     this.nodes
       .map((other, j) => ({ j, d: Math.hypot(other.x - node.x, other.y - node.y) }))
-      .filter(({ j }) => j !== index)
+      .filter(({ j }) => j !== index && this.alphaOf(j) > 0.01)
       .sort((a, b) => a.d - b.d)
       .slice(0, links)
       .forEach(({ j }) => this.edges.push([index, j]));
@@ -352,12 +360,8 @@ function capture(root: HTMLElement): void {
   const random = Math.random;
   let cycle = 0;
   const captured: number[] = [];
+  const keep = 4;
   const wait = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
-
-  field.nodeAlpha = (i) => {
-    const order = captured.indexOf(i);
-    return order >= 0 && captured.length - order > 4 ? 0 : 1;
-  };
 
   const run = async () => {
     if (!field.visible) {
@@ -409,7 +413,7 @@ function capture(root: HTMLElement): void {
       { duration: 900, easing: "cubic-bezier(0.65, 0, 0.35, 1)" }
     ).finished;
     card.setAttribute("data-state", "hidden");
-    const index = field.addNode(node, 3);
+    const index = field.addNode(node, 3, captured.length >= keep ? captured.shift() : undefined);
     captured.push(index);
     field.pulse(index, 1, 2);
     await wait(2600);

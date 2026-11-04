@@ -1,5 +1,5 @@
 import { readFile, readdir, stat } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const site = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -34,16 +34,32 @@ for (const required of [
 }
 
 const landing = await readFile(join(dist, "index.html"), "utf8");
+const staticImport = /\b(?:import|export)\s*(?:[\w$*{}\s,]*?from\s*)?["']([^"']+\.js)["']/g;
 const scripts = [...landing.matchAll(/<script[^>]*src="([^"]+)"/g)].map((m) => m[1]);
-let eagerJs = 0;
-for (const src of scripts) eagerJs += (await stat(join(dist, src))).size;
-const inline = [...landing.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/g)].reduce(
-  (n, m) => n + m[1].length,
-  0
+const inlineBodies = [...landing.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/g)].map(
+  (m) => m[1]
 );
+const eager = new Set();
+const pending = [
+  ...scripts,
+  ...inlineBodies.flatMap((body) =>
+    [...body.matchAll(staticImport)].map((m) => posix.resolve("/", m[1]))
+  ),
+];
+while (pending.length > 0) {
+  const src = pending.pop();
+  if (eager.has(src)) continue;
+  eager.add(src);
+  const code = await readFile(join(dist, src), "utf8");
+  for (const m of code.matchAll(staticImport))
+    pending.push(posix.resolve(posix.dirname(src), m[1]));
+}
+let eagerJs = 0;
+for (const src of eager) eagerJs += (await stat(join(dist, src))).size;
+const inline = inlineBodies.reduce((n, body) => n + body.length, 0);
 const lazy = (await readdir(join(dist, "_astro"))).filter((f) => f.startsWith("memory-field"));
 console.log(
-  `landing: ${scripts.length} external script(s) ${eagerJs} B, inline ${inline} B, lazy chunk(s): ${lazy.join(", ")}`
+  `landing: ${scripts.length} external script(s), ${eager.size} eager file(s) ${eagerJs} B, inline ${inline} B, lazy chunk(s): ${lazy.join(", ")}`
 );
 if (eagerJs + inline > 12000)
   failures.push(`landing eager JS ${eagerJs + inline} B exceeds 12000 B budget`);

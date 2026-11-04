@@ -156,7 +156,7 @@ export const en = {
       ["profile", "User profile"],
       ["skills", "Skills"],
       ["stats", "Stats"],
-    ],
+    ] as Array<[string, string]>,
   },
   privacy: {
     title: "Your memories live on your machine.",

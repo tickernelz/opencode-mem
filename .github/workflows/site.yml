@@ -9,6 +9,8 @@ on:
       - "README.md"
       - ".github/i18n/**"
       - "web/src/app.css"
+      - "src/config.ts"
+      - "opencode-mem.example.jsonc"
       - "web/public/favicon.*"
       - ".github/workflows/site.yml"
   pull_request:
@@ -17,6 +19,8 @@ on:
       - "README.md"
       - ".github/i18n/**"
       - "web/src/app.css"
+      - "src/config.ts"
+      - "opencode-mem.example.jsonc"
       - "web/public/favicon.*"
       - ".github/workflows/site.yml"
   schedule:
@@ -50,6 +54,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bun run build
+
+      - name: Typecheck site
+        working-directory: site
+        run: bun run check
 
       - name: Check build output
         working-directory: site
