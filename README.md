@@ -279,17 +279,17 @@ The plugin creates a full commented template at this path on first startup. For 
 
 Commonly tuned top-level options:
 
-| Option                                                                | Default                         | What it does                                                                                                         |
-| --------------------------------------------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `storagePath`                                                         | `"~/.opencode-mem/data"`        | Where the memory databases live.                                                                                     |
-| `webServerEnabled` / `webServerPort` / `webServerHost`                | `true` / `4747` / `"127.0.0.1"` | Web UI server switch, port and bind address.                                                                         |
-| `autoCaptureEnabled`                                                  | `true`                          | Summarize idle sessions into memories (needs a provider, see [Auto-Capture AI Provider](#auto-capture-ai-provider)). |
-| `similarityThreshold` / `maxMemories`                                 | `0.6` / `10`                    | Minimum similarity score and maximum number of results for memory search.                                            |
-| `injectProfile`                                                       | `true`                          | Inject the user profile (preferences, patterns, workflows) into the AI context.                                      |
-| `deduplicationEnabled` / `deduplicationSimilarityThreshold`           | `true` / `0.9`                  | Detect and remove duplicate memories.                                                                                |
-| `autoCleanupEnabled` / `autoCleanupRetentionDays`                     | `true` / `30`                   | At most once a day, delete memories not updated within the retention window. Pinned memories are kept.               |
-| `showAutoCaptureToasts` / `showUserProfileToasts` / `showErrorToasts` | `true`                          | Toasts for auto-capture, profile updates and errors.                                                                 |
-| `autoUpdate`                                                          | `true`                          | Clear OpenCode's cached install when a newer npm release is available.                                               |
+| Option                                                                | Default                         | What it does                                                                                                                    |
+| --------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `storagePath`                                                         | `"~/.opencode-mem/data"`        | Where the memory databases live.                                                                                                |
+| `webServerEnabled` / `webServerPort` / `webServerHost`                | `true` / `4747` / `"127.0.0.1"` | Web UI server switch, port and bind address.                                                                                    |
+| `autoCaptureEnabled`                                                  | `true`                          | Summarize idle sessions into memories (needs a provider, see [Auto-Capture AI Provider](#auto-capture-ai-provider)).            |
+| `similarityThreshold` / `maxMemories`                                 | `0.6` / `10`                    | Minimum similarity score and maximum number of results for memory search.                                                       |
+| `injectProfile`                                                       | `true`                          | Inject the user profile (preferences, patterns, workflows) into the AI context.                                                 |
+| `deduplicationEnabled` / `deduplicationSimilarityThreshold`           | `true` / `0.9`                  | Detect and remove duplicate memories.                                                                                           |
+| `autoCleanupEnabled` / `autoCleanupRetentionDays`                     | `true` / `30`                   | At most once a day, delete prompts older than, and memories not updated within, the retention window. Pinned memories are kept. |
+| `showAutoCaptureToasts` / `showUserProfileToasts` / `showErrorToasts` | `true`                          | Toasts for auto-capture, profile updates and errors.                                                                            |
+| `autoUpdate`                                                          | `true`                          | Clear OpenCode's cached install when a newer npm release is available.                                                          |
 
 ### Markdown vault backend (`memoryBackend`)
 
@@ -755,7 +755,7 @@ bun run check
 
 `bun run check` runs `format:check`, `lint` and `typecheck`; `bun run format` rewrites formatting.
 
-The [website](https://opencode-mem.zhafron.my.id) and its [docs](https://opencode-mem.zhafron.my.id/docs/) are generated from this README and the translations under `.github/i18n/`. Every README heading must be mapped to a docs page in `site/docs-map.json`, otherwise the site build fails. Build the site locally with `cd site && bun install && bun run build`.
+The [docs](https://opencode-mem.zhafron.my.id/docs/) are generated from this README and the translations under `.github/i18n/`; the [landing page](https://opencode-mem.zhafron.my.id) lives in `site/src/`. Every README heading must be mapped to a docs page in `site/docs-map.json`, otherwise the site build fails. Build the site locally with `cd site && bun install && bun run build`.
 
 This project is actively seeking contributions to become the definitive memory plugin for AI coding agents. Whether you are fixing bugs, adding features, improving documentation, or expanding embedding model support, your contributions are critical. The codebase is well-structured and ready for enhancement. Please open issues with the Issue or Feature request templates, and fill out the pull request template when you submit a PR — we review and merge contributions quickly.
 

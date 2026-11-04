@@ -258,7 +258,7 @@ Sık ayarlanan üst düzey seçenekler:
 | `similarityThreshold` / `maxMemories`                                 | `0.6` / `10`                    | Bellek araması için minimum benzerlik puanı ve maksimum sonuç sayısı.                                                                           |
 | `injectProfile`                                                       | `true`                          | Kullanıcı profilini (tercihler, kalıplar, iş akışları) AI bağlamına enjekte eder.                                                               |
 | `deduplicationEnabled` / `deduplicationSimilarityThreshold`           | `true` / `0.9`                  | Yinelenen bellekleri tespit eder ve kaldırır.                                                                                                   |
-| `autoCleanupEnabled` / `autoCleanupRetentionDays`                     | `true` / `30`                   | Günde en fazla bir kez, saklama süresi içinde güncellenmemiş bellekleri siler. Sabitlenmiş bellekler korunur.                                   |
+| `autoCleanupEnabled` / `autoCleanupRetentionDays`                     | `true` / `30`                   | Günde en fazla bir kez, saklama süresinden eski istemleri ve bu süre içinde güncellenmemiş bellekleri siler. Sabitlenmiş bellekler korunur.                                   |
 | `showAutoCaptureToasts` / `showUserProfileToasts` / `showErrorToasts` | `true`                          | auto-capture, profil güncellemeleri ve hatalar için bildirimler.                                                                                |
 | `autoUpdate`                                                          | `true`                          | Daha yeni bir npm sürümü mevcut olduğunda OpenCode’un önbelleğe alınmış kurulumunu temizler.                                                    |
 
@@ -732,7 +732,7 @@ bun run check
 
 `bun run check`, `format:check`, `lint` ve `typecheck` komutlarını çalıştırır; `bun run format` biçimlendirmeyi yeniden yazar.
 
-[Web sitesi](https://opencode-mem.zhafron.my.id) ve [belgeleri](https://opencode-mem.zhafron.my.id/docs/) bu README'den ve `.github/i18n/` altındaki çevirilerden oluşturulur. Her README başlığı `site/docs-map.json` içinde bir belge sayfasına eşlenmelidir, aksi takdirde site derlemesi başarısız olur. Siteyi yerelde `cd site && bun install && bun run build` ile derleyin.
+[Belgeler](https://opencode-mem.zhafron.my.id/docs/) bu README'den ve `.github/i18n/` altındaki çevirilerden oluşturulur; [açılış sayfası](https://opencode-mem.zhafron.my.id) `site/src/` içinde bulunur. Her README başlığı `site/docs-map.json` içinde bir belge sayfasına eşlenmelidir, aksi takdirde site derlemesi başarısız olur. Siteyi yerelde `cd site && bun install && bun run build` ile derleyin.
 
 Bu proje, AI kodlama ajanları için nihai bellek eklentisi olmak üzere aktif olarak katkı arıyor. Hataları düzeltmek, özellik eklemek, belgeleri iyileştirmek veya embedding model desteğini genişletmek olsun, katkılarınız kritiktir. Kod tabanı iyi yapılandırılmış ve iyileştirmeye hazırdır. Lütfen Issue veya Feature request şablonlarıyla issue açın ve bir PR gönderdiğinizde pull request şablonunu doldurun — katkıları hızlıca inceler ve birleştiririz.
 

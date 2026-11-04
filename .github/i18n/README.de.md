@@ -256,7 +256,7 @@ Häufig angepasste Top-Level-Optionen:
 | `similarityThreshold` / `maxMemories`                                 | `0.6` / `10`                    | Minimaler Ähnlichkeitswert und maximale Anzahl an Ergebnissen für die Memory-Suche.                                                        |
 | `injectProfile`                                                       | `true`                          | Fügt das User profile (Präferenzen, Muster, Workflows) in den KI-Kontext ein.                                                             |
 | `deduplicationEnabled` / `deduplicationSimilarityThreshold`           | `true` / `0.9`                  | Erkennt und entfernt doppelte Memories.                                                                                                    |
-| `autoCleanupEnabled` / `autoCleanupRetentionDays`                     | `true` / `30`                   | Löscht höchstens einmal täglich Memories, die innerhalb des Aufbewahrungszeitraums nicht aktualisiert wurden. Angepinnte Memories bleiben erhalten. |
+| `autoCleanupEnabled` / `autoCleanupRetentionDays`                     | `true` / `30`                   | Löscht höchstens einmal täglich Prompts, die älter als der Aufbewahrungszeitraum sind, und Memories, die innerhalb dieses Zeitraums nicht aktualisiert wurden. Angepinnte Memories bleiben erhalten. |
 | `showAutoCaptureToasts` / `showUserProfileToasts` / `showErrorToasts` | `true`                          | Toasts für auto-capture, Profil-Updates und Fehler.                                                                                        |
 | `autoUpdate`                                                          | `true`                          | Leert die zwischengespeicherte Installation von OpenCode, wenn ein neueres npm-Release verfügbar ist.                                      |
 
@@ -726,7 +726,7 @@ bun run check
 
 `bun run check` führt `format:check`, `lint` und `typecheck` aus; `bun run format` schreibt die Formatierung neu.
 
-Die [Website](https://opencode-mem.zhafron.my.id) und ihre [Dokumentation](https://opencode-mem.zhafron.my.id/docs/) werden aus dieser README und den Übersetzungen unter `.github/i18n/` generiert. Jede README-Überschrift muss in `site/docs-map.json` einer Docs-Seite zugeordnet sein, sonst schlägt der Site-Build fehl. Baue die Site lokal mit `cd site && bun install && bun run build`.
+Die [Dokumentation](https://opencode-mem.zhafron.my.id/docs/) wird aus dieser README und den Übersetzungen unter `.github/i18n/` generiert; die [Landingpage](https://opencode-mem.zhafron.my.id) liegt in `site/src/`. Jede README-Überschrift muss in `site/docs-map.json` einer Docs-Seite zugeordnet sein, sonst schlägt der Site-Build fehl. Baue die Site lokal mit `cd site && bun install && bun run build`.
 
 Dieses Projekt sucht aktiv Beiträge, um das maßgebliche Memory-Plugin für KI-Coding-Agenten zu werden. Ob du Bugs behebst, Features hinzufügst, Dokumentation verbesserst oder die Embedding-Modell-Unterstützung erweiterst — deine Beiträge sind entscheidend. Die Codebasis ist gut strukturiert und bereit für Erweiterungen. Bitte Issues mit den Vorlagen Issue oder Feature request öffnen und beim Einreichen eines PRs die Pull-Request-Vorlage ausfüllen — wir reviewen und mergen Beiträge zügig.
 

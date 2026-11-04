@@ -256,7 +256,7 @@ memory({ mode: "import", inputPath: "./memories.json" });
 | `similarityThreshold` / `maxMemories`                                 | `0.6` / `10`                    | 记忆搜索的最低相似度分数与最大结果数量。                                                               |
 | `injectProfile`                                                       | `true`                          | 将用户画像（偏好、模式、工作流）注入 AI 上下文。                                                       |
 | `deduplicationEnabled` / `deduplicationSimilarityThreshold`           | `true` / `0.9`                  | 检测并移除重复记忆。                                                                                   |
-| `autoCleanupEnabled` / `autoCleanupRetentionDays`                     | `true` / `30`                   | 每天最多一次，删除在保留期内未更新的记忆。已置顶的记忆会被保留。                                       |
+| `autoCleanupEnabled` / `autoCleanupRetentionDays`                     | `true` / `30`                   | 每天最多一次，删除早于保留期的提示词，以及在保留期内未更新的记忆。已置顶的记忆会被保留。                                       |
 | `showAutoCaptureToasts` / `showUserProfileToasts` / `showErrorToasts` | `true`                          | auto-capture、画像更新与错误的提示通知。                                                               |
 | `autoUpdate`                                                          | `true`                          | 当有更新的 npm 版本可用时，清除 OpenCode 缓存的安装。                                                  |
 
@@ -666,7 +666,7 @@ bun run check
 
 `bun run check` 会运行 `format:check`、`lint` 和 `typecheck`；`bun run format` 会重写格式。
 
-[网站](https://opencode-mem.zhafron.my.id)及其[文档](https://opencode-mem.zhafron.my.id/docs/)由本 README 和 `.github/i18n/` 下的翻译生成。每个 README 标题都必须在 `site/docs-map.json` 中映射到一个文档页面，否则站点构建会失败。可使用 `cd site && bun install && bun run build` 在本地构建站点。
+[文档](https://opencode-mem.zhafron.my.id/docs/)由本 README 和 `.github/i18n/` 下的翻译生成；[首页](https://opencode-mem.zhafron.my.id)位于 `site/src/`。每个 README 标题都必须在 `site/docs-map.json` 中映射到一个文档页面，否则站点构建会失败。可使用 `cd site && bun install && bun run build` 在本地构建站点。
 
 本项目积极寻求贡献，以成为 AI 编程代理的权威记忆插件。无论你是修复缺陷、添加功能、改进文档，还是扩展嵌入模型支持，你的贡献都至关重要。代码库结构良好，已准备好增强。请使用 Issue 或 Feature request 模板提出问题，并在提交 PR 时填写 pull request 模板 — 我们会快速审查并合并贡献。
 

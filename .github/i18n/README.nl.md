@@ -256,7 +256,7 @@ Vaak aangepaste opties op het hoogste niveau:
 | `similarityThreshold` / `maxMemories`                                 | `0.6` / `10`                    | Minimale gelijkenisscore en maximaal aantal resultaten bij het zoeken in herinneringen.                                               |
 | `injectProfile`                                                       | `true`                          | Injecteert het gebruikersprofiel (voorkeuren, patronen, workflows) in de AI-context.                                                  |
 | `deduplicationEnabled` / `deduplicationSimilarityThreshold`           | `true` / `0.9`                  | Detecteert en verwijdert dubbele herinneringen.                                                                                       |
-| `autoCleanupEnabled` / `autoCleanupRetentionDays`                     | `true` / `30`                   | Verwijdert maximaal één keer per dag herinneringen die niet binnen de bewaartermijn zijn bijgewerkt. Vastgezette herinneringen blijven behouden. |
+| `autoCleanupEnabled` / `autoCleanupRetentionDays`                     | `true` / `30`                   | Verwijdert maximaal één keer per dag prompts die ouder zijn dan de bewaartermijn en herinneringen die niet binnen die termijn zijn bijgewerkt. Vastgezette herinneringen blijven behouden. |
 | `showAutoCaptureToasts` / `showUserProfileToasts` / `showErrorToasts` | `true`                          | Toasts voor auto-capture, profielupdates en fouten.                                                                                   |
 | `autoUpdate`                                                          | `true`                          | Wist de gecachte installatie van OpenCode wanneer er een nieuwere npm-release beschikbaar is.                                         |
 
@@ -730,7 +730,7 @@ bun run check
 
 `bun run check` voert `format:check`, `lint` en `typecheck` uit; `bun run format` herschrijft de opmaak.
 
-De [website](https://opencode-mem.zhafron.my.id) en de bijbehorende [docs](https://opencode-mem.zhafron.my.id/docs/) worden gegenereerd uit deze README en de vertalingen onder `.github/i18n/`. Elke README-kop moet in `site/docs-map.json` aan een docs-pagina zijn gekoppeld, anders mislukt de site-build. Bouw de site lokaal met `cd site && bun install && bun run build`.
+De [docs](https://opencode-mem.zhafron.my.id/docs/) worden gegenereerd uit deze README en de vertalingen onder `.github/i18n/`; de [landingspagina](https://opencode-mem.zhafron.my.id) staat in `site/src/`. Elke README-kop moet in `site/docs-map.json` aan een docs-pagina zijn gekoppeld, anders mislukt de site-build. Bouw de site lokaal met `cd site && bun install && bun run build`.
 
 Dit project zoekt actief bijdragen om de definitieve geheugenplugin voor AI-codingagents te worden. Of je bugs fixt, features toevoegt, documentatie verbetert of embeddingmodelondersteuning uitbreidt: je bijdragen zijn cruciaal. De codebase is goed gestructureerd en klaar voor verbetering. Open issues met de Issue- of Feature request-templates, en vul het pull request-template in wanneer je een PR indient — we reviewen en mergen bijdragen snel.
 

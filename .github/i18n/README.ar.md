@@ -256,7 +256,7 @@ memory({ mode: "import", inputPath: "./memories.json" });
 | `similarityThreshold` / `maxMemories`                                 | `0.6` / `10`                    | الحد الأدنى لدرجة التشابه والحد الأقصى لعدد النتائج في البحث عن الذكريات.                                            |
 | `injectProfile`                                                       | `true`                          | حقن ملف المستخدم (التفضيلات، الأنماط، سير العمل) في سياق الذكاء الاصطناعي.                                           |
 | `deduplicationEnabled` / `deduplicationSimilarityThreshold`           | `true` / `0.9`                  | اكتشاف الذكريات المكررة وإزالتها.                                                                                    |
-| `autoCleanupEnabled` / `autoCleanupRetentionDays`                     | `true` / `30`                   | مرة واحدة يوميًا على الأكثر، حذف الذكريات التي لم تُحدَّث خلال فترة الاحتفاظ. الذكريات المثبّتة تُحفظ.               |
+| `autoCleanupEnabled` / `autoCleanupRetentionDays`                     | `true` / `30`                   | مرة واحدة يوميًا على الأكثر، حذف المطالبات الأقدم من فترة الاحتفاظ والذكريات التي لم تُحدَّث خلالها. الذكريات المثبّتة تُحفظ.               |
 | `showAutoCaptureToasts` / `showUserProfileToasts` / `showErrorToasts` | `true`                          | إشعارات منبثقة لـ auto-capture وتحديثات الملف الشخصي والأخطاء.                                                        |
 | `autoUpdate`                                                          | `true`                          | مسح التثبيت المخزّن مؤقتًا لـ OpenCode عند توفر إصدار npm أحدث.                                                       |
 
@@ -724,7 +724,7 @@ bun run check
 
 يشغّل `bun run check` كلًا من `format:check` و`lint` و`typecheck`؛ ويعيد `bun run format` كتابة التنسيق.
 
-يتم توليد [الموقع](https://opencode-mem.zhafron.my.id) و[توثيقه](https://opencode-mem.zhafron.my.id/docs/) من هذا README والترجمات ضمن `.github/i18n/`. يجب ربط كل عنوان في README بصفحة توثيق في `site/docs-map.json`، وإلا فسيفشل بناء الموقع. ابنِ الموقع محليًا باستخدام `cd site && bun install && bun run build`.
+يتم توليد [التوثيق](https://opencode-mem.zhafron.my.id/docs/) من هذا README والترجمات ضمن `.github/i18n/`؛ أما [الصفحة الرئيسية](https://opencode-mem.zhafron.my.id) فموجودة في `site/src/`. يجب ربط كل عنوان في README بصفحة توثيق في `site/docs-map.json`، وإلا فسيفشل بناء الموقع. ابنِ الموقع محليًا باستخدام `cd site && bun install && bun run build`.
 
 يسعى هذا المشروع بنشاط للمساهمات ليصبح المكون الإضافي النهائي للذاكرة لوكلاء البرمجة بالذكاء الاصطناعي. سواء كنت تصلح أخطاء، أو تضيف ميزات، أو تحسّن التوثيق، أو توسّع دعم نماذج التضمين، مساهماتك حاسمة. قاعدة الشيفرة منظمة جيدًا وجاهزة للتحسين. افتح القضايا بقوالب Issue أو Feature request، واملأ قالب طلب السحب عند إرسال PR — نراجع وندمج المساهمات بسرعة.
 
