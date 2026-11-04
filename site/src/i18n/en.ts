@@ -3,6 +3,8 @@ export const en = {
     title: "opencode-mem: your OpenCode agent finally remembers",
     description:
       "opencode-mem gives OpenCode a long-term memory. It writes down decisions, fixes, and preferences while you work, and brings them back next session. Free, open source, and stored on your machine.",
+    ogImageAlt:
+      "opencode-mem: Your agent finally remembers. Long-term memory for OpenCode. Free, open source, stored on your machine.",
   },
   nav: {
     how: "How it works",

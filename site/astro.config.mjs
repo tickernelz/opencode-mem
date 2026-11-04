@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
+import { en } from "./src/i18n/en.ts";
 
 const map = JSON.parse(readFileSync(new URL("./docs-map.json", import.meta.url), "utf8"));
 const groups = [...new Set(map.pages.map((page) => page.group))];
@@ -45,6 +46,10 @@ export default defineConfig({
           tag: "meta",
           attrs: { property: "og:image", content: "https://opencode-mem.zhafron.my.id/og.png" },
         },
+        { tag: "meta", attrs: { property: "og:image:width", content: "1200" } },
+        { tag: "meta", attrs: { property: "og:image:height", content: "630" } },
+        { tag: "meta", attrs: { property: "og:image:alt", content: en.meta.ogImageAlt } },
+        { tag: "meta", attrs: { name: "twitter:image:alt", content: en.meta.ogImageAlt } },
       ],
     }),
   ],

@@ -4,6 +4,8 @@
 [![npm downloads](https://img.shields.io/npm/dm/opencode-mem.svg)](https://www.npmjs.com/package/opencode-mem)
 [![license](https://img.shields.io/npm/l/opencode-mem.svg)](https://www.npmjs.com/package/opencode-mem)
 [![GitHub stars](https://img.shields.io/github/stars/tickernelz/opencode-mem.svg)](https://github.com/tickernelz/opencode-mem)
+[![Website](https://img.shields.io/badge/website-opencode--mem.zhafron.my.id-blue)](https://opencode-mem.zhafron.my.id)
+[![Docs](https://img.shields.io/badge/docs-opencode--mem.zhafron.my.id%2Fdocs-blue)](https://opencode-mem.zhafron.my.id/docs/)
 
 ![OpenCode Memory Banner](../pics/banner.png)
 
@@ -13,7 +15,16 @@
 
 ## 核心功能
 
-本地 Turso/libSQL 数据库与原生向量搜索、持久化项目记忆、自动用户画像学习、统一的记忆–提示时间线、功能完整的 Web UI、基于提示的智能记忆提取、多提供商 AI 支持（OpenAI、Anthropic）、12+ 本地嵌入模型、智能去重，以及内置隐私保护。
+- **本地数据库：** 内嵌 Turso/libSQL 与原生向量搜索，存储于 `storagePath` 下。无需单独的向量数据库。
+- **基于提示的智能记忆提取 (auto-capture)：** 当会话进入空闲状态时，后台 AI 请求会将技术工作转化为持久化项目记忆。
+- **自动召回：** 相关记忆和用户画像会被注入到模型上下文中（`chatMessage`）。
+- **自动用户画像学习：** 跨项目汇总你的偏好、模式和工作流程。
+- **记忆整理：** 智能去重、可选的 update-on-capture，以及可选的 dreaming 整合，并配有可恢复的回收站。
+- **多提供商 AI 支持：** 可使用 OpenCode 中配置的任意提供商（`opencodeProvider` / `opencodeModel`），或手动配置 API：OpenAI Chat Completions、OpenAI Responses、Anthropic、MiniMax、OrcaRouter、Atlas Cloud、Cheaper Inference、API Route、Runcrate、CloudGPU。
+- **嵌入：** 12+ 本地嵌入模型，在 CPU 上运行（无需 GPU），或使用任意 OpenAI 兼容的嵌入 API。
+- **功能完整的 Web UI：** 统一的 memory–prompt timeline、用户画像、技能库、Markdown vault 和健康统计，并支持可选的 HTTP Basic Auth。
+- **内置隐私保护：** `<private>` 标签、捕获前凭据脱敏，以及可选的静态加密。
+- **可移植性：** 可选的 Markdown vault 后端，以及 `memory` 工具的 `export` / `import` / `migrate`，适用于移动或复制的项目。
 
 ## 前置要求
 
@@ -138,7 +149,7 @@ v2 插件通过模型的系统上下文提供自动记忆上下文。
 }
 ```
 
-首次启动时，插件会创建 `~/.config/opencode/opencode-mem-db.key`（32 字节十六进制密钥，`chmod 600`）并迁移现有明文分片。若你自行管理密钥，可用 `"databaseEncryptionKey": "env://OPENCODE_MEM_DB_KEY"` 或 `"file://~/path/to.key"` 覆盖。丢失密钥意味着无法打开已加密的数据库。
+首次启动时，插件会创建 `~/.config/opencode/opencode-mem-db.key`（32 字节十六进制密钥，`chmod 600`）并迁移现有明文分片。若你自行管理密钥，可用 `"databaseEncryptionKey": "env://OPENCODE_MEM_DB_KEY"` 或 `"file://~/path/to.key"` 覆盖。丢失密钥意味着无法打开已加密的数据库。`databaseEncryptionCipher` 用于选择加密算法：`aes256gcm`（默认）、`aes128gcm`、`aegis256`、`aegis256x2`、`aegis128l`、`aegis128x2` 或 `aegis128x4`。
 
 **Windows：** 使用 `%USERPROFILE%\.config\opencode\opencode.json`（例如 `C:\Users\<you>\.config\opencode\opencode.json`）。本插件**不会**从 `%APPDATA%` 或 `%LOCALAPPDATA%` 读取其 OpenCode 插件条目 — 请将文件放在用户配置文件下的 `.config\opencode`，然后重启 OpenCode。若插件未出现，请确认该路径并再次重启。
 
@@ -158,10 +169,10 @@ v2 插件通过模型的系统上下文提供自动记忆上下文。
 
 ### 自动与手动记忆
 
-| 方式                                             | 何时运行                 | 你需要做什么                                                                               |
-| ------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------ |
-| **自动捕获**（`autoCaptureEnabled: true`，默认） | 会话空闲后的对话轮次之后 | 无需操作 — 提取是自动的                                                                    |
-| **手动** `memory` 工具 / 命令                    | 按需                     | `add`、`search`、`list`、`profile`、`forget`、`list-shards`、`migrate`、`export`、`import` |
+| 方式                                             | 何时运行                 | 你需要做什么                                                                                       |
+| ------------------------------------------------ | ------------------------ | -------------------------------------------------------------------------------------------------- |
+| **自动捕获**（`autoCaptureEnabled: true`，默认） | 会话空闲后的对话轮次之后 | 无需操作 — 提取是自动的                                                                            |
+| **手动** `memory` 工具 / 命令                    | 按需                     | `add`、`search`、`list`、`profile`、`forget`、`list-shards`、`migrate`、`export`、`import`、`help` |
 
 即使自动捕获未配置提供商，手动搜索/添加/列表仍可工作。自动捕获与用户画像学习需要能返回结构化/工具调用输出的提供商。
 
@@ -205,7 +216,7 @@ Web UI 的 **Stats** 选项卡（`/stats`）一眼展示记忆系统健康状况
 
 ### Web UI
 
-打开 `http://127.0.0.1:4747` 以浏览记忆–提示时间线、检查捕获内容并管理用户画像。若将服务器绑定到回环以外，参见 [Web UI HTTP Basic Auth](#web-ui-http-basic-auth)。
+打开 `http://127.0.0.1:4747` 以浏览 memory–prompt timeline、检查捕获内容并管理用户画像。该 UI 包含五个视图：**Project memories**（`/project-memories`）、**User profile**（`/user-profile`）、**Skill library**（`/skill-library`）、**Markdown vault**（`/markdown-vault`）和 **Stats**（`/stats`）。可通过 `webServerPort` 更改端口，或设置 `webServerEnabled: false` 以在不启用 Web UI 的情况下运行。若将服务器绑定到回环以外，参见 [Web UI HTTP Basic Auth](#web-ui-http-basic-auth)。
 
 ## 使用示例
 
@@ -234,6 +245,20 @@ memory({ mode: "import", inputPath: "./memories.json" });
 **Windows：** `%USERPROFILE%\.config\opencode\opencode-mem.jsonc`（与上述相同的 `.config\opencode` 目录 — 不是 AppData）。默认存储解析为 `%USERPROFILE%\.opencode-mem\data`（`~` 形式在 Windows 上也会展开为你的用户主目录）。
 
 插件在首次启动时会在此路径创建完整的注释模板。有关每项设置与注释，参见 [`opencode-mem.example.jsonc`](../../opencode-mem.example.jsonc)。
+
+常用的顶层选项：
+
+| 选项                                                                  | 默认值                          | 作用                                                                                                   |
+| --------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `storagePath`                                                         | `"~/.opencode-mem/data"`        | 记忆数据库的存放位置。                                                                                 |
+| `webServerEnabled` / `webServerPort` / `webServerHost`                | `true` / `4747` / `"127.0.0.1"` | Web UI 服务器开关、端口与绑定地址。                                                                    |
+| `autoCaptureEnabled`                                                  | `true`                          | 将空闲会话总结为记忆（需要配置提供方，参见 [Auto-Capture AI Provider](#自动捕获-ai-提供商)）。 |
+| `similarityThreshold` / `maxMemories`                                 | `0.6` / `10`                    | 记忆搜索的最低相似度分数与最大结果数量。                                                               |
+| `injectProfile`                                                       | `true`                          | 将用户画像（偏好、模式、工作流）注入 AI 上下文。                                                       |
+| `deduplicationEnabled` / `deduplicationSimilarityThreshold`           | `true` / `0.9`                  | 检测并移除重复记忆。                                                                                   |
+| `autoCleanupEnabled` / `autoCleanupRetentionDays`                     | `true` / `30`                   | 每天最多一次，删除早于保留期的提示词，以及在保留期内未更新的记忆。已置顶的记忆会被保留。                                       |
+| `showAutoCaptureToasts` / `showUserProfileToasts` / `showErrorToasts` | `true`                          | auto-capture、画像更新与错误的提示通知。                                                               |
+| `autoUpdate`                                                          | `true`                          | 当有更新的 npm 版本可用时，清除 OpenCode 缓存的安装。                                                  |
 
 ### Markdown vault 后端（`memoryBackend`）
 
@@ -265,7 +290,10 @@ memory({ mode: "import", inputPath: "./memories.json" });
 | 选项                                                   | 默认值           | 作用                                                                                                                                                                                            |
 | ------------------------------------------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `enabled`                                              | `true`           | 捕获已编写的用户提示并注入记忆上下文。                                                                                                                                                          |
-| `injectOn`                                             | `"first"`        | 在会话的第一条用户消息上注入记忆上下文，或在每次已编写轮次上使用 `"always"`。                                                                                                                   |
+| `injectOn`                                             | `"first"`        | 对于 `recall: "recent"`，在第一条用户消息上注入，或使用 `"always"` 在每次已编写轮次上注入。使用 `recall: "relevant"` / `"both"` 时，上下文总是在每次已编写轮次刷新（issue #460）。             |
+| `recall`                                               | `"relevant"`     | 注入记忆的选择方式：`"relevant"` 在每轮嵌入用户消息并执行向量搜索；`"recent"` 保留旧版的最新 N 条列表；`"both"` 优先选择相关记忆，再用最近记忆填充剩余名额。                                     |
+| `recallScope`                                          | `"default"`      | 自动召回的范围：`"default"` 遵循 `memory.defaultScope`，也可强制使用 `"project"` / `"all-projects"`。搜索所有项目时，来自当前项目的结果会获得少量相似度加成。                                    |
+| `similarityThreshold`                                  | （顶层）         | 可选的注入专用下限；否则使用顶层的 `similarityThreshold`。                                                                                                                                      |
 | `maxMemories` / `excludeCurrentSession` / `maxAgeDays` | `3` / `true` / — | 注入上下文保留多少条记忆、是否排除当前会话中捕获的记忆，以及可选的天数年龄截止。                                                                                                                |
 | `filterInjectedPrompts`                                | `true`           | 跳过由主机或其他 OpenCode 插件注入的提示文本（系统提醒、编排指令、后台任务通知），以免将其当作用户亲自输入而存储。                                                                              |
 | `injectionMarkers`                                     | 内置             | 识别注入块的额外标记；添加到内置列表，永不替换它。                                                                                                                                              |
@@ -274,6 +302,16 @@ memory({ mode: "import", inputPath: "./memories.json" });
 会话和时间范围的排除条件会在应用记忆注入数量上限之前生效，因此被排除的记忆
 不会占用原本可供符合条件的记忆使用的名额。将 `chatMessage.maxMemories` 设为 `0`
 会禁用项目记忆注入，但启用用户画像后仍可注入用户画像。
+
+注入的记忆标签会标明 `selection="recent"` 或 `selection="semantic"`。
+最近选择（包括回退以及 `both` 中的最近填充）不带数值分数。语义选择在可用时会携带有限的 `retrieval_score`；
+这是一个排序信号，可能包含当前项目加成，并非相关性或事实正确性的概率。缺失或无效的分数会被省略。
+这取代了以前的 `relevance="...%"` 提示属性，但不改变记忆的选择、排序、内容或来源。压缩保留其现有格式。
+
+当语义召回失败时（例如嵌入不可用），`relevant` 和 `both` 会回退到现有的最近列表，
+并沿用相同的范围、数量、会话和时间限制。搜索成功但没有符合条件的匹配时，`relevant` 保持为空；
+`both` 仍照常用最近记忆填充。部分分片警告不会触发失败回退。如果最近列表回退也失败，召回保持为空且不致命。
+缺失查询时的回退以及每轮刷新行为保持不变。
 
 ### Update-on-capture（可选）
 
@@ -295,7 +333,7 @@ memory({ mode: "import", inputPath: "./memories.json" });
 
 嵌入为记忆与用户画像提供相似性搜索能力。在同一文件中配置（`~/.config/opencode/opencode-mem.jsonc`）。**没有 MLX 后端** — 本地嵌入使用带 ONNX 的 `@huggingface/transformers`，而非 Apple MLX。
 
-**本地（默认）：** 仅设置 `embeddingModel`。首次使用时模型从 Hugging Face 下载并缓存在 `{storagePath}/.cache`（默认 `~/.opencode-mem/data/.cache`）下。
+**本地（默认）：** 仅设置 `embeddingModel`。首次使用时模型从 Hugging Face 下载并缓存在 `{storagePath}/.cache`（默认 `~/.opencode-mem/data/.cache`）下。模型权重会在宿主进程的整个生命周期内常驻内存；设置 `embeddingIdleTimeoutMs` 可在空闲达到该毫秒数后释放它们，下一次记忆操作会从本地缓存重新预热（约一秒，而非重新下载）。
 
 **远程（OpenAI 兼容）：** 同时设置 `embeddingApiUrl` 与 `embeddingApiKey`。插件随后使用 Bearer 令牌调用 `{embeddingApiUrl}/embeddings`。`embeddingApiKey` 接受与 `memoryApiKey` 相同的密钥格式（`literal`、`env://…`、`file://…`）。
 
@@ -308,6 +346,7 @@ memory({ mode: "import", inputPath: "./memories.json" });
 | `embeddingDocumentPrefix`  | 文档任务嵌入的前缀（与 `embeddingQueryPrefix` 相同的解析规则）                                              |
 | `embeddingUseTaskPrefixes` | 当自定义/预设前缀未设置时，可选启用 Nomic 的 `search_query:` / `search_document:` 前缀。默认 `false`        |
 | `embeddingDtype`           | 可选的本地 ONNX dtype 覆盖（例如 `"q8"`、`"fp32"`）。设置后会传给 transformers.js 的 `pipeline({ dtype })`  |
+| `embeddingIdleTimeoutMs`   | 空闲达到该毫秒数后释放本地模型（例如 `600000` 表示 10 分钟）。`0`（默认）在进程生命周期内保持加载          |
 | `embeddingApiUrl`          | OpenAI 兼容嵌入 API 的基础 URL（末尾路径不超过 `/v1`）                                                      |
 | `embeddingApiKey`          | 该端点的 API 密钥（需与 `embeddingApiUrl` 一起设置）                                                        |
 
@@ -497,9 +536,13 @@ memory({ mode: "import", inputPath: "./memories.json" });
 
 慢速推理模型（或非常大的画像提示）可能超过默认的 90 秒结构化输出预算。设置 `"opencodeTimeoutMs"`（毫秒）可为内部结构化输出调用（自动捕获摘要、画像学习）延长 — 例如 `"opencodeTimeoutMs": 180000` 表示 3 分钟。值钳制在 10000..600000；默认保持 90000。数字字符串会被强制转换。画像清理使用单独的、更长的超时。
 
-支持的提供商：`opencode providers list` 列出的任何提供商（例如 `anthropic`、`openai`、`github-copilot` 等）。
+支持的提供商：`opencode providers list` 列出的任何提供商（例如 `anthropic`、`openai`、`github-copilot`、`openrouter` 等）。
 
-若设置了 `opencodeProvider` 与 `opencodeModel`，它们优先于下方的手动 `memoryProvider` 设置。
+**内置 Free / Zen 模型**（提供商 id 为 `opencode`，例如 `big-pickle`）通常无法运行插件的内部结构化输出会话 — OpenCode 可能在交互式聊天之外拒绝它们。请优先使用 `opencode providers list` 中已认证的提供商，或使用 `"opencodeModel": "inherit"`，让捕获跟随你在会话中已使用的模型。
+
+若 `autoCaptureEnabled` 为 `true`（默认），但既未配置 `opencodeProvider`/`opencodeModel`，也未配置完整的手动回退，插件会记录警告并显示启动提示（当启用 `showErrorToasts` 时），使缺失的配置无需翻查日志即可发现。
+
+若设置了 `opencodeProvider` 与 `opencodeModel`，默认情况下它们优先于下方的手动 `memoryProvider` 设置（`"autoCaptureProviderOrder": "opencode-first"`）。设置 `"autoCaptureProviderOrder": "external-first"` 可在两者均已配置时优先使用手动 API（适用于主机会话 API 繁忙/缓慢时）；另一通道用作回退。调低 `"opencodeTimeoutMs"` 可更快地从 opencode 通道故障转移。
 
 **跟随会话模型：** 设置 `"opencodeModel": "inherit"` 以在调用时使用具体的 OpenCode 模型，而非固定 id。对于**自动捕获**，每个提示通过 `chat.params` 钩子记录，捕获请求重用该提示的提供商/模型。对于**画像学习**及其他结构化输出路径（不绑定到单条用户消息），`inherit` 先复用主机在 `chat.params` / V2 context 钩子上报的最近模型，再回退到 OpenCode `model.json` 最近列表（若存在；优先使用已配置的 `opencodeProvider`）。OpenCode v2 不再写入 `model.json`，因此进程内会话模型是主要回退。发送字面模型 id `inherit` 永远无效，此前会在这些路径上导致 `ProviderModelNotFoundError: Model not found: <provider>/inherit`。`opencodeProvider` 仍作为正常配置门控是必需的。
 
@@ -566,6 +609,11 @@ memory({ mode: "import", inputPath: "./memories.json" });
 故障排除：
 
 - 自动捕获失败不会阻止手动 `memory` 工具使用。
+- 自动捕获会在延迟摘要运行之前，保留来自已投递 V1/V2 事件的有界最终助手文本与终态工具结果。正常的空闲捕获仍优先使用实时主机记录；当会话已不存在时（删除或启动重放），已就绪的待处理证据作为回退。恢复范围限定于同一项目，并使用正常的捕获提供商与认领队列。它不会仅凭请求推断已完成的工作。删除 OpenCode 会话**不会**删除这些待处理记忆证据或已捕获的记忆。
+- 待处理证据在持久化前会进行私有标签脱敏（包括跨越同一助手消息内多个最终文本部分的标签）；推理内容、附件、原始提供商元数据、流式增量与工具参数均被排除。限制为每部分 16 KiB、每个提示 16 个部分、全局 256 个部分（文本最多 4 MiB），以及每次捕获 64 KiB。截断会被标记；超出预算时淘汰最旧的部分。证据在 24 小时后过期，并在后续存储访问时清理。当捕获完成/跳过，或其提示被现有删除/保留路径移除时，证据会被清除。这些是逻辑保留限制，而非对 SQLite/WAL 备份的安全擦除。
+- V2 事件是易失流：断开/错过的事件、无法解析的提示关联，以及因过期/淘汰而丢失的证据均无法恢复。所保证的是基于已接收、已保存并由空闲/删除事件检查点标记为就绪的证据进行捕获，而非重建未见过或先前已删除的记录。在该检查点之后，会话会被封存以防止迟到的重新绑定，直至下一次用户撰写的输入（V2 `session.inbox.delivered`、V1 用户 `message.updated`），因此缓冲的部分无法将就绪证据翻转回未就绪。在终态检查点之前断开连接会使部分证据延迟到之后的检查点；重启不会假定未完成的工作已完成。V1 使用显式的助手父 ID；V2 在步骤开始时冻结已投递的输入，而非猜测最新排队的提示。
+- 若实时主机报告 `Session.NotFoundError`（或删除/启动重放没有就绪证据），捕获会记录 `skipped` / `session_not_found`，释放其认领而不退避或消耗重试次数，并跳过该批次中后续依赖主机的查找。之后带有已就绪保存证据的提示仍会继续。之后独立的空闲事件可能会重试。已耗尽重试的提示不会被复活。其他失败保留其现有的重试行为。
+- 自动捕获新增使用稳定的按项目/提示 ID，因此顺序的崩溃/重启重放会复用先前的记忆（包括软删除的记录），而不是插入或复活它。这并不声称对可选的语义更新/取代操作或所有多进程崩溃交错提供分布式恰好一次语义。
 - 若自动捕获报告提供商未连接，请用 `opencode providers list` 确认提供商名称，并先在 opencode 中配置该提供商。
 - 若代理或自定义提供商返回纯文本而非结构化/工具输出，请选择另一模型/提供商，或使用上方手动提供商模式之一。
 - 对于拒绝 `temperature` 的模型，在使用手动 API 配置时添加 `"memoryTemperature": false`。
@@ -612,9 +660,13 @@ const { user, project } = getTags(process.cwd());
 ```bash
 bun install
 bun run build
-bun run typecheck
-bun run format
+bun test
+bun run check
 ```
+
+`bun run check` 会运行 `format:check`、`lint` 和 `typecheck`；`bun run format` 会重写格式。
+
+[文档](https://opencode-mem.zhafron.my.id/docs/)由本 README 和 `.github/i18n/` 下的翻译生成；[首页](https://opencode-mem.zhafron.my.id)位于 `site/src/`。每个 README 标题都必须在 `site/docs-map.json` 中映射到一个文档页面，否则站点构建会失败。可使用 `cd site && bun install && bun run build` 在本地构建站点。
 
 本项目积极寻求贡献，以成为 AI 编程代理的权威记忆插件。无论你是修复缺陷、添加功能、改进文档，还是扩展嵌入模型支持，你的贡献都至关重要。代码库结构良好，已准备好增强。请使用 Issue 或 Feature request 模板提出问题，并在提交 PR 时填写 pull request 模板 — 我们会快速审查并合并贡献。
 
@@ -624,8 +676,11 @@ bun run format
 
 MIT License - 参见 LICENSE 文件
 
+- **网站**：https://opencode-mem.zhafron.my.id
+- **文档**：https://opencode-mem.zhafron.my.id/docs/
 - **仓库**：https://github.com/tickernelz/opencode-mem
 - **Issues**：https://github.com/tickernelz/opencode-mem/issues
+- **npm**：https://www.npmjs.com/package/opencode-mem
 - **OpenCode 平台**：https://opencode.ai
 
 灵感来自 [opencode-supermemory](https://github.com/supermemoryai/opencode-supermemory)
