@@ -1,0 +1,23 @@
+---
+import Landing from "../layouts/Landing.astro";
+import BrandMark from "../components/BrandMark.svelte";
+import { en as copy } from "../i18n/en";
+---
+
+<Landing copy={copy} lang="en">
+  <main class="wrap" style="padding: 6rem 1rem; text-align: center;">
+    <BrandMark />
+    <h1 style="margin: 1.5rem 0 0.75rem; font-size: 1.75rem;">Page not found</h1>
+    <p style="color: var(--om-muted-foreground); margin-bottom: 1.5rem;">
+      That URL is not part of the opencode-mem site.
+    </p>
+    <p>
+      <a class="button button--primary" href="/">
+        Home
+      </a>
+      <a class="button button--ghost" href="/docs/" style="margin-inline-start: 0.5rem;">
+        Docs
+      </a>
+    </p>
+  </main>
+</Landing>

@@ -724,7 +724,7 @@ bun run check
 
 يشغّل `bun run check` كلًا من `format:check` و`lint` و`typecheck`؛ ويعيد `bun run format` كتابة التنسيق.
 
-يتم توليد [التوثيق](https://opencode-mem.zhafron.my.id/docs/) من هذا README والترجمات ضمن `.github/i18n/`؛ أما [الصفحة الرئيسية](https://opencode-mem.zhafron.my.id) فموجودة في `site/src/`. يجب ربط كل عنوان في README بصفحة توثيق في `site/docs-map.json`، وإلا فسيفشل بناء الموقع. ابنِ الموقع محليًا باستخدام `cd site && bun install && bun run build`.
+يتم توليد [التوثيق](https://opencode-mem.zhafron.my.id/docs/) من هذا README والترجمات ضمن `.github/i18n/`؛ أما [الصفحة الرئيسية](https://opencode-mem.zhafron.my.id) فموجودة في `github-site/src/`. يجب ربط كل عنوان في README بصفحة توثيق في `github-site/docs-map.json`، وإلا فسيفشل بناء الموقع. ابنِ الموقع محليًا باستخدام `cd github-site && bun install && bun run build`.
 
 يسعى هذا المشروع بنشاط للمساهمات ليصبح المكون الإضافي النهائي للذاكرة لوكلاء البرمجة بالذكاء الاصطناعي. سواء كنت تصلح أخطاء، أو تضيف ميزات، أو تحسّن التوثيق، أو توسّع دعم نماذج التضمين، مساهماتك حاسمة. قاعدة الشيفرة منظمة جيدًا وجاهزة للتحسين. افتح القضايا بقوالب Issue أو Feature request، واملأ قالب طلب السحب عند إرسال PR — نراجع وندمج المساهمات بسرعة.
 

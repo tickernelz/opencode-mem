@@ -10,9 +10,11 @@ export default ts.config(
       "dist/**",
       "node_modules/**",
       "out/**",
-      "site/.astro/**",
-      "site/dist/**",
-      "site/node_modules/**",
+      "github-site/.astro/**",
+      "github-site/dist/**",
+      "github-site/node_modules/**",
+      "github-site/src/content/docs/**",
+      "github-site/src/generated/**",
       "web/dist/**",
       "web/node_modules/**",
     ],
@@ -41,7 +43,12 @@ export default ts.config(
     },
   },
   {
-    files: ["web/src/**/*.svelte.ts", "web/src/**/*.svelte.js"],
+    files: [
+      "web/src/**/*.svelte.ts",
+      "web/src/**/*.svelte.js",
+      "github-site/src/**/*.svelte.ts",
+      "github-site/src/**/*.svelte.js",
+    ],
     languageOptions: {
       parserOptions: {
         extraFileExtensions: [".svelte"],

@@ -1,0 +1,37 @@
+---
+import Landing from "../layouts/Landing.astro";
+import Closing from "../components/landing/Closing.svelte";
+import Contrast from "../components/landing/Contrast.svelte";
+import Dream from "../components/landing/Dream.svelte";
+import Faq from "../components/landing/Faq.svelte";
+import Features from "../components/landing/Features.svelte";
+import Hero from "../components/landing/Hero.svelte";
+import HowItWorks from "../components/landing/HowItWorks.svelte";
+import Nav from "../components/landing/Nav.svelte";
+import Nested from "../components/landing/Nested.svelte";
+import Privacy from "../components/landing/Privacy.svelte";
+import Proof from "../components/landing/Proof.svelte";
+import Showcase from "../components/landing/Showcase.svelte";
+import { en as copy } from "../i18n/en";
+---
+
+<Landing copy={copy} lang="en">
+  <Nav client:load {copy} />
+  <main id="main">
+    <Hero {copy} />
+    <Contrast {copy} />
+    <HowItWorks {copy} />
+    <Features {copy} />
+    <Dream {copy} />
+    <Nested {copy} />
+    <Showcase {copy} />
+    <Privacy {copy} />
+    <Proof {copy} />
+    <Faq {copy} />
+  </main>
+  <Closing {copy} />
+</Landing>
+
+<script>
+  import "../scripts/landing";
+</script>

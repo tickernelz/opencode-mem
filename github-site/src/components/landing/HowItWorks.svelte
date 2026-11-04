@@ -1,0 +1,102 @@
+<script lang="ts">
+  import type { Copy } from "../../i18n/en";
+  import { captureGraph } from "../../lib/constellation";
+  import GraphSvg from "./GraphSvg.svelte";
+  import CodeBlock from "./CodeBlock.svelte";
+
+  type Props = { copy: Copy };
+  let { copy }: Props = $props();
+
+  const first = $derived(copy.how.sessions[0]!);
+  const graph = captureGraph();
+</script>
+
+<section class="how" id="how" aria-labelledby="how-title">
+  <div class="wrap how__grid">
+    <div class="how__text">
+      <h2 id="how-title">{copy.how.title}</h2>
+      <ol class="steps">
+        {#each copy.how.steps as step, i}
+          <li class="step">
+            <span class="step__n" aria-hidden="true">{i + 1}</span>
+            <div>
+              <h3>{step.title}</h3>
+              <p>{step.body}</p>
+            </div>
+          </li>
+        {/each}
+      </ol>
+    </div>
+    <figure
+      class="capture"
+      aria-label={copy.how.captureLabel}
+      data-field="capture"
+      data-sessions={JSON.stringify(copy.how.sessions)}
+    >
+      <div class="terminal" data-terminal>
+        {#each first.lines as [who, text]}
+          <p class="terminal__line" data-line>
+            <span class={["terminal__who", `terminal__who--${who}`].join(" ")} data-who>{who}</span>
+            <span class="terminal__text" data-text>{text}</span>
+          </p>
+        {/each}
+        <p class="terminal__idle" data-idle data-on="true">{copy.how.idle}</p>
+      </div>
+      <div class="memcard" data-card data-state="shown">
+        <span class="memcard__tag" data-tag>{first.tag}</span>
+        <span class="memcard__text" data-memory>{first.memory}</span>
+      </div>
+      <div class="field field--capture">
+        <GraphSvg {graph} fit="meet" />
+        <canvas aria-hidden="true"></canvas>
+      </div>
+    </figure>
+  </div>
+  <div class="wrap install" id="install">
+    <div class="install__head">
+      <h2>{copy.install.title}</h2>
+      <p>{copy.install.lede}</p>
+    </div>
+    <div class="install__body">
+      <div class="tabs" role="tablist" aria-label={copy.install.title} data-tabs="install">
+        <button type="button" role="tab" id="tab-v2" aria-controls="panel-v2" aria-selected="true">
+          {copy.install.v2}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-v1"
+          aria-controls="panel-v1"
+          aria-selected="false"
+          tabindex="-1"
+        >
+          {copy.install.v1}
+        </button>
+      </div>
+      <div role="tabpanel" id="panel-v2" aria-labelledby="tab-v2">
+        <CodeBlock
+          file={copy.install.v2File}
+          code={copy.install.v2Code}
+          copyLabel={copy.install.copy}
+          copiedLabel={copy.install.copied}
+        />
+      </div>
+      <div role="tabpanel" id="panel-v1" aria-labelledby="tab-v1" hidden>
+        <CodeBlock
+          file={copy.install.v1File}
+          code={copy.install.v1Code}
+          copyLabel={copy.install.copy}
+          copiedLabel={copy.install.copied}
+        />
+      </div>
+      <p class="install__provider">{copy.install.providerLead}</p>
+      <CodeBlock
+        file={copy.install.providerFile}
+        code={copy.install.providerCode}
+        copyLabel={copy.install.copy}
+        copiedLabel={copy.install.copied}
+      />
+      <a class="link-arrow" href="/docs/start/getting-started/">{copy.install.more}</a>
+    </div>
+  </div>
+</section>

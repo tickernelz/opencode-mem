@@ -1,0 +1,24 @@
+---
+import { render } from "astro:content";
+import Docs from "../../layouts/Docs.astro";
+import { allDocsPaths, findDocsEntry } from "../../lib/docs";
+
+export async function getStaticPaths() {
+  const paths = await allDocsPaths();
+  return paths
+    .filter((p) => p.lang === "")
+    .map((p) => ({
+      params: { slug: p.slug || undefined },
+      props: { entry: p.entry, slug: p.slug },
+    }));
+}
+
+const { slug } = Astro.props;
+const entry = Astro.props.entry ?? (await findDocsEntry("", slug ?? ""));
+if (!entry) return Astro.redirect("/404/");
+const { Content } = await render(entry);
+---
+
+<Docs lang="" slug={slug ?? ""} title={entry.data.title} description={entry.data.description}>
+  <Content />
+</Docs>

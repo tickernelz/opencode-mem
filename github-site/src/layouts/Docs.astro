@@ -1,0 +1,77 @@
+---
+import monoFont from "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2?url";
+import DocsShell from "../components/docs/DocsShell.svelte";
+import { sidebarGroups } from "../lib/docs";
+import "../styles/global.css";
+import "../styles/docs.css";
+
+interface Props {
+  lang: string;
+  slug: string;
+  title: string;
+  description?: string;
+  pageLang?: string;
+}
+
+const { lang, slug, title, description, pageLang = "en" } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const groups = sidebarGroups(lang);
+const htmlLang = lang || pageLang;
+---
+
+<!doctype html>
+<html lang={htmlLang} data-theme="dark" dir={lang === "ar" ? "rtl" : "ltr"}>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <title>{title} · opencode-mem docs</title>
+    {description && <meta name="description" content={description} />}
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="preload" href={monoFont} as="font" type="font/woff2" crossorigin />
+    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f5f4f8" media="(prefers-color-scheme: light)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="opencode-mem" />
+    <meta property="og:title" content={title} />
+    {description && <meta property="og:description" content={description} />}
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={new URL("/og.png", Astro.site)} />
+    {/* Blocking theme + paint before CSS — kills refresh flash */}
+    <script is:inline>
+      (() => {
+        const stored = localStorage.getItem("om-theme") || localStorage.getItem("starlight-theme");
+        const theme =
+          stored || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+        const resolved = theme === "light" ? "light" : "dark";
+        document.documentElement.dataset.theme = resolved;
+        document.documentElement.style.colorScheme = resolved;
+        document.documentElement.style.backgroundColor =
+          resolved === "light" ? "#f5f4f8" : "#0a0a0a";
+      })();
+    </script>
+    <style is:inline>
+      html,
+      body {
+        background: #0a0a0a;
+      }
+      html[data-theme="light"],
+      html[data-theme="light"] body {
+        background: #f5f4f8;
+      }
+    </style>
+  </head>
+  <body>
+    <DocsShell client:load lang={lang} currentSlug={slug} title={title} groups={groups}>
+      <slot />
+    </DocsShell>
+    <script>
+      import { installNoZoom } from "../scripts/no-zoom";
+      installNoZoom();
+    </script>
+  </body>
+</html>

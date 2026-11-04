@@ -778,7 +778,7 @@ bun run check
 
 `bun run check` runs `format:check`, `lint` and `typecheck`; `bun run format` rewrites formatting.
 
-The [docs](https://opencode-mem.zhafron.my.id/docs/) are generated from this README and the translations under `.github/i18n/`; the [landing page](https://opencode-mem.zhafron.my.id) lives in `site/src/`. Every README heading must be mapped to a docs page in `site/docs-map.json`, otherwise the site build fails. Build the site locally with `cd site && bun install && bun run build`.
+The [docs](https://opencode-mem.zhafron.my.id/docs/) are generated from this README and the translations under `.github/i18n/`; the [landing page](https://opencode-mem.zhafron.my.id) lives in `github-site/src/`. Every README heading must be mapped to a docs page in `github-site/docs-map.json`, otherwise the site build fails. Build the site locally with `cd github-site && bun install && bun run build`.
 
 This project is actively seeking contributions to become the definitive memory plugin for AI coding agents. Whether you are fixing bugs, adding features, improving documentation, or expanding embedding model support, your contributions are critical. The codebase is well-structured and ready for enhancement. Please open issues with the Issue or Feature request templates, and fill out the pull request template when you submit a PR — we review and merge contributions quickly.
 

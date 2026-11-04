@@ -1,0 +1,230 @@
+/* Sidebar = hellgrau, content = dunkler — no top bar. */
+:root,
+:root[data-theme="dark"] {
+  --docs-sidebar: #1a1a1a;
+  --docs-sidebar-border: #2a2a2a;
+  --docs-pane: #0a0a0a;
+  --docs-pane-elevated: #141414;
+  --docs-pane-hover: #1a1a1a;
+}
+
+:root[data-theme="light"] {
+  --docs-sidebar: #eeedf2;
+  --docs-sidebar-border: #dddce3;
+  --docs-pane: #f5f4f8;
+  --docs-pane-elevated: #ffffff;
+  --docs-pane-hover: #ebeaf0;
+}
+
+.docs {
+  background: var(--docs-pane);
+  color: var(--om-foreground);
+}
+
+.docs__sidebar {
+  background: var(--docs-sidebar);
+  border-right-color: var(--docs-sidebar-border);
+}
+
+.docs__main {
+  background: var(--docs-pane);
+}
+
+.docs__corner {
+  position: fixed;
+  top: 0.75rem;
+  right: max(0.75rem, var(--docs-edge));
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.docs__menu {
+  display: none;
+}
+
+/* Match Tailwind `md` (48rem) — mobile drawer only */
+@media (max-width: 47.99rem) {
+  .docs__menu {
+    display: grid;
+    position: fixed;
+    bottom: 1rem;
+    left: 1rem;
+    z-index: 40;
+    border: 1px solid var(--docs-sidebar-border);
+    background: var(--docs-sidebar);
+    box-shadow: 0 8px 24px color-mix(in srgb, black 35%, transparent);
+  }
+}
+
+.docs-theme-icon--light {
+  display: none;
+}
+
+:root[data-theme="light"] .docs-theme-icon--dark {
+  display: none;
+}
+
+:root[data-theme="light"] .docs-theme-icon--light {
+  display: block;
+}
+
+.theme-toggle .docs-theme-icon {
+  grid-area: 1 / 1;
+}
+
+.docs__search-trigger {
+  border-color: var(--docs-sidebar-border);
+  background: color-mix(in srgb, var(--docs-pane) 55%, transparent);
+}
+
+.docs__search-trigger:hover {
+  background: var(--om-surface-hover);
+}
+
+.docs__pager-link {
+  background: var(--docs-pane-elevated);
+  border-color: color-mix(in srgb, var(--om-border) 85%, transparent);
+}
+
+.docs__pager-link:hover {
+  background: var(--docs-pane-hover);
+}
+
+/* Markdown article prose — nested selectors stay here; chrome uses Tailwind. */
+
+.docs__article {
+  min-width: 0;
+}
+
+.docs__article :is(h1, h2, h3, h4) {
+  font-family: var(--om-font-body);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--om-foreground-bright);
+  scroll-margin-top: 1.25rem;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.docs__article h1 {
+  font-size: clamp(1.65rem, 2.4vw, 2rem);
+  margin: 0 0 1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--om-border) 80%, transparent);
+}
+
+.docs__article h2 {
+  font-size: 1.3rem;
+  margin: 2.25rem 0 0.85rem;
+}
+
+.docs__article h3 {
+  font-size: 1.05rem;
+  margin: 1.65rem 0 0.55rem;
+}
+
+.docs__article h4 {
+  font-size: 0.95rem;
+  margin: 1.25rem 0 0.45rem;
+}
+
+.docs__article :is(p, ul, ol, table, blockquote, pre) {
+  margin: 0 0 1rem;
+}
+
+.docs__article :is(ul, ol) {
+  padding-inline-start: 1.35rem;
+}
+
+.docs__article li {
+  margin: 0.35rem 0;
+}
+
+.docs__article li::marker {
+  color: var(--om-muted-foreground);
+}
+
+.docs__article a {
+  color: var(--om-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.docs__article a:hover {
+  color: var(--om-foreground-bright);
+}
+
+.docs__article strong {
+  color: var(--om-foreground-bright);
+  font-weight: 650;
+}
+
+.docs__article code {
+  font-family: var(--om-font-mono);
+  font-size: 0.86em;
+  background: var(--om-secondary);
+  padding: 0.12em 0.38em;
+  border-radius: 0.3rem;
+  overflow-wrap: anywhere;
+}
+
+.docs__article pre {
+  overflow: auto;
+  padding: 1rem 1.1rem;
+  border-radius: 0.65rem;
+  border: 1px solid var(--om-border);
+  background: var(--docs-pane-elevated);
+  max-width: 100%;
+}
+
+.docs__article pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 0.84rem;
+  line-height: 1.55;
+  overflow-wrap: normal;
+}
+
+.docs__article blockquote {
+  margin-inline: 0;
+  padding: 0.15rem 0 0.15rem 1rem;
+  border-inline-start: 3px solid color-mix(in srgb, var(--om-primary) 55%, transparent);
+  color: var(--om-muted-foreground);
+}
+
+.docs__article hr {
+  border: 0;
+  border-top: 1px solid var(--om-border);
+  margin: 2rem 0;
+}
+
+.docs__article table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  display: block;
+  overflow-x: auto;
+}
+
+.docs__article th,
+.docs__article td {
+  border: 1px solid var(--om-border);
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.docs__article th {
+  background: var(--docs-pane-elevated);
+  color: var(--om-foreground-bright);
+  font-weight: 600;
+}
+
+.docs__article img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+}

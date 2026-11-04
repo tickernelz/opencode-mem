@@ -1,0 +1,31 @@
+---
+import { render } from "astro:content";
+import Docs from "../../../layouts/Docs.astro";
+import { LOCALES, allDocsPaths, findDocsEntry, isDocsLocale } from "../../../lib/docs";
+
+export async function getStaticPaths() {
+  const paths = await allDocsPaths();
+  return paths
+    .filter((p) => p.lang !== "" && isDocsLocale(p.lang))
+    .map((p) => ({
+      params: { lang: p.lang, slug: p.slug || undefined },
+      props: { entry: p.entry, slug: p.slug, lang: p.lang },
+    }));
+}
+
+const { lang, slug } = Astro.props;
+if (!LOCALES.includes(lang as (typeof LOCALES)[number])) return Astro.redirect("/404/");
+const entry = Astro.props.entry ?? (await findDocsEntry(lang, slug ?? ""));
+if (!entry) return Astro.redirect("/404/");
+const { Content } = await render(entry);
+---
+
+<Docs
+  lang={lang}
+  slug={slug ?? ""}
+  title={entry.data.title}
+  description={entry.data.description}
+  pageLang={lang}
+>
+  <Content />
+</Docs>
