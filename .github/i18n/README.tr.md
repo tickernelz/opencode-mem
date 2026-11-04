@@ -4,6 +4,8 @@
 [![npm downloads](https://img.shields.io/npm/dm/opencode-mem.svg)](https://www.npmjs.com/package/opencode-mem)
 [![license](https://img.shields.io/npm/l/opencode-mem.svg)](https://www.npmjs.com/package/opencode-mem)
 [![GitHub stars](https://img.shields.io/github/stars/tickernelz/opencode-mem.svg)](https://github.com/tickernelz/opencode-mem)
+[![Website](https://img.shields.io/badge/website-opencode--mem.zhafron.my.id-blue)](https://opencode-mem.zhafron.my.id)
+[![Docs](https://img.shields.io/badge/docs-opencode--mem.zhafron.my.id%2Fdocs-blue)](https://opencode-mem.zhafron.my.id/docs/)
 
 ![OpenCode Memory Banner](../pics/banner.png)
 
@@ -13,7 +15,16 @@ Yerel vektör veritabanı teknolojisi kullanarak oturumlar arasında uzun vadeli
 
 ## Temel Özellikler
 
-Yerel Turso/libSQL veritabanı ve yerel vektör arama, kalıcı proje bellekleri, otomatik kullanıcı profili öğrenme, birleşik bellek-prompt zaman çizelgesi, tam özellikli web arayüzü, akıllı prompt tabanlı bellek çıkarımı, çoklu sağlayıcı AI desteği (OpenAI, Anthropic), 12+ yerel embedding modeli, akıllı tekilleştirme ve yerleşik gizlilik koruması.
+- **Yerel veritabanı:** `storagePath` altında saklanan, yerel vektör aramalı gömülü Turso/libSQL. Ayrı bir vektör veritabanı gerekmez.
+- **Akıllı prompt tabanlı bellek çıkarımı (auto-capture):** bir oturum boşta kaldığında, arka planda çalışan bir AI isteği teknik çalışmayı kalıcı proje belleklerine dönüştürür.
+- **Otomatik hatırlama:** ilgili bellekler ve kullanıcı profili modelin bağlamına (`chatMessage`) eklenir.
+- **Otomatik kullanıcı profili öğrenme:** tercihlerinizin, kalıplarınızın ve iş akışlarınızın projeler arası bir özeti.
+- **Bellek hijyeni:** akıllı tekilleştirme, isteğe bağlı update-on-capture ve kurtarılabilir çöp kutusuyla isteğe bağlı dreaming birleştirmesi.
+- **Çoklu sağlayıcı AI desteği:** OpenCode'da yapılandırılmış herhangi bir sağlayıcı (`opencodeProvider` / `opencodeModel`) veya manuel bir API: OpenAI Chat Completions, OpenAI Responses, Anthropic, MiniMax, OrcaRouter, Atlas Cloud, Cheaper Inference, API Route, Runcrate, CloudGPU.
+- **Embedding'ler:** CPU üzerinde çalışan 12+ yerel embedding modeli (GPU gerekmez) veya OpenAI uyumlu herhangi bir embedding API'si.
+- **Tam özellikli web arayüzü:** birleşik memory–prompt timeline, kullanıcı profili, beceri kütüphanesi, Markdown vault ve sağlık istatistikleri; isteğe bağlı HTTP Basic Auth ile.
+- **Gizlilik:** `<private>` etiketleri, yakalama öncesinde kimlik bilgisi maskeleme ve isteğe bağlı bekleyen veri şifrelemesi.
+- **Taşınabilirlik:** isteğe bağlı Markdown vault arka ucu ve taşınan veya kopyalanan projeler için `memory` aracının `export` / `import` / `migrate` komutları.
 
 ## Ön Koşullar
 
@@ -140,7 +151,7 @@ Yerel Turso shard’ları için AES-256-GCM şifrelemesini `~/.config/opencode/o
 }
 ```
 
-İlk başlangıçta eklenti `~/.config/opencode/opencode-mem-db.key` oluşturur (32 bayt hex anahtar, `chmod 600`) ve mevcut düz metin shard’larını taşır. Anahtarı kendiniz yönetiyorsanız `"databaseEncryptionKey": "env://OPENCODE_MEM_DB_KEY"` veya `"file://~/path/to.key"` ile geçersiz kılın. Anahtarı kaybetmek, şifreli veritabanlarının açılamayacağı anlamına gelir.
+İlk başlangıçta eklenti `~/.config/opencode/opencode-mem-db.key` oluşturur (32 bayt hex anahtar, `chmod 600`) ve mevcut düz metin shard’larını taşır. Anahtarı kendiniz yönetiyorsanız `"databaseEncryptionKey": "env://OPENCODE_MEM_DB_KEY"` veya `"file://~/path/to.key"` ile geçersiz kılın. Anahtarı kaybetmek, şifreli veritabanlarının açılamayacağı anlamına gelir. `databaseEncryptionCipher` şifreleme algoritmasını seçer: `aes256gcm` (varsayılan), `aes128gcm`, `aegis256`, `aegis256x2`, `aegis128l`, `aegis128x2` veya `aegis128x4`.
 
 **Windows:** `%USERPROFILE%\.config\opencode\opencode.json` kullanın (örneğin `C:\Users\<you>\.config\opencode\opencode.json`). Bu eklenti OpenCode eklenti girişi için `%APPDATA%` veya `%LOCALAPPDATA%` **okumaz** — dosyayı kullanıcı profilinizdeki `.config\opencode` altına koyun, ardından OpenCode’u yeniden başlatın. Eklenti görünmezse yolu doğrulayın ve yeniden başlatın.
 
@@ -160,10 +171,10 @@ Eklentinin çalışması için OpenCode’dan bir şeyleri “hatırlamasını�
 
 ### Otomatik ve manuel bellek
 
-| Yaklaşım                                                       | Ne zaman çalışır                                  | Sizin yaptığınız                                                                           |
-| -------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| **Otomatik yakalama** (`autoCaptureEnabled: true`, varsayılan) | Oturum boşta kaldığında konuşma turlarından sonra | Hiçbir şey — çıkarım otomatiktir                                                           |
-| **Manuel** `memory` aracı / komutlar                           | İsteğe bağlı                                      | `add`, `search`, `list`, `profile`, `forget`, `list-shards`, `migrate`, `export`, `import` |
+| Yaklaşım                                                       | Ne zaman çalışır                                  | Sizin yaptığınız                                                                                   |
+| -------------------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **Otomatik yakalama** (`autoCaptureEnabled: true`, varsayılan) | Oturum boşta kaldığında konuşma turlarından sonra | Hiçbir şey — çıkarım otomatiktir                                                                   |
+| **Manuel** `memory` aracı / komutlar                           | İsteğe bağlı                                      | `add`, `search`, `list`, `profile`, `forget`, `list-shards`, `migrate`, `export`, `import`, `help` |
 
 Manuel arama/ekleme/listeleme, otomatik yakalama için yapılandırılmış bir sağlayıcı olmasa bile çalışır. Otomatik yakalama ve kullanıcı profili öğrenme, yapılandırılmış/araç-çağrısı çıktısı döndürebilen bir sağlayıcı gerektirir.
 
@@ -207,7 +218,7 @@ Bir süre sohbet ettikten sonra hâlâ bu mesajı görüyorsanız, otomatik yaka
 
 ### Web arayüzü
 
-Bellek–prompt zaman çizelgesine göz atmak, yakalamaları incelemek ve kullanıcı profilini yönetmek için `http://127.0.0.1:4747` adresini açın. Sunucuyu loopback dışına bağlarsanız bkz. [Web arayüzü HTTP Basic Auth](#web-arayüzü-http-basic-auth).
+memory–prompt timeline'a göz atmak, yakalamaları incelemek ve kullanıcı profilini yönetmek için `http://127.0.0.1:4747` adresini açın. Arayüzde beş görünüm bulunur: **Project memories** (`/project-memories`), **User profile** (`/user-profile`), **Skill library** (`/skill-library`), **Markdown vault** (`/markdown-vault`) ve **Stats** (`/stats`). Portu `webServerPort` ile değiştirin veya web arayüzü olmadan çalıştırmak için `webServerEnabled: false` ayarlayın. Sunucuyu loopback dışına bağlarsanız bkz. [Web arayüzü HTTP Basic Auth](#web-arayüzü-http-basic-auth).
 
 ## Kullanım Örnekleri
 
@@ -236,6 +247,20 @@ Boyut migrasyonları önce her yeni embedding’i üretir, bunları geçici inde
 **Windows:** `%USERPROFILE%\.config\opencode\opencode-mem.jsonc` (yukarıdakiyle aynı `.config\opencode` dizini — AppData değil). Varsayılan depolama `%USERPROFILE%\.opencode-mem\data` olarak çözülür (`~` biçimi Windows’ta da kullanıcı ev dizinine genişler).
 
 Eklenti ilk başlangıçta bu yolda tam yorumlu bir şablon oluşturur. Her ayar ve yorum için bkz. [`opencode-mem.example.jsonc`](../../opencode-mem.example.jsonc).
+
+Sık ayarlanan üst düzey seçenekler:
+
+| Seçenek                                                               | Varsayılan                      | Ne yapar                                                                                                                                        |
+| --------------------------------------------------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `storagePath`                                                         | `"~/.opencode-mem/data"`        | Bellek veritabanlarının bulunduğu konum.                                                                                                        |
+| `webServerEnabled` / `webServerPort` / `webServerHost`                | `true` / `4747` / `"127.0.0.1"` | Web UI sunucusu anahtarı, portu ve bağlanma adresi.                                                                                             |
+| `autoCaptureEnabled`                                                  | `true`                          | Boştaki oturumları belleklere özetler (bir sağlayıcı gerektirir, bkz. [Auto-Capture AI Sağlayıcısı](#otomatik-yakalama-ai-sağlayıcısı)).                |
+| `similarityThreshold` / `maxMemories`                                 | `0.6` / `10`                    | Bellek araması için minimum benzerlik puanı ve maksimum sonuç sayısı.                                                                           |
+| `injectProfile`                                                       | `true`                          | Kullanıcı profilini (tercihler, kalıplar, iş akışları) AI bağlamına enjekte eder.                                                               |
+| `deduplicationEnabled` / `deduplicationSimilarityThreshold`           | `true` / `0.9`                  | Yinelenen bellekleri tespit eder ve kaldırır.                                                                                                   |
+| `autoCleanupEnabled` / `autoCleanupRetentionDays`                     | `true` / `30`                   | Günde en fazla bir kez, saklama süresi içinde güncellenmemiş bellekleri siler. Sabitlenmiş bellekler korunur.                                   |
+| `showAutoCaptureToasts` / `showUserProfileToasts` / `showErrorToasts` | `true`                          | auto-capture, profil güncellemeleri ve hatalar için bildirimler.                                                                                |
+| `autoUpdate`                                                          | `true`                          | Daha yeni bir npm sürümü mevcut olduğunda OpenCode’un önbelleğe alınmış kurulumunu temizler.                                                    |
 
 ### Markdown vault backend (`memoryBackend`)
 
@@ -267,7 +292,10 @@ Bu ayarlar `~/.config/opencode/opencode-mem.jsonc` içindeki `chatMessage` anaht
 | Seçenek                                                | Varsayılan       | Ne yapar                                                                                                                                                                                                                                                                                                                       |
 | ------------------------------------------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `enabled`                                              | `true`           | Yazılan kullanıcı prompt’larını yakala ve bellek bağlamını enjekte et.                                                                                                                                                                                                                                                         |
-| `injectOn`                                             | `"first"`        | Bellek bağlamını bir oturumun ilk kullanıcı mesajında veya `"always"` ile her yazılan turda enjekte et.                                                                                                                                                                                                                        |
+| `injectOn`                                             | `"first"`        | `recall: "recent"` için ilk kullanıcı mesajında veya `"always"` ile her yazılan turda enjekte et. `recall: "relevant"` / `"both"` ile bağlam her yazılan turda her zaman yenilenir (issue #460).                                                                                                                                 |
+| `recall`                                               | `"relevant"`     | Enjekte edilen belleklerin nasıl seçildiği: `"relevant"` her turda kullanıcı mesajını gömer ve vektör araması çalıştırır; `"recent"` eski en yeni N listelemesini korur; `"both"` önce ilgili olanları tercih eder, ardından kalan yerleri son belleklerle doldurur.                                                            |
+| `recallScope`                                          | `"default"`      | Otomatik hatırlama kapsamı: `"default"` `memory.defaultScope` değerini izler veya `"project"` / `"all-projects"` zorlanabilir. Tüm projelerde arama yapılırken mevcut projeden gelen sonuçlar küçük bir benzerlik artışı alır.                                                                                                  |
+| `similarityThreshold`                                  | (üst düzey)      | İsteğe bağlı enjeksiyon başına alt sınır; aksi halde üst düzey `similarityThreshold` kullanılır.                                                                                                                                                                                                                                |
 | `maxMemories` / `excludeCurrentSession` / `maxAgeDays` | `3` / `true` / — | Enjekte edilen bağlamın kaç bellek tutacağı, mevcut oturumda yakalanan belleklerin hariç tutulup tutulmayacağı ve isteğe bağlı gün cinsinden yaş sınırı.                                                                                                                                                                       |
 | `filterInjectedPrompts`                                | `true`           | Ana bilgisayar veya diğer OpenCode eklentileri tarafından enjekte edilen prompt metnini (sistem hatırlatıcıları, orkestrasyon yönergeleri, arka plan görev bildirimleri) atla; böylece kullanıcı yazmış gibi asla saklanmaz.                                                                                                   |
 | `injectionMarkers`                                     | yerleşikler      | Enjekte edilmiş blokları tanımlayan ek işaretçiler; yerleşik listeye eklenir, asla onun yerine geçmez.                                                                                                                                                                                                                         |
@@ -277,6 +305,22 @@ Oturum ve yaşa göre hariç tutma kuralları, enjekte edilen bellek sayısı s�
 önce uygulanır; böylece hariç tutulan bellekler uygun belleklere ayrılabilecek yerleri
 doldurmaz. `chatMessage.maxMemories` değerini `0` yapmak proje belleği enjeksiyonunu
 devre dışı bırakır; kullanıcı profili etkinleştirilmişse yine de enjekte edilebilir.
+
+Enjekte edilen bellek etiketleri `selection="recent"` veya `selection="semantic"` olarak
+tanımlanır. Son seçimler (`both` içindeki geri dönüş ve son bellek doldurma dahil) sayısal
+puan taşımaz. Semantik seçimler, mevcut olduğunda sonlu bir `retrieval_score` taşır;
+bu, mevcut proje artışını içerebilen bir sıralama sinyalidir, ilgililik veya olgusal
+doğruluk olasılığı değildir. Eksik veya geçersiz puanlar atlanır. Bu, bellek seçimini,
+sıralamasını, içeriğini veya kaynağını değiştirmeden eski `relevance="...%"` prompt
+özniteliğinin yerini alır. Sıkıştırma (compaction) mevcut biçimini korur.
+
+Semantik hatırlama başarısız olduğunda (örneğin gömme kullanılamıyorsa), `relevant` ve
+`both`, aynı kapsam, sayı, oturum ve yaş kısıtlamalarıyla mevcut son bellek listelemesine
+geri döner. Uygun eşleşme bulunmayan başarılı bir arama `relevant` modunda boş kalır;
+`both` ise her zamanki gibi son belleklerle doldurmaya devam eder. Kısmi parça (shard)
+uyarıları başarısızlık geri dönüşünü tetiklemez. Son bellek geri dönüşü de başarısız olursa,
+hatırlama boş ve ölümcül olmayan şekilde kalır. Eksik sorgu geri dönüşü ve tur başına
+yenileme davranışı değişmeden kalır.
 
 ### Update-on-capture (isteğe bağlı)
 
@@ -315,7 +359,7 @@ proje etiketleri arasında gruplanır; kullanıcı kapsamı ayrı kalır.
 
 Embedding’ler bellekler ve kullanıcı profili için benzerlik aramasını güçlendirir. Bunları aynı dosyada yapılandırın (`~/.config/opencode/opencode-mem.jsonc`). **MLX backend yoktur** — yerel embedding’ler Apple MLX değil, ONNX ile `@huggingface/transformers` kullanır.
 
-**Yerel (varsayılan):** yalnızca `embeddingModel` ayarlayın. İlk kullanımda model Hugging Face’ten indirilir ve `{storagePath}/.cache` altında önbelleğe alınır (varsayılan `~/.opencode-mem/data/.cache`).
+**Yerel (varsayılan):** yalnızca `embeddingModel` ayarlayın. İlk kullanımda model Hugging Face’ten indirilir ve `{storagePath}/.cache` altında önbelleğe alınır (varsayılan `~/.opencode-mem/data/.cache`). Ağırlıklar ana süreç yaşadığı sürece bellekte kalır; bunları o kadar milisaniyelik boşta kalma süresinden sonra serbest bırakmak için `embeddingIdleTimeoutMs` ayarlayın; sonraki bellek işlemi onları yerel önbellekten yeniden ısıtır (yeniden indirme değil, yaklaşık bir saniye).
 
 **Uzak (OpenAI uyumlu):** hem `embeddingApiUrl` hem `embeddingApiKey` ayarlayın. Eklenti ardından Bearer belirteciyle `{embeddingApiUrl}/embeddings` çağırır. `embeddingApiKey`, `memoryApiKey` ile aynı gizli biçimleri kabul eder (`literal`, `env://…`, `file://…`).
 
@@ -328,6 +372,7 @@ Embedding’ler bellekler ve kullanıcı profili için benzerlik aramasını gü
 | `embeddingDocumentPrefix`  | Belge-görevi embedding’leri için önek (`embeddingQueryPrefix` ile aynı çözüm kuralları)                                                            |
 | `embeddingUseTaskPrefixes` | Özel/ön ayar önekleri ayarlanmamışken Nomic `search_query:` / `search_document:` öneklerine katılma. Varsayılan `false`                            |
 | `embeddingDtype`           | İsteğe bağlı yerel ONNX dtype geçersiz kılması (örn. `"q8"`, `"fp32"`). Ayarlandığında transformers.js `pipeline({ dtype })`’a iletilir            |
+| `embeddingIdleTimeoutMs`   | Yerel modeli bu kadar milisaniye boşta kaldıktan sonra serbest bırakır (örn. 10 dakika için `600000`). `0` (varsayılan) süreç ömrü boyunca yüklü tutar |
 | `embeddingApiUrl`          | OpenAI uyumlu bir embeddings API’si için temel URL (`/v1` ötesinde sondaki yol yok)                                                                |
 | `embeddingApiKey`          | O uç nokta için API anahtarı (`embeddingApiUrl` ile birlikte gerekli)                                                                              |
 
@@ -520,9 +565,13 @@ Eklenti, sağlayıcı uç noktalarını doğrudan çağırmak yerine yapılandı
 
 Yavaş muhakeme modelleri (veya çok büyük profil prompt’ları) varsayılan 90 sn yapılandırılmış çıktı bütçesini aşabilir. Dahili yapılandırılmış çıktı çağrıları (otomatik yakalama özetleri, profil öğrenme) için uzatmak üzere `"opencodeTimeoutMs"` (milisaniye) ayarlayın — örn. 3 dakika için `"opencodeTimeoutMs": 180000`. Değerler 10000..600000’e sıkıştırılır; varsayılan 90000 kalır. Sayısal dizgeler zorlanır. Profil temizleme ayrı, daha uzun bir zaman aşımı kullanır.
 
-Desteklenen sağlayıcılar: `opencode providers list` tarafından listelenen herhangi bir sağlayıcı (örn. `anthropic`, `openai`, `github-copilot`, ...).
+Desteklenen sağlayıcılar: `opencode providers list` tarafından listelenen herhangi bir sağlayıcı (örn. `anthropic`, `openai`, `github-copilot`, `openrouter`, ...).
 
-`opencodeProvider` ve `opencodeModel` ayarlanmışsa, aşağıdaki manuel `memoryProvider` ayarlarına göre önceliklidirler.
+`opencode` sağlayıcı kimliği altındaki **yerleşik Free / Zen modeller** (örn. `big-pickle`) çoğu zaman eklentinin dahili yapılandırılmış çıktı oturumlarını çalıştıramaz — OpenCode bunları etkileşimli sohbet dışında reddedebilir. `opencode providers list` içinden kimliği doğrulanmış bir sağlayıcıyı tercih edin veya yakalamanın oturumda zaten kullandığınız modeli izlemesi için `"opencodeModel": "inherit"` kullanın.
+
+`autoCaptureEnabled` `true` (varsayılan) ise ancak ne `opencodeProvider`/`opencodeModel` ne de eksiksiz bir manuel yedek yapılandırılmışsa, eklenti bir uyarı günlüğe yazar ve (`showErrorToasts` etkinse) bir başlangıç bildirimi gösterir; böylece eksik yapılandırma günlükleri incelemeden görünür olur.
+
+`opencodeProvider` ve `opencodeModel` ayarlanmışsa, varsayılan olarak aşağıdaki manuel `memoryProvider` ayarlarına göre önceliklidirler (`"autoCaptureProviderOrder": "opencode-first"`). Her ikisi de yapılandırıldığında manuel API’yi tercih etmek için `"autoCaptureProviderOrder": "external-first"` ayarlayın (host oturum API’si meşgul/yavaş olduğunda yararlıdır); diğer kanal yedek olarak kullanılır. opencode kanalından daha erken geçiş yapmak için `"opencodeTimeoutMs"` değerini düşürün.
 
 **Oturum modelini izle:** çağrı anında sabitlenmiş bir kimlik yerine somut bir OpenCode modeli kullanmak için `"opencodeModel": "inherit"` ayarlayın. **Otomatik yakalama** için her prompt `chat.params` kancası üzerinden kaydedilir ve yakalama isteği o prompt’un sağlayıcı/modelini yeniden kullanır. **Profil öğrenme** ve diğer yapılandırılmış çıktı yolları için (tek bir kullanıcı mesajına bağlı değildir), `inherit` önce host’un `chat.params` / V2 context kancasında bildirdiği son modeli yeniden kullanır; yoksa OpenCode’un `model.json` son listesine düşer (yapılandırılmış `opencodeProvider` tercih edilir). OpenCode v2 artık `model.json` yazmaz; orada birincil geri dönüş süreç içi oturum modelidir. Literâl model kimliği `inherit` göndermek asla geçerli değildir ve daha önce bu yollarda `ProviderModelNotFoundError: Model not found: <provider>/inherit`’e neden olmuştur. `opencodeProvider` yine de normal yapılandırma kapısı olarak gereklidir.
 
@@ -589,6 +638,45 @@ Manuel `memoryProvider` modları:
 Sorun giderme:
 
 - Otomatik yakalama hataları manuel `memory` araç kullanımını engellemez.
+- Otomatik yakalama, gecikmeli özetleme çalışmadan önce iletilen V1/V2 olaylarından sınırlı
+  son asistan metnini ve terminal araç sonuçlarını korur. Normal boşta yakalama yine de
+  canlı host dökümünü tercih eder; oturum zaten yoksa (silme veya başlangıç yeniden oynatma)
+  hazır bekleyen kanıt yedek olarak kullanılır. Kurtarma aynı projeyle sınırlıdır ve normal
+  yakalama sağlayıcısını ve sahiplenme kuyruğunu kullanır. Tamamlanmış işi yalnızca istekten
+  çıkarsamaz. Bir OpenCode oturumunu silmek bu bekleyen bellek kanıtını veya zaten
+  yakalanmış bellekleri **silmez**.
+- Bekleyen kanıt kalıcı hale getirilmeden önce özel etiketlerden arındırılır (tek bir
+  asistan mesajındaki son metin parçalarına yayılan etiketler dahil); muhakeme, ekler, ham
+  sağlayıcı meta verileri, akış deltaları ve araç argümanları hariç tutulur. Sınırlar parça
+  başına 16 KiB, prompt başına 16 parça, genel olarak 256 parça (en fazla 4 MiB metin) ve
+  yakalama başına 64 KiB’dir. Kesme işaretlenir; bütçe aşıldığında en eski parçalar
+  çıkarılır. Kanıt 24 saat sonra sona erer ve sonraki depo erişiminde temizlenir. Yakalama
+  bittiğinde/atlandığında veya prompt’u mevcut silme/saklama yollarıyla kaldırıldığında
+  silinir. Bunlar mantıksal saklama sınırlarıdır, SQLite/WAL yedeklerinin güvenli silinmesi
+  değildir.
+- V2 olayları geçici bir akıştır: bağlantısı kopan/kaçırılan olaylar, çözülemeyen prompt
+  ilişkilendirmesi ve süre dolumu/çıkarma nedeniyle kaybolan kanıt kurtarılamaz. Garanti,
+  alınan, kaydedilen ve bir idle/deleted olayıyla hazır olarak kontrol noktasına alınan
+  kanıttan yakalamadır; görülmemiş veya daha önce silinmiş dökümlerin yeniden oluşturulması
+  değildir. Bu kontrol noktasından sonra oturum, bir sonraki yazılmış kullanıcı girdisine
+  (V2 `session.inbox.delivered`, V1 kullanıcı `message.updated`) kadar geç yeniden
+  bağlamalara karşı mühürlenir; böylece arabelleğe alınmış parçalar hazır kanıtı yeniden
+  hazır olmayan duruma çeviremez. Terminal kontrol noktasından önceki bir bağlantı kopması,
+  kısmi kanıtı sonraki bir kontrol noktasına kadar ertelenmiş bırakır; yeniden başlatma
+  bitmemiş işin tamamlandığını varsaymaz. V1 açık asistan üst kimliklerini kullanır;
+  V2 en son kuyruğa alınan prompt’u tahmin etmek yerine iletilen girdiyi adım başında
+  dondurur.
+- Canlı host `Session.NotFoundError` bildirirse (veya silme/başlangıç yeniden oynatmada
+  hazır kanıt yoksa), yakalama `skipped` / `session_not_found` günlüğe yazar, sahiplenmesini
+  geri çekilme olmadan veya yeniden denemeleri tüketmeden bırakır ve o toplu işte host’a
+  bağlı diğer aramaları atlar. Hazır kaydedilmiş kanıtı olan sonraki prompt’lar yine de
+  devam eder. Sonraki bağımsız bir idle yeniden deneyebilir. Zaten tükenmiş prompt’lar
+  yeniden canlandırılmaz. Diğer hatalar mevcut yeniden deneme davranışlarını korur.
+- Otomatik yakalama eklemeleri proje/prompt başına kararlı bir kimlik kullanır; böylece
+  ardışık çökme/yeniden başlatma yeniden oynatması, yeni kayıt eklemek veya yeniden
+  canlandırmak yerine yumuşak silinmiş kayıtlar dahil önceki belleği yeniden kullanır. Bu,
+  isteğe bağlı anlamsal güncelleme/yerine geçme işlemleri veya her çok süreçli çökme
+  iç içe geçmesi için dağıtık tam-bir-kez semantiği iddia etmez.
 - Otomatik yakalama bir sağlayıcının bağlı olmadığını bildirirse, sağlayıcı adını `opencode providers list` ile doğrulayın ve önce o sağlayıcıyı opencode’da yapılandırın.
 - Bir proxy veya özel sağlayıcı yapılandırılmış/araç çıktısı yerine düz metin döndürürse, başka bir model/sağlayıcı seçin veya yukarıdaki manuel sağlayıcı modlarından birini kullanın.
 - `temperature` reddeden modeller için manuel API yapılandırması kullanırken `"memoryTemperature": false` ekleyin.
@@ -638,9 +726,13 @@ Yerelde derleyin ve test edin:
 ```bash
 bun install
 bun run build
-bun run typecheck
-bun run format
+bun test
+bun run check
 ```
+
+`bun run check`, `format:check`, `lint` ve `typecheck` komutlarını çalıştırır; `bun run format` biçimlendirmeyi yeniden yazar.
+
+[Web sitesi](https://opencode-mem.zhafron.my.id) ve [belgeleri](https://opencode-mem.zhafron.my.id/docs/) bu README'den ve `.github/i18n/` altındaki çevirilerden oluşturulur. Her README başlığı `site/docs-map.json` içinde bir belge sayfasına eşlenmelidir, aksi takdirde site derlemesi başarısız olur. Siteyi yerelde `cd site && bun install && bun run build` ile derleyin.
 
 Bu proje, AI kodlama ajanları için nihai bellek eklentisi olmak üzere aktif olarak katkı arıyor. Hataları düzeltmek, özellik eklemek, belgeleri iyileştirmek veya embedding model desteğini genişletmek olsun, katkılarınız kritiktir. Kod tabanı iyi yapılandırılmış ve iyileştirmeye hazırdır. Lütfen Issue veya Feature request şablonlarıyla issue açın ve bir PR gönderdiğinizde pull request şablonunu doldurun — katkıları hızlıca inceler ve birleştiririz.
 
@@ -650,8 +742,11 @@ Bu proje, AI kodlama ajanları için nihai bellek eklentisi olmak üzere aktif o
 
 MIT License - see LICENSE file
 
+- **Web Sitesi**: https://opencode-mem.zhafron.my.id
+- **Belgeler**: https://opencode-mem.zhafron.my.id/docs/
 - **Depo**: https://github.com/tickernelz/opencode-mem
 - **Issues**: https://github.com/tickernelz/opencode-mem/issues
+- **npm**: https://www.npmjs.com/package/opencode-mem
 - **OpenCode Platform**: https://opencode.ai
 
 [opencode-supermemory](https://github.com/supermemoryai/opencode-supermemory) tarafından ilham alınmıştır

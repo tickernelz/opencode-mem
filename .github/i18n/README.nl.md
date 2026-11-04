@@ -4,6 +4,8 @@
 [![npm downloads](https://img.shields.io/npm/dm/opencode-mem.svg)](https://www.npmjs.com/package/opencode-mem)
 [![license](https://img.shields.io/npm/l/opencode-mem.svg)](https://www.npmjs.com/package/opencode-mem)
 [![GitHub stars](https://img.shields.io/github/stars/tickernelz/opencode-mem.svg)](https://github.com/tickernelz/opencode-mem)
+[![Website](https://img.shields.io/badge/website-opencode--mem.zhafron.my.id-blue)](https://opencode-mem.zhafron.my.id)
+[![Docs](https://img.shields.io/badge/docs-opencode--mem.zhafron.my.id%2Fdocs-blue)](https://opencode-mem.zhafron.my.id/docs/)
 
 ![OpenCode Memory Banner](../pics/banner.png)
 
@@ -13,7 +15,16 @@ Een persistent geheugensysteem voor AI-codingagents dat langetermijncontextbehou
 
 ## Kernfuncties
 
-Lokale Turso/libSQL-database met native vectorzoekopdrachten, persistente projectherinneringen, automatisch leren van gebruikersprofielen, uniforme geheugen-prompttijdlijn, volledige web-UI, intelligente promptgebaseerde geheugenextractie, multi-provider AI-ondersteuning (OpenAI, Anthropic), 12+ lokale embeddingmodellen, slimme deduplicatie en ingebouwde privacybescherming.
+- **Lokale database:** ingebedde Turso/libSQL met native vectorzoekopdrachten, opgeslagen onder `storagePath`. Geen aparte vectordatabase.
+- **Intelligente promptgebaseerde geheugenextractie (auto-capture):** wanneer een sessie inactief wordt, zet een AI-verzoek op de achtergrond het technische werk om in persistente projectherinneringen.
+- **Automatisch ophalen:** relevante herinneringen en het gebruikersprofiel worden in de context van het model geïnjecteerd (`chatMessage`).
+- **Automatisch leren van gebruikersprofielen:** een projectoverstijgende samenvatting van je voorkeuren, patronen en workflows.
+- **Geheugenhygiëne:** slimme deduplicatie, optionele update-on-capture en optionele dreaming-consolidatie met herstelbare prullenbak.
+- **Multi-provider AI-ondersteuning:** elke provider die in OpenCode is geconfigureerd (`opencodeProvider` / `opencodeModel`), of een handmatige API: OpenAI Chat Completions, OpenAI Responses, Anthropic, MiniMax, OrcaRouter, Atlas Cloud, Cheaper Inference, API Route, Runcrate, CloudGPU.
+- **Embeddings:** 12+ lokale embeddingmodellen op de CPU (geen GPU nodig) of elke OpenAI-compatibele embeddings-API.
+- **Volledige web-UI:** uniforme memory–prompt timeline, gebruikersprofiel, skillbibliotheek, Markdown vault en gezondheidsstatistieken, met optionele HTTP Basic Auth.
+- **Ingebouwde privacybescherming:** `<private>`-tags, het verwijderen van inloggegevens vóór het vastleggen en optionele versleuteling in rust.
+- **Overdraagbaarheid:** optionele Markdown vault-backend, en `export` / `import` / `migrate` van de `memory`-tool voor verplaatste of gekopieerde projecten.
 
 ## Vereisten
 
@@ -138,7 +149,7 @@ Schakel AES-256-GCM-versleuteling in voor lokale Turso-shards in `~/.config/open
 }
 ```
 
-Bij de eerste start maakt de plugin `~/.config/opencode/opencode-mem-db.key` aan (32-byte hex-sleutel, `chmod 600`) en migreert bestaande plaintext-shards. Overschrijf met `"databaseEncryptionKey": "env://OPENCODE_MEM_DB_KEY"` of `"file://~/path/to.key"` als je de sleutel zelf beheert. Verlies van de sleutel betekent dat de versleutelde databases niet kunnen worden geopend.
+Bij de eerste start maakt de plugin `~/.config/opencode/opencode-mem-db.key` aan (32-byte hex-sleutel, `chmod 600`) en migreert bestaande plaintext-shards. Overschrijf met `"databaseEncryptionKey": "env://OPENCODE_MEM_DB_KEY"` of `"file://~/path/to.key"` als je de sleutel zelf beheert. Verlies van de sleutel betekent dat de versleutelde databases niet kunnen worden geopend. `databaseEncryptionCipher` selecteert de cipher: `aes256gcm` (standaard), `aes128gcm`, `aegis256`, `aegis256x2`, `aegis128l`, `aegis128x2` of `aegis128x4`.
 
 **Windows:** gebruik `%USERPROFILE%\.config\opencode\opencode.json` (bijvoorbeeld `C:\Users\<you>\.config\opencode\opencode.json`). Deze plugin leest **niet** `%APPDATA%` of `%LOCALAPPDATA%` voor zijn OpenCode-pluginentry — plaats het bestand onder `.config\opencode` in je gebruikersprofiel en herstart OpenCode. Als de plugin niet verschijnt, controleer dat pad en herstart opnieuw.
 
@@ -158,10 +169,10 @@ Je hoeft OpenCode **niet** te vragen dingen te “onthouden” om de plugin te l
 
 ### Automatisch versus handmatig geheugen
 
-| Aanpak                                                   | Wanneer het draait                                 | Wat jij doet                                                                               |
-| -------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| **Auto-capture** (`autoCaptureEnabled: true`, standaard) | Na conversatiebeurten wanneer de sessie idle wordt | Niets — extractie is automatisch                                                           |
-| **Handmatig** `memory`-tool / commands                   | Op verzoek                                         | `add`, `search`, `list`, `profile`, `forget`, `list-shards`, `migrate`, `export`, `import` |
+| Aanpak                                                   | Wanneer het draait                                 | Wat jij doet                                                                                       |
+| -------------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **Auto-capture** (`autoCaptureEnabled: true`, standaard) | Na conversatiebeurten wanneer de sessie idle wordt | Niets — extractie is automatisch                                                                   |
+| **Handmatig** `memory`-tool / commands                   | Op verzoek                                         | `add`, `search`, `list`, `profile`, `forget`, `list-shards`, `migrate`, `export`, `import`, `help` |
 
 Handmatige search/add/list werken nog steeds, ook als auto-capture geen provider geconfigureerd heeft. Auto-capture en gebruikersprofiel-leren hebben een provider nodig die structured/tool-call-output kan teruggeven.
 
@@ -205,7 +216,7 @@ Als je een tijd hebt gechat en het bericht nog steeds ziet, controleer of auto-c
 
 ### Web-UI
 
-Open `http://127.0.0.1:4747` om de geheugen–prompttijdlijn te bekijken, captures te inspecteren en het gebruikersprofiel te beheren. Als je de server buiten loopback bindt, zie [Web-UI HTTP Basic Auth](#web-ui-http-basic-auth).
+Open `http://127.0.0.1:4747` om de memory–prompt timeline te bekijken, captures te inspecteren en het gebruikersprofiel te beheren. De UI heeft vijf weergaven: **Project memories** (`/project-memories`), **User profile** (`/user-profile`), **Skill library** (`/skill-library`), **Markdown vault** (`/markdown-vault`) en **Stats** (`/stats`). Wijzig de poort met `webServerPort`, of stel `webServerEnabled: false` in om zonder de web-UI te draaien. Als je de server buiten loopback bindt, zie [Web-UI HTTP Basic Auth](#web-ui-http-basic-auth).
 
 ## Gebruiksvoorbeelden
 
@@ -234,6 +245,20 @@ Configureer op `~/.config/opencode/opencode-mem.jsonc`:
 **Windows:** `%USERPROFILE%\.config\opencode\opencode-mem.jsonc` (zelfde `.config\opencode`-directory als hierboven — niet AppData). Standaardopslag lost op naar `%USERPROFILE%\.opencode-mem\data` (de `~`-vorm expandt ook op Windows naar je gebruikershome).
 
 De plugin maakt bij de eerste start een volledig becommentarieerd template op dit pad. Voor elke instelling en commentaar, zie [`opencode-mem.example.jsonc`](../../opencode-mem.example.jsonc).
+
+Vaak aangepaste opties op het hoogste niveau:
+
+| Optie                                                                 | Standaard                       | Wat het doet                                                                                                                          |
+| --------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `storagePath`                                                         | `"~/.opencode-mem/data"`        | Waar de geheugendatabases worden opgeslagen.                                                                                          |
+| `webServerEnabled` / `webServerPort` / `webServerHost`                | `true` / `4747` / `"127.0.0.1"` | Schakelaar, poort en bindadres van de Web UI-server.                                                                                  |
+| `autoCaptureEnabled`                                                  | `true`                          | Vat inactieve sessies samen tot herinneringen (vereist een provider, zie [Auto-Capture AI Provider](#auto-capture-ai-provider)).      |
+| `similarityThreshold` / `maxMemories`                                 | `0.6` / `10`                    | Minimale gelijkenisscore en maximaal aantal resultaten bij het zoeken in herinneringen.                                               |
+| `injectProfile`                                                       | `true`                          | Injecteert het gebruikersprofiel (voorkeuren, patronen, workflows) in de AI-context.                                                  |
+| `deduplicationEnabled` / `deduplicationSimilarityThreshold`           | `true` / `0.9`                  | Detecteert en verwijdert dubbele herinneringen.                                                                                       |
+| `autoCleanupEnabled` / `autoCleanupRetentionDays`                     | `true` / `30`                   | Verwijdert maximaal één keer per dag herinneringen die niet binnen de bewaartermijn zijn bijgewerkt. Vastgezette herinneringen blijven behouden. |
+| `showAutoCaptureToasts` / `showUserProfileToasts` / `showErrorToasts` | `true`                          | Toasts voor auto-capture, profielupdates en fouten.                                                                                   |
+| `autoUpdate`                                                          | `true`                          | Wist de gecachte installatie van OpenCode wanneer er een nieuwere npm-release beschikbaar is.                                         |
 
 ### Markdown-vault-backend (`memoryBackend`)
 
@@ -265,7 +290,10 @@ Deze instellingen staan onder de `chatMessage`-sleutel in `~/.config/opencode/op
 | Optie                                                  | Standaard        | Wat het doet                                                                                                                                                                                                                                                                                                                    |
 | ------------------------------------------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `enabled`                                              | `true`           | Leg geschreven gebruikersprompts vast en injecteer geheugencontext.                                                                                                                                                                                                                                                             |
-| `injectOn`                                             | `"first"`        | Injecteer geheugencontext bij het eerste gebruikersbericht van een sessie, of bij `"always"` elke geschreven beurt.                                                                                                                                                                                                             |
+| `injectOn`                                             | `"first"`        | Bij `recall: "recent"`: injecteer bij het eerste gebruikersbericht, of bij `"always"` elke geschreven beurt. Met `recall: "relevant"` / `"both"` wordt de context altijd bij elke geschreven beurt ververst (issue #460).                                                                                                       |
+| `recall`                                               | `"relevant"`     | Hoe geïnjecteerde herinneringen worden gekozen: `"relevant"` maakt een embedding van het gebruikersbericht en voert elke beurt een vectorzoekopdracht uit; `"recent"` behoudt de oude lijst van de nieuwste N; `"both"` geeft de voorkeur aan relevante en vult resterende plaatsen aan met recente.                            |
+| `recallScope`                                          | `"default"`      | Bereik voor auto-recall: `"default"` volgt `memory.defaultScope`, of forceer `"project"` / `"all-projects"`. Bij zoeken in alle projecten krijgen treffers uit het huidige project een kleine similarity-boost.                                                                                                                 |
+| `similarityThreshold`                                  | (top-level)      | Optionele ondergrens per injectie; anders wordt de top-level `similarityThreshold` gebruikt.                                                                                                                                                                                                                                    |
 | `maxMemories` / `excludeCurrentSession` / `maxAgeDays` | `3` / `true` / — | Hoeveel herinneringen de geïnjecteerde context bevat, of herinneringen uit de huidige sessie worden uitgesloten, en een optionele leeftijdslimiet in dagen.                                                                                                                                                                     |
 | `filterInjectedPrompts`                                | `true`           | Sla prompttekst over die door de host of andere OpenCode-plugins is geïnjecteerd (systeemherinneringen, orchestratierichtlijnen, achtergrondtaakmeldingen) zodat die nooit wordt opgeslagen alsof de gebruiker die heeft getypt.                                                                                                |
 | `injectionMarkers`                                     | built-ins        | Extra markers die geïnjecteerde blokken identificeren; worden toegevoegd aan de ingebouwde lijst, vervangen die nooit.                                                                                                                                                                                                          |
@@ -276,6 +304,23 @@ geïnjecteerde herinneringen. Uitgesloten herinneringen nemen daardoor geen plaa
 in die voor geschikte herinneringen beschikbaar zijn. Met `chatMessage.maxMemories`
 op `0` wordt het injecteren van projectherinneringen uitgeschakeld; het
 gebruikersprofiel kan nog steeds worden geïnjecteerd als dit is ingeschakeld.
+
+Geïnjecteerde geheugentags geven `selection="recent"` of `selection="semantic"` aan.
+Recente selecties (inclusief fallback en recente aanvulling in `both`) hebben geen
+numerieke score. Semantische selecties bevatten een eindige `retrieval_score` wanneer
+beschikbaar; dit is een rangschikkingssignaal dat de boost voor het huidige project kan
+bevatten, geen waarschijnlijkheid van relevantie of feitelijke juistheid. Ontbrekende of
+ongeldige scores worden weggelaten. Dit vervangt het vroegere promptattribuut
+`relevance="...%"` zonder de selectie, volgorde, inhoud of herkomst van herinneringen te
+wijzigen. Compaction behoudt het bestaande formaat.
+
+Wanneer semantische recall mislukt (bijvoorbeeld omdat embedding niet beschikbaar is),
+vallen `relevant` en `both` terug op de bestaande recente lijst met dezelfde
+beperkingen voor bereik, aantal, sessie en leeftijd. Een geslaagde zoekopdracht zonder
+geschikte treffers blijft leeg in `relevant`; `both` vult zoals gebruikelijk aan met
+recente herinneringen. Waarschuwingen over gedeeltelijke shards activeren geen
+fallback. Als ook de recente fallback mislukt, blijft recall leeg en niet-fataal. Het
+fallbackgedrag bij een ontbrekende query en het verversen per beurt blijven ongewijzigd.
 
 ### Update-on-capture (optioneel)
 
@@ -315,21 +360,22 @@ opgeschoond.
 
 Embeddings voeden similarity search voor herinneringen en het gebruikersprofiel. Configureer ze in hetzelfde bestand (`~/.config/opencode/opencode-mem.jsonc`). Er is **geen MLX-backend** — lokale embeddings gebruiken `@huggingface/transformers` met ONNX, niet Apple MLX.
 
-**Lokaal (standaard):** stel alleen `embeddingModel` in. Bij eerste gebruik wordt het model gedownload van Hugging Face en gecached onder `{storagePath}/.cache` (standaard `~/.opencode-mem/data/.cache`).
+**Lokaal (standaard):** stel alleen `embeddingModel` in. Bij eerste gebruik wordt het model gedownload van Hugging Face en gecached onder `{storagePath}/.cache` (standaard `~/.opencode-mem/data/.cache`). De gewichten blijven geladen zolang het hostproces draait; stel `embeddingIdleTimeoutMs` in om ze na dat aantal inactieve milliseconden vrij te geven, waarna de volgende geheugenoperatie ze opnieuw opwarmt vanuit de lokale cache (ongeveer een seconde, geen nieuwe download).
 
 **Remote (OpenAI-compatibel):** stel zowel `embeddingApiUrl` als `embeddingApiKey` in. De plugin roept dan `{embeddingApiUrl}/embeddings` aan met een Bearer-token. `embeddingApiKey` accepteert dezelfde geheime formaten als `memoryApiKey` (`literal`, `env://…`, `file://…`).
 
-| Sleutel                    | Rol                                                                                                                                      |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `embeddingModel`           | Hugging Face-id (lokaal) of API-modelnaam (remote). Standaard: `Xenova/nomic-embed-text-v1`                                              |
-| `embeddingDimensions`      | Optionele override; meestal weglaten — dimensies worden opgezocht uit een ingebouwde map                                                 |
-| `embeddingPooling`         | Lokale pooling: `"mean"` (standaard), `"cls"`, of `"last_token"`. Unset → klein known-model-preset of `"mean"`                           |
-| `embeddingQueryPrefix`     | Prefix voor query-task-embeddings. Unset → modelpreset of Nomic wanneer `embeddingUseTaskPrefixes` true is. Expliciete `""` schakelt uit |
-| `embeddingDocumentPrefix`  | Prefix voor document-task-embeddings (zelfde resolutieregels als `embeddingQueryPrefix`)                                                 |
-| `embeddingUseTaskPrefixes` | Opt-in Nomic `search_query:` / `search_document:`-prefixes wanneer custom/preset-prefixes unset zijn. Standaard `false`                  |
-| `embeddingDtype`           | Optionele lokale ONNX-dtype-override (bijv. `"q8"`, `"fp32"`). Indien gezet, doorgegeven aan transformers.js `pipeline({ dtype })`       |
-| `embeddingApiUrl`          | Basis-URL voor een OpenAI-compatibele embeddings-API (geen trailing path voorbij `/v1`)                                                  |
-| `embeddingApiKey`          | API-sleutel voor dat endpoint (vereist samen met `embeddingApiUrl`)                                                                      |
+| Sleutel                    | Rol                                                                                                                                                   |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `embeddingModel`           | Hugging Face-id (lokaal) of API-modelnaam (remote). Standaard: `Xenova/nomic-embed-text-v1`                                                           |
+| `embeddingDimensions`      | Optionele override; meestal weglaten — dimensies worden opgezocht uit een ingebouwde map                                                              |
+| `embeddingPooling`         | Lokale pooling: `"mean"` (standaard), `"cls"`, of `"last_token"`. Unset → klein known-model-preset of `"mean"`                                        |
+| `embeddingQueryPrefix`     | Prefix voor query-task-embeddings. Unset → modelpreset of Nomic wanneer `embeddingUseTaskPrefixes` true is. Expliciete `""` schakelt uit              |
+| `embeddingDocumentPrefix`  | Prefix voor document-task-embeddings (zelfde resolutieregels als `embeddingQueryPrefix`)                                                              |
+| `embeddingUseTaskPrefixes` | Opt-in Nomic `search_query:` / `search_document:`-prefixes wanneer custom/preset-prefixes unset zijn. Standaard `false`                               |
+| `embeddingDtype`           | Optionele lokale ONNX-dtype-override (bijv. `"q8"`, `"fp32"`). Indien gezet, doorgegeven aan transformers.js `pipeline({ dtype })`                    |
+| `embeddingIdleTimeoutMs`   | Geef het lokale model vrij na dit aantal inactieve milliseconden (bijv. `600000` voor 10 minuten). `0` (standaard) houdt het geladen zolang het proces draait |
+| `embeddingApiUrl`          | Basis-URL voor een OpenAI-compatibele embeddings-API (geen trailing path voorbij `/v1`)                                                               |
+| `embeddingApiKey`          | API-sleutel voor dat endpoint (vereist samen met `embeddingApiUrl`)                                                                                   |
 
 Aanbevolen lokale modellen:
 
@@ -521,9 +567,13 @@ Optioneel kun je een model-reasoningvariant vastzetten met `"opencodeVariant": "
 
 Trage reasoningmodellen (of zeer grote profielprompts) kunnen het standaard 90 s structured-output-budget overschrijden. Stel `"opencodeTimeoutMs"` (milliseconden) in om het te verlengen voor interne structured-output-calls (auto-capture-samenvattingen, profiel-leren) — bijv. `"opencodeTimeoutMs": 180000` voor 3 minuten. Waarden worden geclampt tot 10000..600000; de standaard blijft 90000. Numerieke strings worden gecoeerd. Profielopschoning gebruikt een aparte, langere timeout.
 
-Ondersteunde providers: elke provider uit `opencode providers list` (bijv. `anthropic`, `openai`, `github-copilot`, ...).
+Ondersteunde providers: elke provider uit `opencode providers list` (bijv. `anthropic`, `openai`, `github-copilot`, `openrouter`, ...).
 
-Als `opencodeProvider` en `opencodeModel` zijn ingesteld, hebben ze voorrang op de handmatige `memoryProvider`-instellingen hieronder.
+**Ingebouwde Free / Zen-modellen** onder provider-id `opencode` (bijv. `big-pickle`) kunnen de interne structured-output-sessies van de plugin vaak niet draaien — OpenCode kan ze buiten interactieve chat weigeren. Geef de voorkeur aan een geauthenticeerde provider uit `opencode providers list`, of gebruik `"opencodeModel": "inherit"` zodat capture het model volgt dat je al in de sessie gebruikt.
+
+Als `autoCaptureEnabled` `true` is (standaard) maar noch `opencodeProvider`/`opencodeModel` noch een complete handmatige fallback is geconfigureerd, logt de plugin een waarschuwing en toont een opstarttoast (wanneer `showErrorToasts` is ingeschakeld), zodat ontbrekende config zichtbaar is zonder door logs te hoeven zoeken.
+
+Als `opencodeProvider` en `opencodeModel` zijn ingesteld, hebben ze standaard voorrang op de handmatige `memoryProvider`-instellingen hieronder (`"autoCaptureProviderOrder": "opencode-first"`). Stel `"autoCaptureProviderOrder": "external-first"` in om de handmatige API te verkiezen wanneer beide zijn geconfigureerd (handig wanneer de session-API van de host druk/traag is); het andere kanaal wordt als fallback gebruikt. Verlaag `"opencodeTimeoutMs"` om sneller van het opencode-kanaal over te schakelen.
 
 **Volg het sessiermodel:** stel `"opencodeModel": "inherit"` in om op call-tijd een concreet OpenCode-model te gebruiken in plaats van een vastgezette id. Voor **auto-capture** wordt elke prompt via de `chat.params`-hook vastgelegd en hergebruikt het capture-verzoek provider/model van die prompt. Voor **profiel-leren** en andere structured-output-paden (die niet aan één gebruikersbericht zijn gebonden) hergebruikt `inherit` eerst het laatste model dat de host via `chat.params` / de V2-context-hook meldde, en valt daarna terug op OpenCode’s `model.json`-recentelijst indien aanwezig (met voorkeur voor de geconfigureerde `opencodeProvider`). OpenCode v2 schrijft `model.json` niet meer; daar is het in-process-sessiemodel de primaire fallback. Het letterlijke model-id `inherit` versturen is nooit geldig en veroorzaakte eerder `ProviderModelNotFoundError: Model not found: <provider>/inherit` op die paden. `opencodeProvider` blijft vereist als normale configgate.
 
@@ -590,6 +640,42 @@ Handmatige `memoryProvider`-modi:
 Probleemoplossing:
 
 - Auto-capture-fouten blokkeren handmatig `memory`-toolgebruik niet.
+- Auto-capture bewaart begrensde finale assistenttekst en terminale tool-uitkomsten uit
+  afgeleverde V1/V2-events voordat de vertraagde samenvatting draait. Normale idle-capture
+  geeft nog steeds de voorkeur aan het live host-transcript; gereed pending bewijs is de fallback
+  wanneer de sessie al weg is (verwijdering of startup-replay). Herstel is beperkt tot hetzelfde
+  project en gebruikt de normale capture-provider en claim-queue. Het leidt geen voltooid werk
+  af uit alleen het verzoek. Het verwijderen van een OpenCode-sessie verwijdert dit pending
+  geheugenbewijs of reeds vastgelegde geheugens **niet**.
+- Pending bewijs wordt vóór persistentie op private tags geredigeerd (inclusief tags die
+  finale tekstdelen binnen één assistentbericht overspannen); reasoning, bijlagen, ruwe
+  providermetadata, streaming-delta's en tool-argumenten worden uitgesloten. Limieten zijn 16 KiB per
+  part, 16 parts per prompt, 256 parts globaal (maximaal 4 MiB tekst) en 64 KiB per
+  capture. Truncatie wordt gemarkeerd; de oudste parts worden verwijderd wanneer het budget wordt overschreden.
+  Bewijs verloopt na 24 uur en wordt bij volgende store-toegang opgeschoond. Het wordt gewist
+  wanneer capture voltooit/overslaat of de prompt wordt verwijderd via bestaande verwijder-/retentie-
+  paden. Dit zijn logische retentielimieten, geen veilige verwijdering van SQLite/WAL-back-ups.
+- V2-events zijn een vluchtige stream: verbroken/gemiste events, onoplosbare prompt-
+  koppeling en bewijs dat door verloop/verwijdering verloren is gegaan, kunnen niet worden hersteld. De garantie
+  is capture uit bewijs dat is ontvangen, opgeslagen en door een idle/deleted-event als gereed is gecheckpoint,
+  geen reconstructie van ongeziene of eerder verwijderde transcripts. Na dat
+  checkpoint wordt de sessie verzegeld tegen late rebinds tot de volgende door de gebruiker geschreven
+  input (V2 `session.inbox.delivered`, V1 user `message.updated`), zodat gebufferde parts
+  gereed bewijs niet terug naar niet-gereed kunnen zetten. Een disconnect vóór het terminale
+  checkpoint laat het gedeeltelijke bewijs uitgesteld tot een later checkpoint; een herstart
+  gaat er niet van uit dat onvoltooid werk klaar is. V1 gebruikt expliciete parent-ID's van de assistent;
+  V2 bevriest de afgeleverde input bij step-start in plaats van de laatst in de wachtrij geplaatste
+  prompt te raden.
+- Als de live host `Session.NotFoundError` meldt (of verwijdering/startup-replay geen
+  gereed bewijs heeft), logt capture `skipped` / `session_not_found`, geeft zijn claim vrij
+  zonder backoff of verbruik van retries, en slaat verdere host-afhankelijke lookups in die
+  batch over. Latere prompts met gereed opgeslagen bewijs gaan nog steeds door. Een latere onafhankelijke idle
+  kan opnieuw proberen. Reeds uitgeputte prompts worden niet herleefd. Andere fouten behouden hun
+  bestaande retry-gedrag.
+- Auto-capture-toevoegingen gebruiken een stabiele ID per project/prompt, zodat sequentiële crash/restart-
+  replay het eerdere geheugen hergebruikt, inclusief soft-deleted records, in plaats van het in te voegen of
+  te doen herleven. Dit claimt geen gedistribueerde exactly-once-semantiek voor optionele
+  semantische update/supersede-operaties of elke multi-process crash-interleaving.
 - Als auto-capture meldt dat een provider niet verbonden is, bevestig de providernaam met `opencode providers list` en configureer die provider eerst in opencode.
 - Als een proxy of custom provider platte tekst teruggeeft in plaats van structured/tool-output, kies een ander model/provider of gebruik een van de handmatige providermodi hierboven.
 - Voor modellen die `temperature` weigeren, voeg `"memoryTemperature": false` toe bij handmatige API-configuratie.
@@ -638,9 +724,13 @@ Lokaal bouwen en testen:
 ```bash
 bun install
 bun run build
-bun run typecheck
-bun run format
+bun test
+bun run check
 ```
+
+`bun run check` voert `format:check`, `lint` en `typecheck` uit; `bun run format` herschrijft de opmaak.
+
+De [website](https://opencode-mem.zhafron.my.id) en de bijbehorende [docs](https://opencode-mem.zhafron.my.id/docs/) worden gegenereerd uit deze README en de vertalingen onder `.github/i18n/`. Elke README-kop moet in `site/docs-map.json` aan een docs-pagina zijn gekoppeld, anders mislukt de site-build. Bouw de site lokaal met `cd site && bun install && bun run build`.
 
 Dit project zoekt actief bijdragen om de definitieve geheugenplugin voor AI-codingagents te worden. Of je bugs fixt, features toevoegt, documentatie verbetert of embeddingmodelondersteuning uitbreidt: je bijdragen zijn cruciaal. De codebase is goed gestructureerd en klaar voor verbetering. Open issues met de Issue- of Feature request-templates, en vul het pull request-template in wanneer je een PR indient — we reviewen en mergen bijdragen snel.
 
@@ -650,8 +740,11 @@ Dit project zoekt actief bijdragen om de definitieve geheugenplugin voor AI-codi
 
 MIT-licentie — zie LICENSE-bestand
 
+- **Website**: https://opencode-mem.zhafron.my.id
+- **Documentatie**: https://opencode-mem.zhafron.my.id/docs/
 - **Repository**: https://github.com/tickernelz/opencode-mem
 - **Issues**: https://github.com/tickernelz/opencode-mem/issues
+- **npm**: https://www.npmjs.com/package/opencode-mem
 - **OpenCode-platform**: https://opencode.ai
 
 Geïnspireerd door [opencode-supermemory](https://github.com/supermemoryai/opencode-supermemory)
