@@ -56,6 +56,10 @@
     "type": "git",
     "url": "git+https://github.com/tickernelz/opencode-mem.git"
   },
+  "homepage": "https://opencode-mem.zhafron.my.id",
+  "bugs": {
+    "url": "https://github.com/tickernelz/opencode-mem/issues"
+  },
   "publishConfig": {
     "access": "public"
   },
