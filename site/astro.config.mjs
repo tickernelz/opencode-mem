@@ -45,6 +45,16 @@ export default defineConfig({
           tag: "meta",
           attrs: { property: "og:image", content: "https://opencode-mem.zhafron.my.id/og.png" },
         },
+        { tag: "meta", attrs: { property: "og:image:width", content: "1200" } },
+        { tag: "meta", attrs: { property: "og:image:height", content: "630" } },
+        {
+          tag: "meta",
+          attrs: {
+            property: "og:image:alt",
+            content:
+              "opencode-mem: Your agent finally remembers. Long-term memory for OpenCode. Free, open source, stored on your machine.",
+          },
+        },
       ],
     }),
   ],
