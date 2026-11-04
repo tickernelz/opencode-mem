@@ -1,0 +1,7 @@
+node_modules
+dist
+.astro
+src/generated
+src/content/docs
+public/favicon.svg
+public/favicon.ico

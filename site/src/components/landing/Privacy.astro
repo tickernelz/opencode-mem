@@ -1,0 +1,25 @@
+---
+import type { Copy } from "../../i18n/en";
+
+interface Props {
+  copy: Copy;
+}
+
+const { copy } = Astro.props;
+---
+
+<section class="privacy" aria-labelledby="privacy-title">
+  <div class="wrap privacy__grid">
+    <h2 id="privacy-title">{copy.privacy.title}</h2>
+    <ul class="privacy__list">
+      {
+        copy.privacy.points.map(([lead, text]) => (
+          <li>
+            <strong>{lead}</strong> {text}
+          </li>
+        ))
+      }
+    </ul>
+    <p class="privacy__note">{copy.privacy.note}</p>
+  </div>
+</section>

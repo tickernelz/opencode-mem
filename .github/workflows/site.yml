@@ -1,0 +1,78 @@
+name: Site
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "site/**"
+      - "README.md"
+      - ".github/i18n/**"
+      - "web/src/app.css"
+      - "web/public/favicon.*"
+      - ".github/workflows/site.yml"
+  pull_request:
+    paths:
+      - "site/**"
+      - "README.md"
+      - ".github/i18n/**"
+      - "web/src/app.css"
+      - "web/public/favicon.*"
+      - ".github/workflows/site.yml"
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install site dependencies
+        working-directory: site
+        run: bun install --frozen-lockfile
+
+      - name: Build site
+        working-directory: site
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun run build
+
+      - name: Check build output
+        working-directory: site
+        run: node scripts/check-dist.mjs
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/dist
+
+  deploy:
+    name: deploy
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'tickernelz/opencode-mem'
+    needs: build
+    runs-on: ubuntu-26.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

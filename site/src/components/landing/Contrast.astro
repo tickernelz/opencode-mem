@@ -1,0 +1,48 @@
+---
+import type { Copy } from "../../i18n/en";
+
+interface Props {
+  copy: Copy;
+}
+
+const { copy } = Astro.props;
+---
+
+<section class="contrast" aria-labelledby="contrast-title">
+  <div class="wrap">
+    <header class="section-head section-head--wide">
+      <h2 id="contrast-title">{copy.contrast.title}</h2>
+      <p>{copy.contrast.lede}</p>
+    </header>
+    <div class="contrast__grid">
+      <div class="contrast__side contrast__side--without">
+        <h3>{copy.contrast.withoutLabel}</h3>
+        <ol class="contrast__log">
+          {
+            copy.contrast.without.map((line, i) => (
+              <li style={`--i:${i}`}>
+                <span class="contrast__who">you</span>
+                {line}
+              </li>
+            ))
+          }
+        </ol>
+        <p class="contrast__foot">{copy.contrast.withoutFoot}</p>
+      </div>
+      <div class="contrast__side contrast__side--with">
+        <h3>{copy.contrast.withLabel}</h3>
+        <ol class="contrast__log">
+          {
+            copy.contrast.with.map((line, i) => (
+              <li style={`--i:${i}`}>
+                <span class="contrast__who">agent</span>
+                {line}
+              </li>
+            ))
+          }
+        </ol>
+        <p class="contrast__foot">{copy.contrast.withFoot}</p>
+      </div>
+    </div>
+  </div>
+</section>
