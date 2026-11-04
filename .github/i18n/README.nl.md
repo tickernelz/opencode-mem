@@ -730,7 +730,7 @@ bun run check
 
 `bun run check` voert `format:check`, `lint` en `typecheck` uit; `bun run format` herschrijft de opmaak.
 
-De [docs](https://opencode-mem.zhafron.my.id/docs/) worden gegenereerd uit deze README en de vertalingen onder `.github/i18n/`; de [landingspagina](https://opencode-mem.zhafron.my.id) staat in `site/src/`. Elke README-kop moet in `site/docs-map.json` aan een docs-pagina zijn gekoppeld, anders mislukt de site-build. Bouw de site lokaal met `cd site && bun install && bun run build`.
+De [docs](https://opencode-mem.zhafron.my.id/docs/) worden gegenereerd uit deze README en de vertalingen onder `.github/i18n/`; de [landingspagina](https://opencode-mem.zhafron.my.id) staat in `github-site/src/`. Elke README-kop moet in `github-site/docs-map.json` aan een docs-pagina zijn gekoppeld, anders mislukt de site-build. Bouw de site lokaal met `cd github-site && bun install && bun run build`.
 
 Dit project zoekt actief bijdragen om de definitieve geheugenplugin voor AI-codingagents te worden. Of je bugs fixt, features toevoegt, documentatie verbetert of embeddingmodelondersteuning uitbreidt: je bijdragen zijn cruciaal. De codebase is goed gestructureerd en klaar voor verbetering. Open issues met de Issue- of Feature request-templates, en vul het pull request-template in wanneer je een PR indient — we reviewen en mergen bijdragen snel.
 

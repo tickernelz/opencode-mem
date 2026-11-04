@@ -1,0 +1,124 @@
+/* Theme + utilities only — skip Preflight so landing.css keeps its reset. */
+@import "tailwindcss/theme" layer(theme);
+@import "tailwindcss/utilities" layer(utilities);
+@import "../generated/tokens.css";
+@import "./fonts.css";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+@custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
+
+@theme inline {
+  --font-sans: var(--om-font-body);
+  --font-mono: var(--om-font-mono);
+  --color-background: var(--om-background);
+  --color-foreground: var(--om-foreground);
+  --color-foreground-bright: var(--om-foreground-bright);
+  --color-card: var(--om-card);
+  --color-card-foreground: var(--om-card-foreground);
+  --color-popover: var(--om-popover);
+  --color-popover-foreground: var(--om-popover-foreground);
+  --color-primary: var(--om-primary);
+  --color-primary-foreground: var(--om-primary-foreground);
+  --color-secondary: var(--om-secondary);
+  --color-secondary-foreground: var(--om-secondary-foreground);
+  --color-muted: var(--om-muted);
+  --color-muted-foreground: var(--om-muted-foreground);
+  --color-accent: var(--om-accent);
+  --color-accent-foreground: var(--om-accent-foreground);
+  --color-destructive: var(--om-destructive);
+  --color-warning: var(--om-warning);
+  --color-border: var(--om-border);
+  --color-input: var(--om-input);
+  --color-ring: var(--om-ring);
+  --color-sidebar: var(--om-sidebar);
+  --color-sidebar-foreground: var(--om-sidebar-foreground);
+  --color-surface-hover: var(--om-surface-hover);
+  --color-chart-1: var(--om-chart-1);
+  --color-chart-2: var(--om-chart-2);
+  --color-chart-3: var(--om-chart-3);
+  --radius-sm: calc(var(--om-radius) * 0.6);
+  --radius-md: calc(var(--om-radius) * 0.8);
+  --radius-lg: var(--om-radius);
+  --radius-xl: calc(var(--om-radius) * 1.2);
+  --spacing-header: 4rem;
+  --spacing-sidebar: 16.5rem;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    margin: 0;
+    touch-action: pan-x pan-y;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  html {
+    @apply font-sans antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply text-foreground;
+    /* Background set per-layout (docs paint script / landing tokens) to avoid flash */
+    background: var(--om-background);
+  }
+
+  :root {
+    --docs-header-h: 4rem;
+    --docs-gutter: clamp(1.25rem, 4vw, 3rem);
+    --docs-edge: max(var(--docs-gutter), calc((100vw - 74rem) / 2));
+  }
+}
+
+/* Shared with landing nav — icon controls for theme / language */
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 0;
+  border-radius: var(--om-radius);
+  background: transparent;
+  color: var(--om-muted-foreground);
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.theme-toggle svg:not(.gh-icon) {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.theme-toggle svg.gh-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.theme-toggle:hover {
+  background: var(--om-surface-hover);
+  color: var(--om-foreground-bright);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--om-ring);
+  outline-offset: 2px;
+}
+
+.theme-toggle:active {
+  transform: scale(0.96);
+}

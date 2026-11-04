@@ -732,7 +732,7 @@ bun run check
 
 `bun run check`, `format:check`, `lint` ve `typecheck` komutlarını çalıştırır; `bun run format` biçimlendirmeyi yeniden yazar.
 
-[Belgeler](https://opencode-mem.zhafron.my.id/docs/) bu README'den ve `.github/i18n/` altındaki çevirilerden oluşturulur; [açılış sayfası](https://opencode-mem.zhafron.my.id) `site/src/` içinde bulunur. Her README başlığı `site/docs-map.json` içinde bir belge sayfasına eşlenmelidir, aksi takdirde site derlemesi başarısız olur. Siteyi yerelde `cd site && bun install && bun run build` ile derleyin.
+[Belgeler](https://opencode-mem.zhafron.my.id/docs/) bu README'den ve `.github/i18n/` altındaki çevirilerden oluşturulur; [açılış sayfası](https://opencode-mem.zhafron.my.id) `github-site/src/` içinde bulunur. Her README başlığı `github-site/docs-map.json` içinde bir belge sayfasına eşlenmelidir, aksi takdirde site derlemesi başarısız olur. Siteyi yerelde `cd github-site && bun install && bun run build` ile derleyin.
 
 Bu proje, AI kodlama ajanları için nihai bellek eklentisi olmak üzere aktif olarak katkı arıyor. Hataları düzeltmek, özellik eklemek, belgeleri iyileştirmek veya embedding model desteğini genişletmek olsun, katkılarınız kritiktir. Kod tabanı iyi yapılandırılmış ve iyileştirmeye hazırdır. Lütfen Issue veya Feature request şablonlarıyla issue açın ve bir PR gönderdiğinizde pull request şablonunu doldurun — katkıları hızlıca inceler ve birleştiririz.
 

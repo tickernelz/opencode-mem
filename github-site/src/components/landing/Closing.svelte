@@ -1,0 +1,33 @@
+<script lang="ts">
+  import type { Copy } from "../../i18n/en";
+
+  type Props = { copy: Copy };
+  let { copy }: Props = $props();
+
+  const year = new Date().getFullYear();
+</script>
+
+<section class="closing" aria-labelledby="closing-title">
+  <div class="wrap closing__inner">
+    <h2 id="closing-title">{copy.closing.title}</h2>
+    <div class="closing__actions">
+      <a class="button button--primary" href="#install">{copy.closing.primary}</a>
+      <a class="button button--ghost" href="/docs/">{copy.closing.secondary}</a>
+    </div>
+  </div>
+</section>
+<footer class="footer">
+  <div class="wrap footer__inner">
+    <nav class="footer__links" aria-label="Footer">
+      <a href="/docs/">{copy.footer.docs}</a>
+      <a href="https://github.com/tickernelz/opencode-mem">{copy.footer.github}</a>
+      <a href="https://www.npmjs.com/package/opencode-mem">{copy.footer.npm}</a>
+      <a href="https://github.com/tickernelz/opencode-mem/issues">{copy.footer.issues}</a>
+      <a href="https://github.com/tickernelz/opencode-mem/releases">{copy.footer.releases}</a>
+    </nav>
+    <p class="footer__fine">
+      {copy.footer.license} · {year} ·
+      <a href="https://github.com/supermemoryai/opencode-supermemory">{copy.footer.inspired}</a>
+    </p>
+  </div>
+</footer>

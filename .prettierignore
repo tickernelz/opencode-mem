@@ -10,6 +10,6 @@ yarn.lock
 .github
 *.min.js
 *.min.css
-site/.astro
-site/src/content/docs
-site/src/generated
+github-site/.astro
+github-site/src/content/docs
+github-site/src/generated

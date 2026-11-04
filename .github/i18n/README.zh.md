@@ -666,7 +666,7 @@ bun run check
 
 `bun run check` 会运行 `format:check`、`lint` 和 `typecheck`；`bun run format` 会重写格式。
 
-[文档](https://opencode-mem.zhafron.my.id/docs/)由本 README 和 `.github/i18n/` 下的翻译生成；[首页](https://opencode-mem.zhafron.my.id)位于 `site/src/`。每个 README 标题都必须在 `site/docs-map.json` 中映射到一个文档页面，否则站点构建会失败。可使用 `cd site && bun install && bun run build` 在本地构建站点。
+[文档](https://opencode-mem.zhafron.my.id/docs/)由本 README 和 `.github/i18n/` 下的翻译生成；[首页](https://opencode-mem.zhafron.my.id)位于 `github-site/src/`。每个 README 标题都必须在 `github-site/docs-map.json` 中映射到一个文档页面，否则站点构建会失败。可使用 `cd github-site && bun install && bun run build` 在本地构建站点。
 
 本项目积极寻求贡献，以成为 AI 编程代理的权威记忆插件。无论你是修复缺陷、添加功能、改进文档，还是扩展嵌入模型支持，你的贡献都至关重要。代码库结构良好，已准备好增强。请使用 Issue 或 Feature request 模板提出问题，并在提交 PR 时填写 pull request 模板 — 我们会快速审查并合并贡献。
 

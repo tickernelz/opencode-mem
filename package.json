@@ -89,6 +89,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
     "prettier": "^3.9.10",
+    "prettier-plugin-astro": "^1.1.2",
     "prettier-plugin-svelte": "^4.1.1",
     "typescript": "6.0.3",
     "typescript-eslint": "^8.71.2"
@@ -111,6 +112,9 @@
       "prettier --write"
     ],
     "*.svelte": [
+      "prettier --write"
+    ],
+    "*.astro": [
       "prettier --write"
     ],
     "*.{css,html,json,jsonc,md,yml,yaml}": [

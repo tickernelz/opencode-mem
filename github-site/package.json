@@ -1,0 +1,33 @@
+{
+  "name": "opencode-mem-github-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-tokens.mjs && node scripts/build-docs.mjs && node scripts/fetch-numbers.mjs && astro build",
+    "dev": "node scripts/build-tokens.mjs && node scripts/build-docs.mjs && astro dev",
+    "preview": "astro preview",
+    "check": "astro check && svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "^8.1.2",
+    "@astrojs/sitemap": "^3.7.4",
+    "@astrojs/svelte": "^9.1.2",
+    "@fontsource-variable/jetbrains-mono": "5.3.0",
+    "@lucide/svelte": "^1.65.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "astro": "^7.4.5",
+    "github-slugger": "2.0.0",
+    "gray-matter": "^4.0.3",
+    "sharp": "0.35.5",
+    "shiki": "^4.5.0",
+    "svelte": "^5.57.3",
+    "tailwindcss": "^4.3.3",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "svelte-check": "^4.7.7",
+    "typescript": "6.0.3"
+  }
+}

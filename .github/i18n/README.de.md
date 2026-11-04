@@ -726,7 +726,7 @@ bun run check
 
 `bun run check` führt `format:check`, `lint` und `typecheck` aus; `bun run format` schreibt die Formatierung neu.
 
-Die [Dokumentation](https://opencode-mem.zhafron.my.id/docs/) wird aus dieser README und den Übersetzungen unter `.github/i18n/` generiert; die [Landingpage](https://opencode-mem.zhafron.my.id) liegt in `site/src/`. Jede README-Überschrift muss in `site/docs-map.json` einer Docs-Seite zugeordnet sein, sonst schlägt der Site-Build fehl. Baue die Site lokal mit `cd site && bun install && bun run build`.
+Die [Dokumentation](https://opencode-mem.zhafron.my.id/docs/) wird aus dieser README und den Übersetzungen unter `.github/i18n/` generiert; die [Landingpage](https://opencode-mem.zhafron.my.id) liegt in `github-site/src/`. Jede README-Überschrift muss in `github-site/docs-map.json` einer Docs-Seite zugeordnet sein, sonst schlägt der Site-Build fehl. Baue die Site lokal mit `cd github-site && bun install && bun run build`.
 
 Dieses Projekt sucht aktiv Beiträge, um das maßgebliche Memory-Plugin für KI-Coding-Agenten zu werden. Ob du Bugs behebst, Features hinzufügst, Dokumentation verbesserst oder die Embedding-Modell-Unterstützung erweiterst — deine Beiträge sind entscheidend. Die Codebasis ist gut strukturiert und bereit für Erweiterungen. Bitte Issues mit den Vorlagen Issue oder Feature request öffnen und beim Einreichen eines PRs die Pull-Request-Vorlage ausfüllen — wir reviewen und mergen Beiträge zügig.
 
