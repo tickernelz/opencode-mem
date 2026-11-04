@@ -1,0 +1,34 @@
+---
+import type { Copy } from "../../i18n/en";
+import { dreamGraph } from "../../lib/constellation";
+import GraphSvg from "./GraphSvg.astro";
+
+interface Props {
+  copy: Copy;
+}
+
+const { copy } = Astro.props;
+---
+
+<section class="dream" aria-labelledby="dream-title">
+  <div class="dream__sky">
+    <figure class="field field--dream" data-field="dream" aria-label={copy.dream.label}>
+      <GraphSvg graph={dreamGraph()} />
+      <canvas aria-hidden="true"></canvas>
+      <figcaption class="dream__legend">
+        {
+          copy.dream.legend.map((item, i) => (
+            <span class:list={["dream__key", `dream__key--${i}`]} data-legend data-on="true">
+              {item}
+            </span>
+          ))
+        }
+      </figcaption>
+    </figure>
+    <div class="wrap dream__copy">
+      <h2 id="dream-title">{copy.dream.title}</h2>
+      <p>{copy.dream.body}</p>
+      <code class="dream__code">"dreaming": {"{"} "enabled": true {"}"}</code>
+    </div>
+  </div>
+</section>

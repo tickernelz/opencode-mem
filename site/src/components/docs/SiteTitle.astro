@@ -1,0 +1,31 @@
+---
+import Default from "@astrojs/starlight/components/SiteTitle.astro";
+---
+
+<div class="om-title">
+  <Default />
+  <a class="om-home" href="/">Home</a>
+</div>
+
+<style>
+  .om-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .om-home {
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+    text-decoration: none;
+    line-height: 1;
+  }
+  .om-home:hover,
+  .om-home:focus-visible {
+    color: var(--sl-color-text-accent);
+  }
+  @media (max-width: 50rem) {
+    .om-home {
+      display: none;
+    }
+  }
+</style>

@@ -1,0 +1,20 @@
+---
+interface Props {
+  file: string;
+  code: string;
+  copyLabel: string;
+  copiedLabel: string;
+}
+
+const { file, code, copyLabel, copiedLabel } = Astro.props;
+---
+
+<div class="code">
+  <div class="code__bar">
+    <span class="code__file">{file}</span>
+    <button class="code__copy" type="button" data-copy={code} data-copied={copiedLabel}>
+      <span data-copy-label>{copyLabel}</span>
+    </button>
+  </div>
+  <pre><code>{code}</code></pre>
+</div>

@@ -1,0 +1,36 @@
+---
+import type { Copy } from "../../i18n/en";
+import numbers from "../../data/numbers.json";
+
+interface Props {
+  copy: Copy;
+}
+
+const { copy } = Astro.props;
+const format = new Intl.NumberFormat("en");
+const items = [
+  [format.format(numbers.stars), copy.proof.stars],
+  [format.format(numbers.forks), copy.proof.forks],
+  [format.format(numbers.downloadsYear), copy.proof.downloads],
+  [format.format(numbers.releases), `${copy.proof.releases} v${numbers.version}`],
+];
+---
+
+<section class="proof" aria-labelledby="proof-title">
+  <div class="wrap">
+    <h2 id="proof-title">{copy.proof.title}</h2>
+    <ul class="proof__row">
+      {
+        items.map(([value, label]) => (
+          <li>
+            <span class="proof__value">{value}</span>
+            <span class="proof__label">{label}</span>
+          </li>
+        ))
+      }
+    </ul>
+    <p class="proof__source">
+      {copy.proof.source.replace("{date}", numbers.fetchedAt)}
+    </p>
+  </div>
+</section>

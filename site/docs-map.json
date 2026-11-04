@@ -1,0 +1,150 @@
+{
+  "repository": "https://github.com/tickernelz/opencode-mem",
+  "source": "README.md",
+  "translations": {
+    "de": ".github/i18n/README.de.md",
+    "zh": ".github/i18n/README.zh.md",
+    "ar": ".github/i18n/README.ar.md",
+    "tr": ".github/i18n/README.tr.md",
+    "nl": ".github/i18n/README.nl.md"
+  },
+  "untranslated": {
+    "Memory credential redaction": ["de", "zh", "ar", "tr", "nl"]
+  },
+  "dropLines": ["^\\[!\\[", "^!\\[", "README\\.[a-z]{2}\\.md\\)"],
+  "configPages": ["configure/"],
+  "configSources": ["opencode-mem.example.jsonc", "src/config.ts"],
+  "pages": [
+    {
+      "slug": "",
+      "group": "Start",
+      "title": "Overview",
+      "sections": ["OpenCode Memory", "Core Features"]
+    },
+    {
+      "slug": "start/prerequisites",
+      "group": "Start",
+      "sections": ["Prerequisites", "Hardware / resource expectations"]
+    },
+    {
+      "slug": "start/getting-started",
+      "group": "Start",
+      "sections": ["Getting Started", "Automatic memory context on OpenCode v2"]
+    },
+    {
+      "slug": "start/local-checkout",
+      "group": "Start",
+      "sections": ["Using a local checkout"]
+    },
+    {
+      "slug": "start/encryption",
+      "group": "Start",
+      "sections": ["Optional database encryption at rest"]
+    },
+    {
+      "slug": "use/day-to-day",
+      "group": "Use",
+      "sections": ["How to use day-to-day", "Typical daily flow", "Automatic vs manual memory"]
+    },
+    {
+      "slug": "use/memory-agents-skills",
+      "group": "Use",
+      "sections": ["Memory vs AGENTS.md vs Skills", "Shared Skills (V2)"]
+    },
+    {
+      "slug": "use/auto-capture-and-profile",
+      "group": "Use",
+      "sections": ["Intelligent prompt-based memory extraction", "User profile"]
+    },
+    {
+      "slug": "use/web-ui",
+      "group": "Use",
+      "sections": ["Web UI", "Health stats"]
+    },
+    {
+      "slug": "use/examples",
+      "group": "Use",
+      "sections": ["Usage Examples"]
+    },
+    {
+      "slug": "configure",
+      "group": "Configure",
+      "sections": ["Configuration Essentials"]
+    },
+    {
+      "slug": "configure/auto-capture-provider",
+      "group": "Configure",
+      "sections": ["Auto-Capture AI Provider"]
+    },
+    {
+      "slug": "configure/embeddings",
+      "group": "Configure",
+      "sections": ["Choosing / configuring embeddings"]
+    },
+    {
+      "slug": "configure/markdown-vault",
+      "group": "Configure",
+      "sections": ["Markdown vault backend (`memoryBackend`)"]
+    },
+    {
+      "slug": "configure/chat-message",
+      "group": "Configure",
+      "sections": ["Chat message capture and injection (`chatMessage`)"]
+    },
+    {
+      "slug": "configure/update-on-capture",
+      "group": "Configure",
+      "sections": ["Update-on-capture (optional)"]
+    },
+    {
+      "slug": "configure/dreaming",
+      "group": "Configure",
+      "sections": ["Dreaming (optional memory consolidation)"]
+    },
+    {
+      "slug": "configure/memory-scope",
+      "group": "Configure",
+      "sections": ["Memory Scope"]
+    },
+    {
+      "slug": "configure/web-ui-auth",
+      "group": "Configure",
+      "sections": ["Web UI HTTP Basic Auth"]
+    },
+    {
+      "slug": "operate/credential-redaction",
+      "group": "Operate",
+      "sections": ["Memory credential redaction"]
+    },
+    {
+      "slug": "operate/legacy-sqlite",
+      "group": "Operate",
+      "sections": ["Upgrading from legacy SQLite shards"]
+    },
+    {
+      "slug": "operate/schema-migrations",
+      "group": "Operate",
+      "sections": ["Schema migrations"]
+    },
+    {
+      "slug": "operate/nested-repos",
+      "group": "Operate",
+      "sections": ["Sharing One Project Memory Across Nested Repos"]
+    },
+    {
+      "slug": "operate/moving-recovering",
+      "group": "Operate",
+      "sections": ["Moving or Recovering Project Memories"]
+    },
+    {
+      "slug": "reference/subpath-exports",
+      "group": "Reference",
+      "sections": ["Public Subpath Exports", "`opencode-mem/tags`"]
+    },
+    {
+      "slug": "reference/contributing",
+      "group": "Reference",
+      "sections": ["Development & Contribution", "License & Links"]
+    }
+  ]
+}
