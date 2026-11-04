@@ -233,6 +233,29 @@ The web UI's **Stats** tab (at `/stats`) shows memory-system health at a glance:
 
 That phrase in the feature list is **auto-capture**: after a conversation, a background AI request summarizes technical work and saves it as memory. No special prompt from you is required. It uses `opencodeProvider` / `opencodeModel` when set, otherwise the manual `memoryProvider` fallback.
 
+Auto-capture uses bounded textual tool outcomes alongside assistant text. Invocation status is
+not proof that a command, test, or task succeeded: summaries must distinguish plans, attempts,
+failures, observed results and unverified claims. Useful failure/recovery lessons can be
+remembered; routine command failures need not produce memories.
+
+Tool results are privacy-filtered before truncation, limited to 2 KiB per result and 16 KiB
+for the whole tool-evidence block (or less under a small context budget). Up to 32 calls are
+retained, preserving early and recent attempts and explicitly marking omissions. File
+attachments, arbitrary metadata and full logs are not imported. This adds no new evidence
+store; existing deleted-session recovery bounds/expiry remain unchanged. These excerpts
+are partial evidence, not a verifier, and model summaries can still be wrong.
+
+Generated capture summaries are limited to 8 KiB UTF-8, with at most eight 64-byte tags.
+Oversized responses use the existing fallback/retry path rather than silently chopping away
+an outcome caveat; oversized update-on-capture rewrites fall back to adding the bounded draft.
+These limits apply before memory embedding/storage, not to all provider response traffic.
+External providers retain requests and raw responses in their existing session history
+(seven-day default expiry), before capture validation. Tool evidence in requests is bounded,
+but this does not bound raw provider responses; retries retain separate copies and cleanup
+must run.
+This is not a global database-size cap, and deleting rows need not immediately shrink DB/WAL
+files. No historical memories or provider-history settings are changed.
+
 ### User profile
 
 The **User Profile** is a separate, cross-project summary of how you like to work (preferences, habits). It is updated on an interval (`userProfileAnalysisInterval`, default every 10 analyzed prompts), shown in the web UI’s profile view, and readable via `memory({ mode: "profile" })`. You do not populate it by hand for normal use — profile learning fills it when a provider is ready. Output language follows `autoCaptureLanguage` (default `"auto"`, mirroring the language of your prompts), the same setting used for auto-captured memories.
