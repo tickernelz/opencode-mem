@@ -2,6 +2,8 @@ import { sanitizeMemoryContent } from "./privacy.js";
 import { CONFIG } from "../config.js";
 import { log } from "./logger.js";
 import type { MemoryType } from "../types/index.js";
+import { bindFilesToMemory, type FileMemoryAssociation } from "./file-memory-association.js";
+import type { ObservedFiles } from "./observed-files.js";
 
 export type UpdateOnCaptureAction = "add" | "update" | "supersede";
 
@@ -50,6 +52,8 @@ export interface PersistCaptureInput {
   type: string;
   tags: string[];
   containerTag: string;
+  /** Transient native evidence; a rewrite may name a different observed file. */
+  observedFiles?: ObservedFiles;
   metadata: {
     source: "auto-capture";
     type: MemoryType | string;
@@ -63,6 +67,7 @@ export interface PersistCaptureInput {
     projectPath?: string;
     projectName?: string;
     gitRepoUrl?: string;
+    observedFiles?: FileMemoryAssociation | null;
   };
 }
 
@@ -166,6 +171,12 @@ export async function applyUpdateOnCaptureDecision(
         promptId: input.metadata.promptId,
         sessionID: input.metadata.sessionID,
         captureTimestamp: input.metadata.captureTimestamp,
+        // A rewrite replaces the old association. Evidence-only recovery (or
+        // capture with the feature off) cannot preserve stale paths by accident.
+        observedFiles: bindFilesToMemory(
+          input.observedFiles ?? input.metadata.observedFiles ?? undefined,
+          content
+        ),
       },
     });
     if (!updated.success) {

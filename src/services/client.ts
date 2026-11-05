@@ -17,6 +17,7 @@ import type { MemoryType } from "../types/index.js";
 import type { MemoryListFilters, MemoryRecord } from "./turso/types.js";
 import { isMarkdownBackend, writeMemoryMarkdownFile } from "./markdown/backend.js";
 import { pluginMemoryRelPath } from "./markdown/vault.js";
+import { isObservedFiles, type ObservedFiles } from "./observed-files.js";
 
 export type MemoryScope = "project" | "all-projects";
 
@@ -566,6 +567,70 @@ export class LocalMemoryClient {
         memories: [],
         pagination: { currentPage: 1, totalItems: 0, totalPages: 0 },
       };
+    }
+  }
+
+  /** Project-local file recall needs neither embeddings nor all-project scope. */
+  async listFileMemories(
+    containerTag: string,
+    observed: ObservedFiles,
+    limit = 1,
+    filters: MemoryListFilters = {}
+  ) {
+    try {
+      if (
+        isMarkdownBackend() ||
+        !isObservedFiles(observed) ||
+        !Number.isFinite(limit) ||
+        limit <= 0
+      )
+        return { success: true as const, memories: [] };
+      const scopeRef = extractScopeFromContainerTag(containerTag);
+      if (scopeRef.scope !== "project") return { success: true as const, memories: [] };
+      await this.initialize();
+      const shards = await tursoShardManager.getAllShards("project", scopeRef.hash);
+      const allMemories: Record<string, unknown>[] = [];
+      const boundedLimit = Math.min(32, Math.trunc(limit));
+      for (const shard of shards) {
+        const db = await tursoConnectionManager.getConnection(shard.dbPath);
+        allMemories.push(
+          ...(await tursoVectorSearch.listFileMemories(
+            db,
+            containerTag,
+            observed,
+            boundedLimit,
+            filters
+          ))
+        );
+      }
+      allMemories.sort((a, b) => {
+        const pinDiff = Number(b.is_pinned ?? 0) - Number(a.is_pinned ?? 0);
+        if (pinDiff !== 0) return pinDiff;
+        return (
+          Number(b.created_at) - Number(a.created_at) || String(a.id).localeCompare(String(b.id))
+        );
+      });
+      const seen = new Set<string>();
+      const memories = allMemories
+        .filter((row) => {
+          const id = String(row.id);
+          if (seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        })
+        .slice(0, boundedLimit)
+        .map((row) => ({
+          id: String(row.id),
+          summary: String(row.content),
+          createdAt: safeToISOString(row.created_at),
+          metadata: safeJSONParse(row.metadata),
+          projectName: typeof row.project_name === "string" ? row.project_name : undefined,
+        }));
+      return { success: true as const, memories };
+    } catch {
+      // File context is optional: callers retain ordinary semantic recall.
+      log("listFileMemories: lookup unavailable");
+      return { success: false as const, memories: [] };
     }
   }
 

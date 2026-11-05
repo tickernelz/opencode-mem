@@ -4,7 +4,15 @@ import { tool } from "@opencode-ai/plugin";
 
 import { memoryClient } from "./services/client.js";
 import { formatContextForPrompt } from "./services/context.js";
-import { shouldRefreshRecallOnPrompt } from "./services/memory-recall.js";
+import {
+  mergeFileRecall,
+  shouldRefreshRecallOnPrompt,
+  type RecallMemory,
+} from "./services/memory-recall.js";
+import {
+  createObservedFileContext,
+  supportsLocalFileObservations,
+} from "./services/observed-files.js";
 import { buildMemoryProvenanceSuffix } from "./services/memory-provenance.js";
 import { getTags } from "./services/tags.js";
 import { stripPrivateContent, isFullyPrivate, sanitizeMemoryContent } from "./services/privacy.js";
@@ -724,11 +732,14 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     return true;
   };
 
-  const loadMemoryContext = async (sessionID: string): Promise<string> => {
-    const { loadRecallMemoriesForSession } = await import("./services/memory-recall.js");
-    const queryText = await userPromptManager.getLatestPromptTextForSession(sessionID);
-    const memories = await loadRecallMemoriesForSession(tags.project.tag, sessionID, queryText);
-
+  const fileRecallEnabled = () =>
+    isConfigured() &&
+    CONFIG.chatMessage.enabled &&
+    CONFIG.chatMessage.fileAwareRecall === true &&
+    supportsLocalFileObservations(ctx) &&
+    CONFIG.memoryBackend === "database";
+  let observedFileContext: ReturnType<typeof createObservedFileContext> | undefined;
+  const formatMemoryContext = (memories: RecallMemory[]): Promise<string> => {
     // Still format an empty project-memory payload so injectProfile can emit
     // <user_profile> on its own (e.g. chatMessage.maxMemories: 0).
     const projectMemories = {
@@ -748,6 +759,58 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     return formatContextForPrompt(userId, projectMemories);
   };
 
+  const loadMemoryContext = async (sessionID: string): Promise<string> => {
+    const { loadRecallMemoriesForSession } = await import("./services/memory-recall.js");
+    const queryText = await userPromptManager.getLatestPromptTextForSession(sessionID);
+    const memories = await loadRecallMemoriesForSession(tags.project.tag, sessionID, queryText);
+    return formatMemoryContext(memories);
+  };
+
+  const loadFileMemoryContext = async (
+    sessionID: string,
+    filePaths: readonly string[],
+    promptMessageID: string,
+    baseContext: string
+  ): Promise<string> => {
+    if (!fileRecallEnabled() || !filePaths.length || !promptMessageID) return baseContext;
+    try {
+      // Submission can precede inbox delivery. Bind additional recall to the
+      // authored prompt actually present in this model request.
+      const queryText = (
+        await userPromptManager.getPendingPromptForMessage(sessionID, promptMessageID, directory)
+      )?.content;
+      if (!queryText || isFullyPrivate(queryText)) return baseContext;
+      observedFileContext ??= createObservedFileContext(directory);
+      const context = await observedFileContext;
+      const observedFiles = await context?.normalizeCandidates(filePaths);
+      if (!observedFiles) return baseContext;
+      const { loadFileRecallMemoriesForSession, loadRecallMemoriesForSession } =
+        await import("./services/memory-recall.js");
+      const files = await loadFileRecallMemoriesForSession(
+        tags.project.tag,
+        sessionID,
+        observedFiles
+      );
+      // With no association, keep the exact cached context. In particular,
+      // recent/first and profile caches must not refresh because a file was read.
+      if (!files.length) return baseContext;
+      const ordinary = await loadRecallMemoriesForSession(tags.project.tag, sessionID, queryText);
+      const merged = mergeFileRecall(files, ordinary, CONFIG.chatMessage.maxMemories ?? 3);
+      return merged === ordinary ? baseContext : await formatMemoryContext(merged);
+    } catch {
+      log("File memory context failed, keeping cached prompt context", { sessionID });
+      return baseContext;
+    }
+  };
+
+  const canLoadMemoryContext = async (sessionID: string): Promise<boolean> =>
+    isConfigured() &&
+    !!CONFIG.chatMessage.enabled &&
+    !isInternalStructuredSession(sessionID) &&
+    !(await isInternalCaptureSession(ctx.client, sessionID)) &&
+    // Reloaded V2 sessions can rehydrate without passing through capturePrompt.
+    (CONFIG.chatMessage.captureChildSessions || !(await isChildSession(ctx.client, sessionID)));
+
   return {
     // V1 ignores this extra hook; the V2 adapter uses it during plugin reload.
     dispose: disposePlugin,
@@ -759,6 +822,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
         CONFIG.autoCaptureEnabled &&
         userPromptManager.hasPendingCaptureSession(sessionID, directory),
       enabled: () => isConfigured() && CONFIG.chatMessage.enabled,
+      fileRecallEnabled,
       refreshOnPrompt: () =>
         shouldRefreshRecallOnPrompt(
           CONFIG.chatMessage.recall ?? "relevant",
@@ -768,22 +832,17 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
         input: { sessionID: string },
         output: { message: { id: string }; parts: Part[] }
       ) => capturePrompt(input.sessionID, output.message.id, output.parts),
-      load: async (sessionID: string) => {
-        if (
-          !isConfigured() ||
-          !CONFIG.chatMessage.enabled ||
-          isInternalStructuredSession(sessionID) ||
-          (await isInternalCaptureSession(ctx.client, sessionID)) ||
-          // Same child-session gate as capture: after plugin reload the V2
-          // context hook can rehydrate via load() without going through
-          // capturePrompt, so skip injection for orchestrator children too.
-          (!CONFIG.chatMessage.captureChildSessions &&
-            (await isChildSession(ctx.client, sessionID)))
-        ) {
-          return "";
-        }
-        return loadMemoryContext(sessionID);
-      },
+      load: async (sessionID: string) =>
+        (await canLoadMemoryContext(sessionID)) ? loadMemoryContext(sessionID) : "",
+      loadFileContext: async (
+        sessionID: string,
+        filePaths: readonly string[],
+        promptMessageID: string,
+        baseContext: string
+      ) =>
+        (await canLoadMemoryContext(sessionID))
+          ? loadFileMemoryContext(sessionID, filePaths, promptMessageID, baseContext)
+          : "",
     },
     config: async (cfg) => {
       applyStructuredOutputAgentConfig(cfg);

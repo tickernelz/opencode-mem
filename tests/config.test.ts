@@ -111,6 +111,7 @@ describe("config", () => {
     it("should default chatMessage.recall to relevant with default scope", () => {
       expect(CONFIG.chatMessage.recall).toBe("relevant");
       expect(CONFIG.chatMessage.recallScope).toBe("default");
+      expect(CONFIG.chatMessage.fileAwareRecall).toBe(true);
     });
 
     it("should default dreaming to disabled", () => {

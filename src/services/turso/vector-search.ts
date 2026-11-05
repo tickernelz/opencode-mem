@@ -11,6 +11,8 @@ import {
   vectorToJson,
 } from "./vector-utils.js";
 import type { TursoDb, TursoTx } from "./turso-db.js";
+import { isObservedFiles, type ObservedFiles } from "../observed-files.js";
+import { matchesFileMemory } from "../file-memory-association.js";
 
 /** Active (non-trashed) rows. Legacy DBs without deleted_at treat NULL as active. */
 export const ACTIVE_MEMORY_SQL = `(deleted_at IS NULL)`;
@@ -524,6 +526,58 @@ export class TursoVectorSearch {
   async getAllMemories(db: TursoDb): Promise<Record<string, unknown>[]> {
     await this.prepareShardDb(db);
     return db.all(`SELECT * FROM memories WHERE ${ACTIVE_MEMORY_SQL} ORDER BY created_at DESC`);
+  }
+
+  /**
+   * Exact file associations within one project/workspace. This first pass uses
+   * the existing container-tag index then scans that project's JSON metadata;
+   * it does not build a new file index. Bound returned candidates before hash
+   * validation, preferring a conservative miss to unbounded content reads.
+   */
+  async listFileMemories(
+    db: TursoDb,
+    containerTag: string,
+    observed: ObservedFiles,
+    limit: number,
+    filters: MemoryListFilters = {}
+  ): Promise<Record<string, unknown>[]> {
+    if (!containerTag || !isObservedFiles(observed) || !Number.isFinite(limit) || limit <= 0)
+      return [];
+    await this.prepareShardDb(db);
+    const json = `CASE WHEN json_valid(metadata) THEN metadata ELSE '{}' END`;
+    const conditions = [
+      ACTIVE_MEMORY_SQL,
+      "container_tag = ?",
+      `json_extract(${json}, '$.source') = 'auto-capture'`,
+      `json_extract(${json}, '$.observedFiles.version') = 1`,
+      `json_extract(${json}, '$.observedFiles.workspace') = ?`,
+      `json_type(${json}, '$.observedFiles.paths') = 'array'`,
+      `json_array_length(${json}, '$.observedFiles.paths') BETWEEN 1 AND 16`,
+      `EXISTS (SELECT 1 FROM json_each(${json}, '$.observedFiles.paths') AS observed_path
+        WHERE observed_path.type = 'text' AND observed_path.value IN (${observed.paths.map(() => "?").join(", ")}))`,
+    ];
+    const args: Array<string | number> = [containerTag, observed.workspace, ...observed.paths];
+    if (filters.excludeSessionId !== undefined) {
+      // update-on-capture can update metadata.sessionID while preserving the
+      // original session_id column. Exclude either to avoid recalling this turn.
+      conditions.push("session_id IS NOT ?", `json_extract(${json}, '$.sessionID') IS NOT ?`);
+      args.push(filters.excludeSessionId, filters.excludeSessionId);
+    }
+    if (filters.createdAfter !== undefined) {
+      conditions.push("created_at > ?");
+      args.push(filters.createdAfter);
+    }
+    args.push(Math.min(32, Math.max(16, Math.trunc(limit) * 3)));
+    const rows = await db.all(
+      `SELECT * FROM memories WHERE ${conditions.join(" AND ")}
+      ORDER BY is_pinned DESC, created_at DESC, id ASC LIMIT ?`,
+      args
+    );
+    return rows
+      .filter((row) =>
+        matchesFileMemory(parseMetadata(row.metadata), String(row.content), observed)
+      )
+      .slice(0, Math.min(32, Math.trunc(limit)));
   }
 
   async getAllMemoriesWithExtractedVectors(

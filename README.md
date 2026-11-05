@@ -373,6 +373,58 @@ and age restrictions. A successful search with no eligible matches stays empty i
 trigger failure fallback. If recent fallback also fails, recall remains empty and
 nonfatal. Missing-query fallback and per-turn refresh behavior are unchanged.
 
+### File-aware recall (experimental, V2 only)
+
+File-aware recall is enabled by default after successful native OpenCode V2
+`read`, `edit`, and `write` tools when using the database backend. Set
+`chatMessage.fileAwareRecall: false` to disable it in the config file; the web
+dashboard is not required. Only boolean `false` disables it; omitted or
+non-boolean values use the enabled default when no valid inherited setting exists.
+A global setting remains in effect when a project changes unrelated `chatMessage`
+options; an explicit boolean project `fileAwareRecall` value overrides it. Ordinary
+prompt recall stays enabled and V1 behavior is unchanged.
+Managed workspace drivers (which may operate on remote files) are excluded;
+this first pass supports the host's ordinary local filesystem only.
+
+New auto-captured memories can carry up to 16 validated file paths from their
+request's completed tools, restricted to paths explicitly named in the sanitized
+saved summary. Observation alone does not attach the memory to a file.
+The same summary check applies when retrieving older file associations, without
+rewriting stored memories. Read-only investigations can qualify; editing a file is
+neither required nor sufficient. When a later authored turn encounters the same file,
+the next model context can select one associated memory absent from ordinary recall within the existing
+`maxMemories` count. Its `selection="file"` label has no numerical score. An
+association means the file was observed and named in that earlier lesson. It does
+not prove the summary is correct, current, or applicable; current source code
+remains authoritative. Creation date and memory ID remain visible. Summaries that
+omit paths or use only basenames cannot supply this extra recall signal. Exact
+relative references (optionally prefixed with `./`) are recognized in ordinary
+prose and code quotes; root filenames without an extension require quotes. Absolute
+paths and other ambiguous spellings are not inferred.
+
+Matches require the same project and canonical workspace directory, even with
+`recallScope: "all-projects"`. Separate worktrees do not share file matches.
+Paths are exact and case-preserving; similarly named files are not fuzzy matched.
+Outside-root, private/redacted, missing, directory, and symlink-alias paths are
+ignored. No source file contents are read by this feature. Renames are not tracked.
+Shell commands, patches, globs, external tools, and IDE active files are not signals.
+
+The tool-completion hook only records bounded candidate paths; filesystem metadata
+checks and memory lookup happen at the next model-context boundary. Repeated paths
+do not trigger another refresh, and each authored turn allows at most four file
+refreshes over at most 16 paths. The existing context block is replaced, not appended.
+New prompts and compaction clear the file signals. Age, current-session and deletion
+filters still apply; rewritten memory content invalidates its old file association.
+Files with no eligible association leave the existing context unchanged without
+rerunning prompt recall or rebuilding the profile. A positive file match refreshes
+ordinary recall before merging the single file memory into the shared count budget.
+
+This first pass does not backfill old memories or reconstruct file metadata from
+saved-evidence recovery after a host session disappears. File lookup uses exact
+metadata filtering within current-project database shards, without a separate file
+index. Large-store performance and usefulness still need real-workload evaluation.
+This is not source-change detection or a freshness guarantee.
+
 ### Update-on-capture (optional)
 
 Opt-in path that keeps memories current as facts change. When `updateOnCaptureEnabled` is

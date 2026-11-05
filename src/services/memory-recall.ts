@@ -2,6 +2,7 @@ import { CONFIG } from "../config.js";
 import { memoryClient, type MemoryScope } from "./client.js";
 import { log } from "./logger.js";
 import type { SearchResult } from "./turso/types.js";
+import { isObservedFiles, type ObservedFiles } from "./observed-files.js";
 
 export type RecallMode = "recent" | "relevant" | "both";
 export type RecallScopeSetting = "project" | "all-projects" | "default";
@@ -10,7 +11,7 @@ export interface RecallMemory {
   id: string;
   memory: string;
   similarity?: number;
-  selection?: "recent" | "semantic";
+  selection?: "recent" | "semantic" | "file";
   createdAt?: number | string;
   projectName?: string;
   containerTag?: string;
@@ -151,6 +152,7 @@ export interface LoadRecallOptions {
   excludeCurrentSession: boolean;
   maxAgeDays?: number;
   similarityThreshold: number;
+  observedFiles?: ObservedFiles;
 }
 
 /**
@@ -160,6 +162,49 @@ export interface LoadRecallOptions {
  * search fails. Successful searches with no eligible matches are not failures.
  */
 export async function loadRecallMemories(opts: LoadRecallOptions): Promise<RecallMemory[]> {
+  const ordinary = await loadPromptRecallMemories(opts);
+  const files = await loadFileRecallMemories(opts);
+  return mergeFileRecall(files, ordinary, opts.maxMemories);
+}
+
+/** Reserve the single file slot for information ordinary recall did not supply. */
+export function mergeFileRecall(
+  files: RecallMemory[],
+  ordinary: RecallMemory[],
+  limit: number
+): RecallMemory[] {
+  const ids = new Set(ordinary.map((memory) => memory.id));
+  const additional = files.find((memory) => !ids.has(memory.id));
+  return additional ? mergeBoth([additional], ordinary, limit) : ordinary;
+}
+
+/** Association lookup only: never rebuild ordinary recall when an observation has no match. */
+async function loadFileRecallMemories(opts: LoadRecallOptions): Promise<RecallMemory[]> {
+  if (!isObservedFiles(opts.observedFiles) || opts.maxMemories <= 0) return [];
+  try {
+    // One association can supplement the authored prompt, within its existing
+    // count budget. A path match is not a semantic score or proof of correctness.
+    const result = await memoryClient.listFileMemories(
+      opts.containerTag,
+      opts.observedFiles,
+      Math.min(32, opts.maxMemories + 1),
+      {
+        excludeSessionId: opts.excludeCurrentSession ? opts.sessionID : undefined,
+        createdAfter: opts.maxAgeDays ? Date.now() - opts.maxAgeDays * 86400000 : undefined,
+      }
+    );
+    if (!result.success) return [];
+    return result.memories.map((memory) => ({
+      ...listRowToRecall(memory),
+      selection: "file",
+    }));
+  } catch {
+    log("memory recall: file lookup failed, keeping prompt recall", { sessionID: opts.sessionID });
+    return [];
+  }
+}
+
+async function loadPromptRecallMemories(opts: LoadRecallOptions): Promise<RecallMemory[]> {
   const scope = resolveRecallScope(opts.recallScope, opts.defaultScope);
   const filters = {
     excludeSessionId: opts.excludeCurrentSession ? opts.sessionID : undefined,
@@ -242,18 +287,17 @@ export async function loadRecallMemories(opts: LoadRecallOptions): Promise<Recal
   return mergeBoth(relevant, recent, opts.maxMemories);
 }
 
-/** Convenience wrapper using CONFIG + session prompt text. */
-export async function loadRecallMemoriesForSession(
+function recallOptionsForSession(
   containerTag: string,
   sessionID: string,
   queryText: string | null
-): Promise<RecallMemory[]> {
+): LoadRecallOptions {
   const threshold =
     typeof CONFIG.chatMessage.similarityThreshold === "number"
       ? CONFIG.chatMessage.similarityThreshold
       : CONFIG.similarityThreshold;
 
-  return loadRecallMemories({
+  return {
     containerTag,
     sessionID,
     queryText,
@@ -264,5 +308,25 @@ export async function loadRecallMemoriesForSession(
     excludeCurrentSession: CONFIG.chatMessage.excludeCurrentSession ?? true,
     maxAgeDays: CONFIG.chatMessage.maxAgeDays,
     similarityThreshold: threshold,
+  };
+}
+
+/** Convenience wrapper using CONFIG + session prompt text. */
+export async function loadRecallMemoriesForSession(
+  containerTag: string,
+  sessionID: string,
+  queryText: string | null
+): Promise<RecallMemory[]> {
+  return loadRecallMemories(recallOptionsForSession(containerTag, sessionID, queryText));
+}
+
+export async function loadFileRecallMemoriesForSession(
+  containerTag: string,
+  sessionID: string,
+  observedFiles: ObservedFiles
+): Promise<RecallMemory[]> {
+  return loadFileRecallMemories({
+    ...recallOptionsForSession(containerTag, sessionID, null),
+    observedFiles,
   });
 }

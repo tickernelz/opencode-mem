@@ -137,6 +137,9 @@
     "recall": "relevant",
     // "default" follows memory.defaultScope; or "project" / "all-projects"
     "recallScope": "default",
+    // V2 native-file recall, database backend only (enabled by default).
+    // Set false to disable; omitted or non-boolean values use the default.
+    // "fileAwareRecall": false,
     // Optional override of top-level similarityThreshold for relevant recall:
     // "similarityThreshold": 0.6,
     // Skip prompt text injected by the host or by other OpenCode plugins

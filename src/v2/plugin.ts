@@ -17,6 +17,9 @@ const OpenCodeMemPluginV2: Plugin = {
       directory: ctx.location.directory,
       worktree: ctx.location.project.directory,
       project: ctx.location.project,
+      // Native tools can use a workspace driver whose files are not local to
+      // this plugin process. Never validate those paths against node:fs.
+      fileObservationEnvironment: ctx.location.workspaceID === undefined ? "local" : "workspace",
       serverUrl: undefined,
     } as any)) as any;
 

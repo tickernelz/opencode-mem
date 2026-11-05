@@ -5,6 +5,8 @@ import { getTags } from "./tags.js";
 import { log, serializeError } from "./logger.js";
 import { sanitizeMemoryContent, sanitizeMemoryField } from "./privacy.js";
 import { CONFIG } from "../config.js";
+import { bindFilesToMemory } from "./file-memory-association.js";
+import { supportsLocalFileObservations, type ObservedFiles } from "./observed-files.js";
 import { userPromptManager, type UserPrompt } from "./user-prompt/user-prompt-manager.js";
 import { loadOpencodeProvider } from "./ai/opencode-provider-loader.js";
 import { truncateToMaxBytes, utf8ByteLength } from "../utils/context-limit.js";
@@ -162,6 +164,7 @@ async function capturePrompt(
         const tags = getTags(directory);
         const savedEvidence = await userPromptManager.getCaptureEvidence(prompt.id, directory);
         let context: string | undefined;
+        let observedFiles: ObservedFiles | undefined;
 
         // Deleted-session / startup replay: durable evidence is authoritative.
         // Normal idle keeps the richer live transcript and only falls back when
@@ -203,6 +206,26 @@ async function capturePrompt(
             const { textResponses, toolCalls } = extractAIContent(aiMessages);
             if (textResponses.length === 0 && toolCalls.length === 0) {
               return;
+            }
+
+            // Only the live, prompt-delimited transcript carries structured
+            // successful tool inputs. Recovery evidence is text and must never
+            // be mined for paths. Missing files or path errors only lose this
+            // optional signal; ordinary capture still proceeds.
+            if (
+              CONFIG.chatMessage?.fileAwareRecall === true &&
+              supportsLocalFileObservations(ctx) &&
+              CONFIG.memoryBackend !== "markdown"
+            ) {
+              try {
+                const { createObservedFileContext, collectObservedFiles } =
+                  await import("./observed-files.js");
+                const fileContext = await createObservedFileContext(directory);
+                if (fileContext)
+                  observedFiles = await collectObservedFiles(aiMessages, fileContext);
+              } catch {
+                log("Auto-capture: observed file association unavailable", { sessionID });
+              }
             }
 
             const latestMemory = await getLatestProjectMemory(tags.project.tag);
@@ -291,6 +314,9 @@ async function capturePrompt(
           projectPath: tags.project.projectPath,
           projectName: tags.project.projectName,
           gitRepoUrl: tags.project.gitRepoUrl,
+          ...(observedFiles
+            ? { observedFiles: bindFilesToMemory(observedFiles, summaryWithTags) }
+            : {}),
         };
 
         const result = await persistAutoCaptureMemory(
@@ -301,7 +327,8 @@ async function capturePrompt(
           summaryResult.type,
           summaryResult.tags || [],
           tags.project.tag,
-          persistMeta
+          persistMeta,
+          observedFiles
         );
 
         if (result.success) {
@@ -914,7 +941,8 @@ async function persistAutoCaptureMemory(
   type: string,
   tags: string[],
   containerTag: string,
-  metadata: Record<string, unknown>
+  metadata: Record<string, unknown>,
+  observedFiles?: ObservedFiles
 ): Promise<{ success: boolean; id?: string; error?: string; action: string }> {
   if (!CONFIG.updateOnCaptureEnabled) {
     const result = await memoryClient.addMemory(summaryWithTags, containerTag, metadata as any);
@@ -978,6 +1006,7 @@ async function persistAutoCaptureMemory(
       type,
       tags,
       containerTag,
+      observedFiles,
       metadata: metadata as any,
     },
     new Set(candidates.map((c) => c.id))

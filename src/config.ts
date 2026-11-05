@@ -229,6 +229,8 @@ interface OpenCodeMemConfig {
      * Scope for auto-recall search/list. "default" follows memory.defaultScope.
      */
     recallScope?: "project" | "all-projects" | "default";
+    /** V2 exact-file recall after completed native file tools. Enabled unless explicitly false. */
+    fileAwareRecall?: boolean;
     /** Optional override of top-level similarityThreshold for relevant recall. */
     similarityThreshold?: number;
     filterInjectedPrompts?: boolean;
@@ -404,6 +406,7 @@ const DEFAULTS: Required<
     injectOn: "first",
     recall: "relevant",
     recallScope: "default",
+    fileAwareRecall: true,
     similarityThreshold: undefined,
     filterInjectedPrompts: true,
     injectionMarkers: [...getDefaultInjectionMarkers()],
@@ -912,6 +915,9 @@ const CONFIG_TEMPLATE = `{
     "recall": "relevant",
     // Scope for auto-recall. "default" follows memory.defaultScope above.
     // "recallScope": "default",
+    // V2 file-aware recall (database backend only) is enabled by default.
+    // Set false to disable; omitted or non-boolean values use the default.
+    // "fileAwareRecall": false,
     // Optional similarity floor for relevant recall (else similarityThreshold).
     // "similarityThreshold": 0.6,
 
@@ -1477,6 +1483,7 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
         "first" | "always",
       recall: normalizeChatMessageRecall(fileConfig.chatMessage?.recall),
       recallScope: normalizeChatMessageRecallScope(fileConfig.chatMessage?.recallScope),
+      fileAwareRecall: fileConfig.chatMessage?.fileAwareRecall !== false,
       similarityThreshold:
         typeof fileConfig.chatMessage?.similarityThreshold === "number" &&
         Number.isFinite(fileConfig.chatMessage.similarityThreshold)
@@ -1588,6 +1595,18 @@ export function initConfig(directory: string): void {
   delete projectOverrides.autoCleanupEnabled;
   delete projectOverrides.autoCleanupRetentionDays;
   const merged: OpenCodeMemConfig = { ...globalConfig, ...projectOverrides };
+  // Preserve this opt-out when a project overrides unrelated chatMessage
+  // settings. A valid boolean project value still wins; other fields keep their
+  // established shallow-merge behavior.
+  if (
+    typeof projectConfig.chatMessage?.fileAwareRecall !== "boolean" &&
+    typeof globalConfig.chatMessage?.fileAwareRecall === "boolean"
+  ) {
+    merged.chatMessage = {
+      ...merged.chatMessage,
+      fileAwareRecall: globalConfig.chatMessage.fileAwareRecall,
+    };
+  }
   CONFIG = buildConfig(merged);
 }
 
