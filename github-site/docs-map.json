@@ -9,7 +9,8 @@
     "nl": ".github/i18n/README.nl.md"
   },
   "untranslated": {
-    "Memory credential redaction": ["de", "zh", "ar", "tr", "nl"]
+    "Memory credential redaction": ["de", "zh", "ar", "tr", "nl"],
+    "File-aware recall (experimental, V2 only)": ["de", "zh", "ar", "tr", "nl"]
   },
   "dropLines": ["^\\[!\\[", "^!\\[", "README\\.[a-z]{2}\\.md\\)"],
   "configPages": ["configure/"],
@@ -89,7 +90,10 @@
     {
       "slug": "configure/chat-message",
       "group": "Configure",
-      "sections": ["Chat message capture and injection (`chatMessage`)"]
+      "sections": [
+        "Chat message capture and injection (`chatMessage`)",
+        "File-aware recall (experimental, V2 only)"
+      ]
     },
     {
       "slug": "configure/update-on-capture",
