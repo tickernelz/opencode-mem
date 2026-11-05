@@ -1,9 +1,11 @@
 import { mock } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const moduleUrl = (path) => new URL("../../src/" + path + ".js", import.meta.url).href;
-const fixtureDirectory = process.argv[2];
+// macOS temporary directories can be reached through /var -> /private/var.
+// Use canonical test roots; the production path gate rejects symlink aliases.
+const fixtureDirectory = realpathSync(process.argv[2]);
 const directory = join(fixtureDirectory, "project");
 mkdirSync(join(directory, ".git"), { recursive: true });
 writeFileSync(join(directory, ".git", "HEAD"), "ref: refs/heads/main\n");

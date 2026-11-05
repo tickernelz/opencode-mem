@@ -1,9 +1,10 @@
 import { mock } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const moduleUrl = (path) => new URL("../../src/" + path + ".js", import.meta.url).href;
-const directory = process.argv[2];
+// Match the canonical workspace identity, including macOS's /var alias.
+const directory = realpathSync(process.argv[2]);
 const mode = process.argv[3];
 mkdirSync(join(directory, "src"));
 writeFileSync(join(directory, ".opencode-mem-project"), "");
