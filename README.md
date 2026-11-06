@@ -316,6 +316,8 @@ Commonly tuned top-level options:
 | `showAutoCaptureToasts` / `showUserProfileToasts` / `showErrorToasts` | `true`                          | Toasts for auto-capture, profile updates and errors.                                                                            |
 | `autoUpdate`                                                          | `true`                          | Clear OpenCode's cached install when a newer npm release is available.                                                          |
 
+Profile context limits are set by `userProfileInjectPreferences` (default `5`), `userProfileInjectPatterns` (`5`), and `userProfileInjectWorkflows` (`3`). These control how many items are injected into the LLM conversation, not how many are displayed in the web UI. The legacy `maxProfileItems`, `userProfileDisplayPreferences`, `userProfileDisplayPatterns`, and `userProfileDisplayWorkflows` options are deprecated and have no effect. Existing config files still load, but you can remove these four keys.
+
 ### Markdown vault backend (`memoryBackend`)
 
 By default memories live only in Turso under `storagePath`. Optionally set a **generic Markdown folder** as the source of truth (Obsidian/Raneto-compatible plain `.md` files — not an Obsidian-specific integration):
