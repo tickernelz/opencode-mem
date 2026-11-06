@@ -281,7 +281,9 @@ Wanneer Markdown-modus aan staat:
 - Door de plugin gemaakte herinneringen worden als `{id}.md` met YAML-frontmatter + body geschreven.
 - Bestaande notities in de map (elke Markdown-paginastijl) worden geïmporteerd/geïndexeerd; Turso is alleen een herbouwbare semantic-search-index.
 - Bestandsadds/bewerkingen/verwijderingen worden bewaakt en opnieuw geïndexeerd; de web-UI toont alleen in deze modus een **Markdown**-sidebarpagina (status, bestandenlijst, reindex).
-- Overschakelen naar Markdown herbouwt de index vanuit de map — DB-only-rijen zonder bijpassend bestand verdwijnen. Exporteer eerst met `memory export` als je oude databaseherinneringen wilt bewaren.
+- Overschakelen naar Markdown herbouwt de index vanuit de map. Rijen die alleen in de database staan en geen bijpassend bestand hebben, worden alleen verwijderd na een leesbare, volledige scan van een niet-lege vault. Exporteer eerst met `memory export` als je oude databaseherinneringen wilt bewaren.
+- Bij het synchroniseren wordt verwijdering overgeslagen en verschijnt een waarschuwing als de vault ontbreekt, onleesbaar is, slechts gedeeltelijk is gescand of verwerkt, of geen Markdown-bestanden bevat; bestaande geïndexeerde herinneringen blijven behouden. Herstel de vault of los het probleem op en indexeer daarna opnieuw. Wil je de geïndexeerde herinnering van het laatste bestand bewust verwijderen, verwijder die herinnering dan expliciet via de tool of web-UI.
+- Bij een gezonde, niet-lege vault worden geïndexeerde herinneringen waarvan de bestanden ontbreken nog steeds permanent verwijderd. Exporteer of maak eerst een back-up: deze beveiligingen vervangen geen back-up en herkennen geen onvolledige synchronisatie die eruitziet als een gezonde, niet-lege vault.
 
 ### Chatberichtvastlegging en -injectie (`chatMessage`)
 
