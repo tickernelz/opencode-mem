@@ -1,7 +1,30 @@
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
 
-export interface MemoryMarkdownFrontmatter {
+export interface MemoryCaptureMetadata {
+  promptId?: string;
+  sessionID?: string;
+  captureTimestamp?: number;
+}
+
+/** Only persist well-formed capture provenance; other metadata stays in the index. */
+export function readCaptureMetadata(input: Record<string, unknown>): MemoryCaptureMetadata {
+  const capture: MemoryCaptureMetadata = {};
+  for (const key of ["promptId", "sessionID"] as const) {
+    const value = input[key];
+    if (typeof value === "string" && value.trim()) capture[key] = value;
+  }
+  if (
+    typeof input.captureTimestamp === "number" &&
+    Number.isFinite(input.captureTimestamp) &&
+    input.captureTimestamp >= 0
+  ) {
+    capture.captureTimestamp = input.captureTimestamp;
+  }
+  return capture;
+}
+
+export interface MemoryMarkdownFrontmatter extends MemoryCaptureMetadata {
   id?: string;
   type?: string;
   tags?: string[];
@@ -20,7 +43,7 @@ export interface ParsedMemoryMarkdown {
   hasFrontmatter: boolean;
 }
 
-export interface PackMemoryMarkdownInput {
+export interface PackMemoryMarkdownInput extends MemoryCaptureMetadata {
   id: string;
   content: string;
   type?: string;
@@ -98,6 +121,12 @@ export function packMemoryMarkdown(input: PackMemoryMarkdownInput): string {
   if (input.updatedAt !== undefined) lines.push(`updatedAt: ${input.updatedAt}`);
   if (input.source) lines.push(`source: ${yamlScalar(input.source)}`);
   if (input.title) lines.push(`title: ${yamlScalar(input.title)}`);
+  const capture = readCaptureMetadata({ ...input });
+  if (capture.promptId) lines.push(`promptId: ${yamlScalar(capture.promptId)}`);
+  if (capture.sessionID) lines.push(`sessionID: ${yamlScalar(capture.sessionID)}`);
+  if (capture.captureTimestamp !== undefined) {
+    lines.push(`captureTimestamp: ${capture.captureTimestamp}`);
+  }
   lines.push("---", "", input.content);
   return lines.join("\n");
 }
@@ -131,7 +160,11 @@ export function parseMemoryMarkdown(raw: string): ParsedMemoryMarkdown {
       continue;
     }
     const parsed = parseYamlScalar(valueRaw);
-    frontmatter[key] = parsed;
+    if (key === "promptId" || key === "sessionID" || key === "captureTimestamp") {
+      Object.assign(frontmatter, readCaptureMetadata({ [key]: parsed }));
+    } else {
+      frontmatter[key] = parsed;
+    }
   }
 
   return {

@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { CONFIG } from "../../config.js";
 import { log } from "../logger.js";
-import { packMemoryMarkdown } from "./document.js";
+import { packMemoryMarkdown, type MemoryCaptureMetadata } from "./document.js";
 import {
   getLastReconcileAt,
   listVaultIndexEntries,
@@ -18,7 +18,7 @@ import {
 } from "./vault.js";
 import { markdownVaultWatcher } from "./watcher.js";
 
-export interface MarkdownMemoryWriteInput {
+export interface MarkdownMemoryWriteInput extends MemoryCaptureMetadata {
   id: string;
   content: string;
   type?: string;
@@ -63,6 +63,9 @@ export function writeMemoryMarkdownFile(input: MarkdownMemoryWriteInput): string
     updatedAt: input.updatedAt,
     source: input.source,
     title: input.title,
+    promptId: input.promptId,
+    sessionID: input.sessionID,
+    captureTimestamp: input.captureTimestamp,
   });
   markdownVaultWatcher.noteSelfWrite(relPath);
   writeVaultFile(root, relPath, markdown);
