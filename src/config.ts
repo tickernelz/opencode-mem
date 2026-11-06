@@ -72,6 +72,10 @@ interface OpenCodeMemConfig {
   embeddingIdleTimeoutMs?: number;
   similarityThreshold?: number;
   maxMemories?: number;
+  /**
+   * @deprecated No effect. Use userProfileInjectPreferences, userProfileInjectPatterns,
+   * and userProfileInjectWorkflows to limit injected profile context.
+   */
   maxProfileItems?: number;
   injectProfile?: boolean;
   containerTagPrefix?: string;
@@ -151,8 +155,17 @@ interface OpenCodeMemConfig {
   deduplicationSimilarityThreshold?: number;
   userProfileAnalysisInterval?: number;
   userProfileMaxContextBytes?: number;
+  /**
+   * @deprecated No effect on the UI. Use userProfileInjectPreferences for LLM context only.
+   */
   userProfileDisplayPreferences?: number;
+  /**
+   * @deprecated No effect on the UI. Use userProfileInjectPatterns for LLM context only.
+   */
   userProfileDisplayPatterns?: number;
+  /**
+   * @deprecated No effect on the UI. Use userProfileInjectWorkflows for LLM context only.
+   */
   userProfileDisplayWorkflows?: number;
   userProfileStaleDays?: number;
   userProfileInjectPreferences?: number;
@@ -339,6 +352,7 @@ const DEFAULTS: Required<
   embeddingIdleTimeoutMs: 0,
   similarityThreshold: 0.6,
   maxMemories: 10,
+  // Deprecated compatibility value; not used for profile selection.
   maxProfileItems: 5,
   injectProfile: true,
   containerTagPrefix: "opencode",
@@ -362,6 +376,7 @@ const DEFAULTS: Required<
   deduplicationSimilarityThreshold: 0.9,
   userProfileAnalysisInterval: 10,
   userProfileMaxContextBytes: 32768,
+  // Deprecated compatibility values; not used by the UI.
   userProfileDisplayPreferences: 20,
   userProfileDisplayPatterns: 15,
   userProfileDisplayWorkflows: 10,
@@ -845,15 +860,6 @@ const CONFIG_TEMPLATE = `{
   // Days before inactive items (all types) are eligible for removal
   "userProfileStaleDays": 2,
 
-  // Number of preferences shown in UI
-  "userProfileDisplayPreferences": 20,
-  
-  // Number of patterns shown in UI
-  "userProfileDisplayPatterns": 15,
-  
-  // Number of workflows shown in UI
-  "userProfileDisplayWorkflows": 10,
-  
   // Number of preferences injected into LLM conversation context
   // Keep this small — the strongest signals are enough; more dilute LLM attention
   "userProfileInjectPreferences": 5,
@@ -1345,6 +1351,10 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
       : undefined,
     similarityThreshold: fileConfig.similarityThreshold ?? DEFAULTS.similarityThreshold,
     maxMemories: fileConfig.maxMemories ?? DEFAULTS.maxMemories,
+    /**
+     * @deprecated No effect. Use userProfileInjectPreferences, userProfileInjectPatterns,
+     * and userProfileInjectWorkflows to limit injected profile context.
+     */
     maxProfileItems: fileConfig.maxProfileItems ?? DEFAULTS.maxProfileItems,
     injectProfile: fileConfig.injectProfile ?? DEFAULTS.injectProfile,
     containerTagPrefix: fileConfig.containerTagPrefix ?? DEFAULTS.containerTagPrefix,
@@ -1407,10 +1417,19 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
       fileConfig.userProfileAnalysisInterval ?? DEFAULTS.userProfileAnalysisInterval,
     userProfileMaxContextBytes:
       fileConfig.userProfileMaxContextBytes ?? DEFAULTS.userProfileMaxContextBytes,
+    /**
+     * @deprecated No effect on the UI. Use userProfileInjectPreferences for LLM context only.
+     */
     userProfileDisplayPreferences:
       fileConfig.userProfileDisplayPreferences ?? DEFAULTS.userProfileDisplayPreferences,
+    /**
+     * @deprecated No effect on the UI. Use userProfileInjectPatterns for LLM context only.
+     */
     userProfileDisplayPatterns:
       fileConfig.userProfileDisplayPatterns ?? DEFAULTS.userProfileDisplayPatterns,
+    /**
+     * @deprecated No effect on the UI. Use userProfileInjectWorkflows for LLM context only.
+     */
     userProfileDisplayWorkflows:
       fileConfig.userProfileDisplayWorkflows ?? DEFAULTS.userProfileDisplayWorkflows,
     userProfileInjectPreferences:

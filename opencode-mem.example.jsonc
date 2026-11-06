@@ -428,15 +428,6 @@
   // Days before inactive items (all types) are eligible for removal
   "userProfileStaleDays": 2,
 
-  // Number of preferences shown in UI
-  "userProfileDisplayPreferences": 20,
-
-  // Number of patterns shown in UI
-  "userProfileDisplayPatterns": 15,
-
-  // Number of workflows shown in UI
-  "userProfileDisplayWorkflows": 10,
-
   // Number of preferences injected into LLM conversation context
   // Keep this small — the strongest signals are enough; more dilute LLM attention
   "userProfileInjectPreferences": 5,
@@ -486,9 +477,6 @@
 
   // Maximum number of memories to return in search results
   "maxMemories": 10,
-
-  // Maximum profile items considered for injection / ranking
-  "maxProfileItems": 5,
 
   // Prefix for user/project container tags
   "containerTagPrefix": "opencode",
