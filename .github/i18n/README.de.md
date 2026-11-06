@@ -281,7 +281,9 @@ Wenn Markdown-Modus aktiv ist:
 - Vom Plugin erzeugte Memories werden als `{id}.md` mit YAML-Frontmatter + Body geschrieben.
 - Vorhandene Notizen im Ordner (beliebiger Markdown-Seitenstil) werden importiert/indexiert; Turso ist nur ein neu aufbaubarer Semantic-Search-Index.
 - Datei-Adds/Edits/Deletes werden beobachtet und neu indexiert; die Web-UI zeigt nur in diesem Modus eine **Markdown**-Sidebar-Seite (Status, Dateiliste, Reindex).
-- Der Wechsel zu Markdown baut den Index aus dem Ordner neu — DB-only-Zeilen ohne passende Datei entfallen. Zuerst mit `memory export` exportieren, wenn du alte Datenbank-Memories behalten willst.
+- Der Wechsel zu Markdown baut den Index aus dem Ordner neu auf. Reine Datenbankeinträge ohne passende Datei werden nur nach einem lesbaren, vollständigen Scan eines nicht leeren Vaults entfernt. Exportiere zuerst mit `memory export`, wenn du alte Datenbank-Memories behalten möchtest.
+- Der Abgleich überspringt das Löschen und gibt eine Warnung aus, wenn der Vault fehlt, nicht lesbar ist, nur teilweise gescannt oder verarbeitet wurde oder keine Markdown-Dateien enthält; bereits indexierte Memories bleiben erhalten. Stelle den Vault wieder her oder behebe das Problem und indexiere ihn erneut. Um die indexierte Memory der letzten Datei absichtlich zu entfernen, lösche diese Memory ausdrücklich über das Tool oder die Web-UI.
+- Bei einem funktionierenden, nicht leeren Vault werden indexierte Memories ohne zugehörige Datei weiterhin endgültig gelöscht. Exportiere die Daten oder erstelle vorher ein Backup: Diese Schutzmaßnahmen ersetzen kein Backup und erkennen keine unvollständige Synchronisierung, die wie ein funktionierender, nicht leerer Vault aussieht.
 
 ### Erfassung und Injection von Chat-Nachrichten (`chatMessage`)
 

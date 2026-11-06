@@ -14,13 +14,20 @@ import {
   parseMemoryMarkdown,
   titleFromRelPath,
 } from "./document.js";
-import { listMarkdownFiles, readVaultFile, type VaultFileInfo } from "./vault.js";
+import {
+  listMarkdownFiles,
+  readVaultFile,
+  scanMarkdownVault,
+  type VaultFileInfo,
+} from "./vault.js";
 
 export interface ReconcileResult {
   scanned: number;
   upserted: number;
   unchanged: number;
   deleted: number;
+  /** Missing files are not evidence of deletion when the inventory is unsafe. */
+  deletionSkipped?: "empty-vault" | "incomplete-scan";
   errors: Array<{ path: string; error: string }>;
   finishedAt: number;
 }
@@ -83,9 +90,11 @@ async function resolveContainerTag(fmContainerTag: string | undefined): Promise<
   return getUserTagInfo().tag;
 }
 
-async function upsertFromFile(file: VaultFileInfo): Promise<"upserted" | "unchanged"> {
-  const raw = readVaultFile(CONFIG.markdownPath!, file.relPath);
-  const parsed = parseMemoryMarkdown(raw);
+async function upsertFromFile(
+  file: VaultFileInfo,
+  raw: string,
+  parsed = parseMemoryMarkdown(raw)
+): Promise<"upserted" | "unchanged"> {
   const fm = parsed.frontmatter;
 
   const id =
@@ -208,6 +217,11 @@ async function collectIndexedMarkdownIds(): Promise<
 }
 
 export async function reconcileMarkdownVault(): Promise<ReconcileResult> {
+  return reconcileVault();
+}
+
+/** A watcher deletion validates the whole inventory but only removes its own path. */
+async function reconcileVault(deletedRelPath?: string): Promise<ReconcileResult> {
   const vaultRoot = CONFIG.markdownPath;
   if (!vaultRoot) {
     throw new Error("markdownPath is not configured");
@@ -216,14 +230,14 @@ export async function reconcileMarkdownVault(): Promise<ReconcileResult> {
   await ensureTursoReady();
   await embeddingService.warmup();
 
-  const files = listMarkdownFiles(vaultRoot);
+  const { files, errors } = scanMarkdownVault(vaultRoot);
   const seenIds = new Set<string>();
   const result: ReconcileResult = {
     scanned: files.length,
     upserted: 0,
     unchanged: 0,
     deleted: 0,
-    errors: [],
+    errors,
     finishedAt: Date.now(),
   };
 
@@ -236,7 +250,9 @@ export async function reconcileMarkdownVault(): Promise<ReconcileResult> {
           ? parsed.frontmatter.id.trim()
           : markdownIdFromRelPath(file.relPath);
       seenIds.add(id);
-      const outcome = await upsertFromFile(file);
+      // Use the same snapshot for identity and content. A second read could see
+      // a different id after an editor/sync write and delete the new row below.
+      const outcome = await upsertFromFile(file, raw, parsed);
       if (outcome === "upserted") result.upserted++;
       else result.unchanged++;
     } catch (error) {
@@ -252,16 +268,40 @@ export async function reconcileMarkdownVault(): Promise<ReconcileResult> {
   }
 
   const indexed = await collectIndexedMarkdownIds();
-  for (const [id] of indexed) {
-    if (seenIds.has(id)) continue;
-    try {
-      const deleted = await deleteMemoryById(id);
-      if (deleted) result.deleted++;
-    } catch (error) {
-      result.errors.push({
-        path: id,
-        error: error instanceof Error ? error.message : String(error),
-      });
+  if (result.errors.length > 0) {
+    result.deletionSkipped = "incomplete-scan";
+  } else if (files.length === 0 && indexed.size > 0) {
+    // An intentionally emptied vault cannot be distinguished from a missing
+    // mount or incomplete sync. Explicit memory deletion remains available.
+    result.deletionSkipped = "empty-vault";
+  }
+
+  if (result.deletionSkipped) {
+    log("markdown reconcile warning: deletion skipped; existing index retained", {
+      reason: result.deletionSkipped,
+      path: vaultRoot,
+      indexed: indexed.size,
+      errors: result.errors,
+    });
+  } else {
+    for (const [id, info] of indexed) {
+      if (seenIds.has(id)) continue;
+      if (
+        deletedRelPath !== undefined &&
+        info.relPath !== deletedRelPath &&
+        id !== markdownIdFromRelPath(deletedRelPath)
+      ) {
+        continue;
+      }
+      try {
+        const deleted = await deleteMemoryById(id);
+        if (deleted) result.deleted++;
+      } catch (error) {
+        result.errors.push({
+          path: id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 
@@ -271,6 +311,7 @@ export async function reconcileMarkdownVault(): Promise<ReconcileResult> {
     upserted: result.upserted,
     unchanged: result.unchanged,
     deleted: result.deleted,
+    deletionSkipped: result.deletionSkipped,
     errors: result.errors.length,
   });
   return result;
@@ -328,17 +369,14 @@ export async function reindexVaultFile(relPath: string): Promise<void> {
   if (!vaultRoot) throw new Error("markdownPath is not configured");
   await ensureTursoReady();
   await embeddingService.warmup();
-  const files = listMarkdownFiles(vaultRoot);
+  const { files } = scanMarkdownVault(vaultRoot);
   const file = files.find((f) => f.relPath === relPath);
   if (!file) {
-    // File gone — drop any id derived from path or previously stored for this path.
-    const indexed = await collectIndexedMarkdownIds();
-    for (const [id, info] of indexed) {
-      if (info.relPath === relPath || id === markdownIdFromRelPath(relPath)) {
-        await deleteMemoryById(id);
-      }
-    }
+    // Watcher events also arrive when the vault disappears or cannot be read.
+    // Require the same complete, nonempty inventory as a full reconciliation.
+    // This also preserves an explicit id when a file was renamed in the vault.
+    await reconcileVault(relPath);
     return;
   }
-  await upsertFromFile(file);
+  await upsertFromFile(file, readVaultFile(vaultRoot, file.relPath));
 }

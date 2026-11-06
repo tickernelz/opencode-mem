@@ -27,6 +27,12 @@ export interface VaultFileInfo {
   size: number;
 }
 
+export interface VaultScanResult {
+  files: VaultFileInfo[];
+  /** A partial inventory must never be used to infer that memories were deleted. */
+  errors: Array<{ path: string; error: string }>;
+}
+
 function normalizeRel(relPath: string): string {
   return relPath.replace(/\\/g, "/").replace(/^\/+/, "");
 }
@@ -66,17 +72,24 @@ function shouldSkipDir(name: string): boolean {
   return false;
 }
 
-export function listMarkdownFiles(vaultRoot: string): VaultFileInfo[] {
+export function scanMarkdownVault(vaultRoot: string): VaultScanResult {
   const root = resolve(vaultRoot);
-  if (!existsSync(root)) return [];
-
   const out: VaultFileInfo[] = [];
+  const errors: VaultScanResult["errors"] = [];
+
+  function recordError(absPath: string, error: unknown): void {
+    errors.push({
+      path: normalizeRel(relative(root, absPath)) || ".",
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   function walk(dir: string): void {
     let entries;
     try {
       entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
+    } catch (error) {
+      recordError(dir, error);
       return;
     }
     for (const entry of entries) {
@@ -91,7 +104,9 @@ export function listMarkdownFiles(vaultRoot: string): VaultFileInfo[] {
       let st;
       try {
         st = statSync(abs);
-      } catch {
+        if (!st.isFile()) throw new Error("Markdown file is no longer a regular file");
+      } catch (error) {
+        recordError(abs, error);
         continue;
       }
       const rel = normalizeRel(relative(root, abs));
@@ -106,7 +121,12 @@ export function listMarkdownFiles(vaultRoot: string): VaultFileInfo[] {
 
   walk(root);
   out.sort((a, b) => a.relPath.localeCompare(b.relPath));
-  return out;
+  return { files: out, errors };
+}
+
+/** Best-effort listing for display; reconciliation must use the scan's errors too. */
+export function listMarkdownFiles(vaultRoot: string): VaultFileInfo[] {
+  return scanMarkdownVault(vaultRoot).files;
 }
 
 export function readVaultFile(vaultRoot: string, relPath: string): string {

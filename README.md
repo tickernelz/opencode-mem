@@ -335,7 +335,9 @@ When Markdown mode is on:
 - Plugin-created memories are written as `{id}.md` with YAML frontmatter + body.
 - Existing notes in the folder (any Markdown page style) are imported/indexed; Turso is only a rebuildable semantic-search index.
 - File adds/edits/deletes are watched and re-indexed; the Web UI shows a **Markdown** sidebar page (status, file list, reindex) only in this mode.
-- Switching to Markdown rebuilds the index from the folder — DB-only rows without a matching file are dropped. Export with `memory export` first if you need to keep old database memories.
+- Switching to Markdown rebuilds the index from the folder. DB-only rows without a matching file are dropped only after a readable, complete scan of a nonempty vault. Export with `memory export` first if you need to keep old database memories.
+- Reconciliation skips deletion and warns when the vault is missing, unreadable, only partially scanned or processed, or contains no Markdown files; existing indexed memories are retained. Restore or fix the vault, then reindex. To intentionally remove the final file's indexed memory, explicitly delete that memory through the tool or Web UI.
+- A healthy, nonempty vault still permits permanent deletion of indexed memories whose files are absent. Export or back up first: these safeguards are not a backup and cannot detect an incomplete sync that appears to be a healthy, nonempty vault.
 
 ### Chat message capture and injection (`chatMessage`)
 

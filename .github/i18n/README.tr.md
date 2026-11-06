@@ -283,7 +283,9 @@ Markdown modu açıkken:
 - Eklentinin oluşturduğu bellekler YAML frontmatter + gövde ile `{id}.md` olarak yazılır.
 - Klasördeki mevcut notlar (herhangi bir Markdown sayfa stili) içe aktarılır/indekslenir; Turso yalnızca yeniden oluşturulabilir bir anlamsal arama indeksidir.
 - Dosya ekleme/düzenleme/silme izlenir ve yeniden indekslenir; Web arayüzü yalnızca bu modda bir **Markdown** kenar çubuğu sayfası gösterir (durum, dosya listesi, yeniden indeks).
-- Markdown’a geçiş indeksi klasörden yeniden oluşturur — eşleşen dosyası olmayan yalnızca-DB satırları düşer. Eski veritabanı belleklerini saklamak istiyorsanız önce `memory export` ile dışa aktarın.
+- Markdown’a geçiş indeksi klasörden yeniden oluşturur. Eşleşen dosyası olmayan, yalnızca veritabanında bulunan kayıtlar ancak okunabilir ve boş olmayan bir vault tamamen tarandıktan sonra silinir. Eski veritabanı belleklerini saklamak istiyorsanız önce `memory export` ile dışa aktarın.
+- Vault yoksa, okunamıyorsa, yalnızca kısmen taranmış veya işlenmişse ya da hiç Markdown dosyası içermiyorsa uzlaştırma silme işlemini atlar ve uyarı verir; mevcut indekslenmiş bellekler korunur. Vault'u geri yükleyin veya sorunu giderin, ardından yeniden indeksleyin. Son dosyanın indekslenmiş belleğini bilerek kaldırmak için bu belleği araç veya Web UI üzerinden açıkça silin.
+- Sağlıklı ve boş olmayan bir vault'ta, dosyaları artık bulunmayan indekslenmiş bellekler yine kalıcı olarak silinir. Önce dışa aktarın veya yedek alın: bu önlemler yedeklemenin yerini tutmaz ve sağlıklı, boş olmayan bir vault gibi görünen eksik senkronizasyonu tespit edemez.
 
 ### Sohbet mesajı yakalama ve enjekte etme (`chatMessage`)
 
