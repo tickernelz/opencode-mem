@@ -127,6 +127,172 @@ const dreamingActionSchema = z.object({
   reason: z.string().optional(),
 });
 
+type DreamingAction = z.infer<typeof dreamingActionSchema>;
+type DreamingChannel = "opencode" | "external";
+
+const DREAMING_SYSTEM_PROMPT =
+  "You are a careful memory consolidation assistant. Return only structured JSON.";
+
+const dreamingToolSchema = {
+  type: "function" as const,
+  function: {
+    name: "consolidate_memories",
+    description: "Decide how to consolidate a related memory group",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: ["merge", "update", "supersede", "keep", "flag"],
+        },
+        content: { type: "string" },
+        keepId: { type: "string" },
+        dropIds: { type: "array", items: { type: "string" } },
+        reason: { type: "string" },
+      },
+      required: ["action"],
+    },
+  },
+};
+
+function isOpencodeDreamingConfigured(): boolean {
+  return Boolean(CONFIG.opencodeProvider && CONFIG.opencodeModel && getV2Client());
+}
+
+function isExternalDreamingConfigured(): boolean {
+  return Boolean(CONFIG.memoryModel && CONFIG.memoryApiUrl);
+}
+
+function isDreamingChannelConfigured(channel: DreamingChannel): boolean {
+  return channel === "opencode" ? isOpencodeDreamingConfigured() : isExternalDreamingConfigured();
+}
+
+function dreamingChannelOrder(): DreamingChannel[] {
+  const order = CONFIG.autoCaptureProviderOrder ?? "opencode-first";
+  return order === "external-first" ? ["external", "opencode"] : ["opencode", "external"];
+}
+
+function isEmptyStructuredOutputError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /no structured output/i.test(message);
+}
+
+function parseDreamingAction(data: unknown): DreamingAction {
+  const parsed = dreamingActionSchema.safeParse(data);
+  if (!parsed.success) {
+    throw new Error(`dreaming: invalid consolidation decision (${parsed.error.message})`);
+  }
+  return parsed.data;
+}
+
+function channelLabel(channel: DreamingChannel): string {
+  if (channel === "opencode") {
+    const variant = CONFIG.opencodeVariant ? ` variant=${CONFIG.opencodeVariant}` : "";
+    return `opencode ${CONFIG.opencodeProvider}/${CONFIG.opencodeModel}${variant}`;
+  }
+  return `external ${CONFIG.memoryProvider}/${CONFIG.memoryModel}`;
+}
+
+async function decideViaOpencode(
+  group: DreamingNearDupGroup,
+  directory: string | undefined,
+  omitVariant: boolean
+): Promise<DreamingAction> {
+  const { generateStructuredOutput } = await import("./ai/opencode-provider.js");
+  const v2Client = getV2Client();
+  if (!v2Client || !CONFIG.opencodeProvider || !CONFIG.opencodeModel) {
+    throw new Error("dreaming_provider_unavailable");
+  }
+
+  const useVariant = !omitVariant && Boolean(CONFIG.opencodeVariant);
+  return generateStructuredOutput({
+    client: v2Client,
+    providerID: CONFIG.opencodeProvider,
+    modelID: CONFIG.opencodeModel,
+    ...(useVariant ? { variant: CONFIG.opencodeVariant } : {}),
+    systemPrompt: DREAMING_SYSTEM_PROMPT,
+    userPrompt: buildMergePrompt(group),
+    schema: dreamingActionSchema,
+    directory,
+  });
+}
+
+async function decideViaExternal(group: DreamingNearDupGroup): Promise<DreamingAction> {
+  if (!CONFIG.memoryModel || !CONFIG.memoryApiUrl) {
+    throw new Error("dreaming_provider_unavailable");
+  }
+
+  const { AIProviderFactory } = await import("./ai/ai-provider-factory.js");
+  const { buildMemoryProviderConfig } = await import("./ai/provider-config.js");
+  const providerConfig = buildMemoryProviderConfig(CONFIG, {
+    maxIterations: 1,
+    iterationTimeout: 60_000,
+  });
+  const provider = AIProviderFactory.createProvider(CONFIG.memoryProvider, providerConfig);
+  const sessionId = `dreaming-${group.representative.id}`;
+  const result = await provider.executeToolCall(
+    DREAMING_SYSTEM_PROMPT,
+    `${buildMergePrompt(group)}\n\nCall the consolidate_memories tool with your decision.`,
+    dreamingToolSchema,
+    sessionId
+  );
+
+  if (!result.success || !result.data) {
+    throw new Error(result.error || "dreaming: external provider returned no decision");
+  }
+  return parseDreamingAction(result.data);
+}
+
+/**
+ * Resolve a consolidation decision for one group. Tries configured channels in
+ * auto-capture order. On empty OpenCode structured output, retries once without
+ * `opencodeVariant`, then falls through to the other channel when configured.
+ */
+export async function decideDreamingAction(
+  group: DreamingNearDupGroup,
+  directory?: string
+): Promise<DreamingAction> {
+  const channels = dreamingChannelOrder();
+  let lastError: unknown;
+
+  for (let i = 0; i < channels.length; i++) {
+    const channel = channels[i]!;
+    if (!isDreamingChannelConfigured(channel)) continue;
+
+    try {
+      if (channel === "opencode") {
+        try {
+          return await decideViaOpencode(group, directory, false);
+        } catch (error) {
+          if (CONFIG.opencodeVariant && isEmptyStructuredOutputError(error)) {
+            log("dreaming: empty structured output; retrying without variant", {
+              channel: channelLabel("opencode"),
+              error: error instanceof Error ? error.message : String(error),
+            });
+            return await decideViaOpencode(group, directory, true);
+          }
+          throw error;
+        }
+      }
+      return await decideViaExternal(group);
+    } catch (error) {
+      lastError = error;
+      const nextConfigured = channels.slice(i + 1).find((c) => isDreamingChannelConfigured(c));
+      if (!nextConfigured) break;
+
+      const fallbackLabel = nextConfigured === "external" ? "external API" : "opencode provider";
+      log(`dreaming: ${channel} provider failed, falling back to ${fallbackLabel}`, {
+        channel: channelLabel(channel),
+        fallback: channelLabel(nextConfigured),
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (lastError) throw lastError;
+  throw new Error("dreaming_provider_unavailable");
+}
+
 function statePath(): string {
   return join(CONFIG.storagePath, "dreaming-state.json");
 }
@@ -327,28 +493,16 @@ export class DreamingService {
         return result;
       }
 
-      const v2Client = getV2Client();
-      if (!v2Client || !CONFIG.opencodeProvider || !CONFIG.opencodeModel) {
-        log("dreaming: skipped (no opencode structured-output client)");
+      if (!isOpencodeDreamingConfigured() && !isExternalDreamingConfigured()) {
+        log("dreaming: skipped (no opencode or external structured-output provider)");
         throw new Error("dreaming_provider_unavailable");
       }
 
-      const { generateStructuredOutput } = await import("./ai/opencode-provider.js");
       let abortedForProvider = false;
 
       for (const group of batch) {
         try {
-          const decision = await generateStructuredOutput({
-            client: v2Client,
-            providerID: CONFIG.opencodeProvider,
-            modelID: CONFIG.opencodeModel,
-            ...(CONFIG.opencodeVariant ? { variant: CONFIG.opencodeVariant } : {}),
-            systemPrompt:
-              "You are a careful memory consolidation assistant. Return only structured JSON.",
-            userPrompt: buildMergePrompt(group),
-            schema: dreamingActionSchema,
-            directory,
-          });
+          const decision = await decideDreamingAction(group, directory);
 
           const memberIds = new Set([
             group.representative.id,
@@ -411,7 +565,16 @@ export class DreamingService {
         } catch (error) {
           result.groupsFailed++;
           const errMsg = error instanceof Error ? error.message : String(error);
-          log("dreaming: group failed", { error: errMsg });
+          log("dreaming: group failed", {
+            error: errMsg,
+            opencode: CONFIG.opencodeProvider
+              ? `${CONFIG.opencodeProvider}/${CONFIG.opencodeModel}${CONFIG.opencodeVariant ? ` variant=${CONFIG.opencodeVariant}` : ""}`
+              : null,
+            external:
+              CONFIG.memoryModel && CONFIG.memoryApiUrl
+                ? `${CONFIG.memoryProvider}/${CONFIG.memoryModel}`
+                : null,
+          });
           // Auth / provider outages will fail every remaining group the same way.
           if (/ProviderRequestError|API_KEY is not set|401|Unauthorized/i.test(errMsg)) {
             const processed =

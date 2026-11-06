@@ -1057,12 +1057,8 @@ export async function handleRunDreaming(
   >
 > {
   try {
-    if (!CONFIG.dreaming.enabled) {
-      return {
-        success: false,
-        error: "Dreaming is disabled. Set dreaming.enabled to true in opencode-mem.jsonc.",
-      };
-    }
+    // Manual runs are always allowed. `dreaming.enabled` only gates the
+    // background scheduler (see DreamingService.shouldRun / maybeRun).
     const { dreamingService } = await import("./dreaming-service.js");
     const result = await dreamingService.run(directory);
     return { success: true, data: result };

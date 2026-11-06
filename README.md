@@ -404,13 +404,16 @@ memories. Prefixes stay opt-in by default.
 
 Opt-in background pass that finds **related** memories (via `dreaming.relatedThreshold`,
 default `0.75`, independent of `deduplicationSimilarityThreshold`), asks the configured
-`opencodeProvider` / `opencodeModel` to `merge`, `update`, `supersede`, `keep`, or `flag`
+`opencodeProvider` / `opencodeModel` (with `memoryModel` / `memoryApiUrl` as fallback,
+same channel order as auto-capture) to `merge`, `update`, `supersede`, `keep`, or `flag`
 contradictions, and soft-deletes superseded rows into recoverable trash. Pinned memories
 are never touched. Set `dreaming.crossProject: true` (or `memory.defaultScope:
 "all-projects"`) to group across project tags; user-scope stays separate. Configure under
-`dreaming` in `opencode-mem.jsonc` (`enabled` default `false`). The web UI exposes
-**Trash** (restore) and **Dream** (manual run). Soft-deleted rows are hard-purged after
-`dreaming.trashRetentionDays` during normal cleanup.
+`dreaming` in `opencode-mem.jsonc`. `dreaming.enabled` (default `false`) gates only the
+scheduled background run — the web UI **Dream** button and `POST /api/dreaming/run` still
+work when it is false (manual-only mode). Soft-deleted rows are hard-purged after
+`dreaming.trashRetentionDays` during normal cleanup. The web UI also exposes **Trash**
+(restore).
 
 ### Choosing / configuring embeddings
 

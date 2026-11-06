@@ -257,6 +257,8 @@ interface OpenCodeMemConfig {
   /**
    * Opt-in background memory consolidation ("dreaming"): merge near-duplicate
    * memories via the configured LLM and soft-delete superseded rows into trash.
+   * `enabled` controls only the scheduled background pass; the web UI / API
+   * manual trigger still runs when false.
    */
   dreaming?: {
     enabled?: boolean;
@@ -941,6 +943,8 @@ const CONFIG_TEMPLATE = `{
 
   // Opt-in background consolidation: merge/update/supersede related memories
   // via the configured LLM and soft-delete superseded rows into trash.
+  // "enabled" gates only the scheduler; the Dream button / POST /api/dreaming/run
+  // still work when false (manual-only mode).
   "dreaming": {
     "enabled": false,
     "intervalHours": 24,
