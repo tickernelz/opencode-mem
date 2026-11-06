@@ -17,6 +17,7 @@ import type { MemoryType } from "../types/index.js";
 import type { MemoryListFilters, MemoryRecord } from "./turso/types.js";
 import { isMarkdownBackend, writeMemoryMarkdownFile } from "./markdown/backend.js";
 import { pluginMemoryRelPath } from "./markdown/vault.js";
+import { readCaptureMetadata } from "./markdown/document.js";
 
 export type MemoryScope = "project" | "all-projects";
 
@@ -263,6 +264,7 @@ export class LocalMemoryClient {
             updatedAt: now,
             source: typeof dynamicMetadata.source === "string" ? dynamicMetadata.source : "manual",
             title: displayName,
+            ...readCaptureMetadata(dynamicMetadata),
           });
           dynamicMetadata.markdownRelPath = pluginMemoryRelPath(id);
           if (!dynamicMetadata.source) dynamicMetadata.source = "manual";
@@ -374,6 +376,7 @@ export class LocalMemoryClient {
           updatedAt,
           source: typeof existingMeta.source === "string" ? existingMeta.source : "api",
           title: existingMemory.display_name ? String(existingMemory.display_name) : undefined,
+          ...readCaptureMetadata(existingMeta),
         });
         existingMeta.markdownRelPath = pluginMemoryRelPath(id);
       }
@@ -406,11 +409,8 @@ export class LocalMemoryClient {
             Number(existingMemory.created_at),
             updatedAt,
             metadataJson,
-            existingMemory.session_id
-              ? String(existingMemory.session_id)
-              : parseSessionIdFromMetadata(
-                  existingMemory.metadata ? String(existingMemory.metadata) : null
-                ),
+            parseSessionIdFromMetadata(metadataJson) ??
+              (existingMemory.session_id ? String(existingMemory.session_id) : null),
             existingMemory.display_name ? String(existingMemory.display_name) : null,
             existingMemory.user_name ? String(existingMemory.user_name) : null,
             existingMemory.user_email ? String(existingMemory.user_email) : null,

@@ -272,6 +272,8 @@ If you have chatted for a while and still see the message, check that auto-captu
 
 Open `http://127.0.0.1:4747` to browse the memory–prompt timeline, inspect captures, and manage the user profile. The UI has five views: **Project memories** (`/project-memories`), **User profile** (`/user-profile`), **Skill library** (`/skill-library`), **Markdown vault** (`/markdown-vault`) and **Stats** (`/stats`). Change the port with `webServerPort`, or set `webServerEnabled: false` to run without the web UI. If you bind the server beyond loopback, see [Web UI HTTP Basic Auth](#web-ui-http-basic-auth).
 
+The timeline shows each memory and prompt once. If several capture prompts refer to one memory, its current prompt is paired with it when available on the page; earlier prompts remain visible as separate entries.
+
 ## Usage Examples
 
 ```typescript
@@ -324,6 +326,8 @@ By default memories live only in Turso under `storagePath`. Optionally set a **g
   "markdownPath": "~/Documents/LLM-Wiki",
 }
 ```
+
+Plugin-created vault files preserve capture provenance (`promptId`, `sessionID`, and `captureTimestamp`) so reindexing can restore those fields. Legacy files without them retain any corresponding metadata already in the index. Provenance already missing from both the file and the index cannot be recovered automatically.
 
 | Key             | Default      | What it does                                                                                                                                       |
 | --------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |

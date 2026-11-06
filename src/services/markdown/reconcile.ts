@@ -12,6 +12,7 @@ import {
   contentHash,
   markdownIdFromRelPath,
   parseMemoryMarkdown,
+  readCaptureMetadata,
   titleFromRelPath,
 } from "./document.js";
 import { listMarkdownFiles, readVaultFile, type VaultFileInfo } from "./vault.js";
@@ -43,7 +44,10 @@ export function getLastReconcileAt(): number | null {
 function parseMetadata(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "string") return {};
   try {
-    return JSON.parse(value) as Record<string, unknown>;
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
   } catch {
     return {};
   }
@@ -98,11 +102,11 @@ async function upsertFromFile(file: VaultFileInfo): Promise<"upserted" | "unchan
 
   const hash = contentHash(raw);
   const existing = await findMemoryAcrossShards(id);
+  const existingMetadata = parseMetadata(existing?.row.metadata);
   if (existing) {
-    const meta = parseMetadata(existing.row.metadata);
     if (
-      meta.markdownContentHash === hash &&
-      meta.markdownRelPath === file.relPath &&
+      existingMetadata.markdownContentHash === hash &&
+      existingMetadata.markdownRelPath === file.relPath &&
       String(existing.row.content) === content
     ) {
       return "unchanged";
@@ -140,7 +144,15 @@ async function upsertFromFile(file: VaultFileInfo): Promise<"upserted" | "unchan
     });
   }
 
+  // Legacy vault files omit capture fields. Keep their surviving provenance and
+  // other index-only metadata; validated file values take precedence when present.
+  const capture = {
+    ...readCaptureMetadata(existingMetadata),
+    ...readCaptureMetadata(fm),
+  };
   const metadata = JSON.stringify({
+    ...existingMetadata,
+    ...capture,
     source,
     markdownRelPath: file.relPath,
     markdownContentHash: hash,
@@ -159,7 +171,18 @@ async function upsertFromFile(file: VaultFileInfo): Promise<"upserted" | "unchan
     createdAt,
     updatedAt,
     metadata,
+    sessionId:
+      capture.sessionID ??
+      (typeof existing?.row.session_id === "string" ? existing.row.session_id : undefined),
     displayName: title,
+    userName: typeof existing?.row.user_name === "string" ? existing.row.user_name : undefined,
+    userEmail: typeof existing?.row.user_email === "string" ? existing.row.user_email : undefined,
+    projectPath:
+      typeof existing?.row.project_path === "string" ? existing.row.project_path : undefined,
+    projectName:
+      typeof existing?.row.project_name === "string" ? existing.row.project_name : undefined,
+    gitRepoUrl:
+      typeof existing?.row.git_repo_url === "string" ? existing.row.git_repo_url : undefined,
   };
 
   const { scope, hash: scopeHash } = extractScopeFromContainerTag(containerTag);
@@ -181,6 +204,9 @@ async function upsertFromFile(file: VaultFileInfo): Promise<"upserted" | "unchan
       await tursoShardManager.decrementVectorCount(shard.id);
     }
     await tursoVectorSearch.insertVector(db, record);
+    if (Number(existing?.row.is_pinned) === 1) {
+      await tursoVectorSearch.pinMemory(db, id);
+    }
     await tursoShardManager.incrementVectorCount(shard.id);
   });
 

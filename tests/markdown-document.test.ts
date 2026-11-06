@@ -3,6 +3,7 @@ import {
   contentHash,
   markdownIdFromRelPath,
   packMemoryMarkdown,
+  readCaptureMetadata,
   parseMemoryMarkdown,
   titleFromRelPath,
 } from "../src/services/markdown/document.js";
@@ -36,6 +37,40 @@ describe("markdown document pack/parse", () => {
     expect(parsed.frontmatter.source).toBe("manual");
     expect(parsed.frontmatter.title).toBe("Bun tip");
     expect(parsed.body.trim()).toBe("Remember to use bun test");
+  });
+
+  it("roundtrips capture provenance with escaped ids and a zero timestamp", () => {
+    const capture = {
+      promptId: 'prompt_"quoted":id',
+      sessionID: "session_with\nnewline",
+      captureTimestamp: 0,
+    };
+    const parsed = parseMemoryMarkdown(
+      packMemoryMarkdown({ id: "mem_capture", content: "Captured fact", ...capture })
+    );
+    expect(readCaptureMetadata(parsed.frontmatter)).toEqual(capture);
+  });
+
+  it("rejects malformed capture fields instead of coercing them into links", () => {
+    const raw = `---
+id: "mem_capture"
+promptId: 123
+sessionID: false
+captureTimestamp: "123"
+---
+
+Captured fact
+`;
+    const parsed = parseMemoryMarkdown(raw);
+    expect(parsed.frontmatter.promptId).toBeUndefined();
+    expect(parsed.frontmatter.sessionID).toBeUndefined();
+    expect(parsed.frontmatter.captureTimestamp).toBeUndefined();
+    for (const captureTimestamp of [-1, NaN, Infinity]) {
+      expect(readCaptureMetadata({ promptId: " ", sessionID: "", captureTimestamp })).toEqual({});
+    }
+    expect(
+      packMemoryMarkdown({ id: "mem_capture", content: "Captured fact", captureTimestamp: NaN })
+    ).not.toContain("captureTimestamp:");
   });
 
   it("parses foreign wiki pages without our id", () => {
