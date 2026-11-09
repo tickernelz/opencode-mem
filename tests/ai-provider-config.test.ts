@@ -284,6 +284,30 @@ describe("AI provider config", () => {
     ).toThrow("missing memoryApiKey");
   });
 
+  it("builds standardcompute config from only an API key, defaulting model and endpoint", () => {
+    const providerConfig = buildMemoryProviderConfig({
+      memoryProvider: "standardcompute",
+      memoryApiKey: "standardcompute-test-key",
+    });
+
+    expect(providerConfig).toEqual({
+      model: "",
+      apiUrl: "",
+      apiKey: "standardcompute-test-key",
+      forceToolChoice: undefined,
+      maxIterations: undefined,
+      iterationTimeout: undefined,
+    });
+  });
+
+  it("still requires an API key for the standardcompute provider", () => {
+    expect(() =>
+      buildMemoryProviderConfig({
+        memoryProvider: "standardcompute",
+      })
+    ).toThrow("missing memoryApiKey");
+  });
+
   it("omits temperature for openai-chat when memoryTemperature is false", async () => {
     let capturedBody: Record<string, unknown> | undefined;
     globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {

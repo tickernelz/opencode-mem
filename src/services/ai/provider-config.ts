@@ -35,7 +35,8 @@ export function buildMemoryProviderConfig(
     config.memoryProvider === "cheaper-inference" ||
     config.memoryProvider === "api-route" ||
     config.memoryProvider === "runcrate" ||
-    config.memoryProvider === "cloudgpu";
+    config.memoryProvider === "cloudgpu" ||
+    config.memoryProvider === "standardcompute";
 
   if (!memoryModel && !isPresetProvider) issues.push("missing memoryModel");
   if (!memoryApiUrl && !isPresetProvider) issues.push("missing memoryApiUrl");

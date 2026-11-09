@@ -9,7 +9,8 @@ export type AIProviderType =
   | "google-gemini"
   | "orcarouter"
   | "runcrate"
-  | "cloudgpu";
+  | "cloudgpu"
+  | "standardcompute";
 
 export interface AIMessage {
   id?: number;
