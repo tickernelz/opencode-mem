@@ -2,15 +2,16 @@ import { OpenAIChatCompletionProvider } from "./openai-chat-completion.js";
 import type { ProviderConfig } from "./base-provider.js";
 import type { AISessionManager } from "../session/ai-session-manager.js";
 import type { AIProviderType } from "../session/session-types.js";
+import { MEMORY_PROVIDER_PRESET_DEFAULTS } from "../memory-provider-presets.js";
 
 /** Runcrate OpenAI-compatible endpoint used when `memoryApiUrl` is omitted. */
-export const RUNCRATE_API_URL = "https://api.runcrate.ai/v1";
+export const RUNCRATE_API_URL = MEMORY_PROVIDER_PRESET_DEFAULTS.runcrate.apiUrl;
 
 /**
  * Default model when `memoryModel` is omitted. Runcrate model IDs are
  * `vendor/model` pairs and are sent unchanged (e.g. `deepseek-ai/DeepSeek-V4.1-Flash`).
  */
-export const RUNCRATE_DEFAULT_MODEL = "deepseek-ai/DeepSeek-V4.1-Flash";
+export const RUNCRATE_DEFAULT_MODEL = MEMORY_PROVIDER_PRESET_DEFAULTS.runcrate.model;
 
 /**
  * Runcrate provider.

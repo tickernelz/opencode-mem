@@ -2,16 +2,17 @@ import { OpenAIChatCompletionProvider } from "./openai-chat-completion.js";
 import type { ProviderConfig } from "./base-provider.js";
 import type { AISessionManager } from "../session/ai-session-manager.js";
 import type { AIProviderType } from "../session/session-types.js";
+import { MEMORY_PROVIDER_PRESET_DEFAULTS } from "../memory-provider-presets.js";
 
 /** OrcaRouter OpenAI-compatible endpoint used when `memoryApiUrl` is omitted. */
-export const ORCAROUTER_API_URL = "https://api.orcarouter.ai/v1";
+export const ORCAROUTER_API_URL = MEMORY_PROVIDER_PRESET_DEFAULTS.orcarouter.apiUrl;
 
 /**
  * Default model when `memoryModel` is omitted. `orcarouter/auto` is the
  * gateway's routing alias — it picks a capable upstream model per request
  * (including structured / tool-call output, which auto-capture relies on).
  */
-export const ORCAROUTER_DEFAULT_MODEL = "orcarouter/auto";
+export const ORCAROUTER_DEFAULT_MODEL = MEMORY_PROVIDER_PRESET_DEFAULTS.orcarouter.model;
 
 /**
  * OrcaRouter provider.

@@ -2,15 +2,18 @@ import { OpenAIChatCompletionProvider } from "./openai-chat-completion.js";
 import type { ProviderConfig } from "./base-provider.js";
 import type { AISessionManager } from "../session/ai-session-manager.js";
 import type { AIProviderType } from "../session/session-types.js";
+import { MEMORY_PROVIDER_PRESET_DEFAULTS } from "../memory-provider-presets.js";
 
 /** Cheaper Inference OpenAI-compatible endpoint used when `memoryApiUrl` is omitted. */
-export const CHEAPER_INFERENCE_API_URL = "https://api.cheaperinference.com/v1";
+export const CHEAPER_INFERENCE_API_URL =
+  MEMORY_PROVIDER_PRESET_DEFAULTS["cheaper-inference"].apiUrl;
 
 /**
  * Default model when `memoryModel` is omitted. Cheaper Inference model IDs are
  * bare (e.g. `gpt-5.4-mini`, `claude-sonnet-5`).
  */
-export const CHEAPER_INFERENCE_DEFAULT_MODEL = "gpt-5.4-mini";
+export const CHEAPER_INFERENCE_DEFAULT_MODEL =
+  MEMORY_PROVIDER_PRESET_DEFAULTS["cheaper-inference"].model;
 
 /**
  * Cheaper Inference provider.

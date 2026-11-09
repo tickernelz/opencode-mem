@@ -4,6 +4,10 @@ import { homedir } from "node:os";
 import { stripJsoncComments } from "./services/jsonc.js";
 import { resolveSecretValue } from "./services/secret-resolver.js";
 import { isPlaceholderApiKey } from "./services/ai/api-key-placeholder.js";
+import {
+  isMemoryProviderPreset,
+  resolveMemoryProviderPresetDefaults,
+} from "./services/ai/memory-provider-presets.js";
 import { getDefaultInjectionMarkers } from "./services/injected-prompt-filter.js";
 
 const CONFIG_DIR = join(homedir(), ".config", "opencode");
@@ -1303,6 +1307,16 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
               : memoryProvider === "standardcompute"
                 ? process.env.STANDARDCOMPUTE_API_KEY
                 : undefined);
+  // Preset providers advertise optional memoryModel / memoryApiUrl in docs and
+  // factory code, but auto-capture / dreaming / profile learning gate on the
+  // resolved CONFIG fields. Fill preset defaults here so key-only configs work.
+  const presetDefaults = resolveMemoryProviderPresetDefaults(memoryProvider);
+  const memoryModel =
+    (typeof fileConfig.memoryModel === "string" ? fileConfig.memoryModel.trim() : "") ||
+    presetDefaults?.model;
+  const memoryApiUrl =
+    (typeof fileConfig.memoryApiUrl === "string" ? fileConfig.memoryApiUrl.trim() : "") ||
+    presetDefaults?.apiUrl;
   const embeddingModel = fileConfig.embeddingModel ?? DEFAULTS.embeddingModel;
   const embeddingPreset = getEmbeddingModelPreset(embeddingModel);
   const embeddingDimensions =
@@ -1397,8 +1411,8 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
       fileConfig.updateOnCaptureMaxCandidates
     ),
     memoryProvider,
-    memoryModel: fileConfig.memoryModel,
-    memoryApiUrl: fileConfig.memoryApiUrl,
+    memoryModel,
+    memoryApiUrl,
     memoryApiKey,
     memoryTemperature: fileConfig.memoryTemperature,
     forceToolChoice: fileConfig.forceToolChoice,
@@ -1411,8 +1425,8 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
       opencodeProvider: fileConfig.opencodeProvider,
       opencodeModel: fileConfig.opencodeModel,
       memoryProvider,
-      memoryModel: fileConfig.memoryModel,
-      memoryApiUrl: fileConfig.memoryApiUrl,
+      memoryModel,
+      memoryApiUrl,
       memoryApiKey,
     }),
     aiSessionRetentionDays: fileConfig.aiSessionRetentionDays ?? DEFAULTS.aiSessionRetentionDays,
@@ -1580,17 +1594,10 @@ export function getAutoCaptureProviderStatus(
   const hasMemoryApiKey = hasValue(config.memoryApiKey);
   const hasPlaceholderMemoryApiKey = isPlaceholderApiKey(config.memoryApiKey);
 
-  // Preset providers fill endpoint/model themselves, so only an API key is
-  // required for the manual fallback path.
-  if (
-    config.memoryProvider === "orcarouter" ||
-    config.memoryProvider === "atlas-cloud" ||
-    config.memoryProvider === "cheaper-inference" ||
-    config.memoryProvider === "api-route" ||
-    config.memoryProvider === "runcrate" ||
-    config.memoryProvider === "cloudgpu" ||
-    config.memoryProvider === "standardcompute"
-  ) {
+  // Preset providers fill endpoint/model themselves (and buildConfig resolves
+  // those defaults into CONFIG), so only an API key is required for the manual
+  // fallback path.
+  if (isMemoryProviderPreset(config.memoryProvider)) {
     if (!hasMemoryApiKey) issues.push("memoryApiKey is not configured");
     if (hasPlaceholderMemoryApiKey) issues.push("memoryApiKey contains a placeholder value");
     if (hasMemoryApiKey && !hasPlaceholderMemoryApiKey) {

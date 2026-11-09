@@ -2,15 +2,16 @@ import { OpenAIChatCompletionProvider } from "./openai-chat-completion.js";
 import type { ProviderConfig } from "./base-provider.js";
 import type { AISessionManager } from "../session/ai-session-manager.js";
 import type { AIProviderType } from "../session/session-types.js";
+import { MEMORY_PROVIDER_PRESET_DEFAULTS } from "../memory-provider-presets.js";
 
 /** Atlas Cloud OpenAI-compatible endpoint used when `memoryApiUrl` is omitted. */
-export const ATLAS_CLOUD_API_URL = "https://api.atlascloud.ai/v1";
+export const ATLAS_CLOUD_API_URL = MEMORY_PROVIDER_PRESET_DEFAULTS["atlas-cloud"].apiUrl;
 
 /**
  * Default model when `memoryModel` is omitted. Atlas Cloud model IDs are
  * typically namespaced (e.g. `deepseek-ai/deepseek-v4-pro`).
  */
-export const ATLAS_CLOUD_DEFAULT_MODEL = "deepseek-ai/deepseek-v4-pro";
+export const ATLAS_CLOUD_DEFAULT_MODEL = MEMORY_PROVIDER_PRESET_DEFAULTS["atlas-cloud"].model;
 
 /**
  * Atlas Cloud provider.

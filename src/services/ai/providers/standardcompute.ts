@@ -2,9 +2,10 @@ import { OpenAIChatCompletionProvider } from "./openai-chat-completion.js";
 import type { ProviderConfig } from "./base-provider.js";
 import type { AISessionManager } from "../session/ai-session-manager.js";
 import type { AIProviderType } from "../session/session-types.js";
+import { MEMORY_PROVIDER_PRESET_DEFAULTS } from "../memory-provider-presets.js";
 
 /** Standard Compute OpenAI-compatible endpoint used when `memoryApiUrl` is omitted. */
-export const STANDARDCOMPUTE_API_URL = "https://api.stdcmpt.com/v1";
+export const STANDARDCOMPUTE_API_URL = MEMORY_PROVIDER_PRESET_DEFAULTS.standardcompute.apiUrl;
 
 /**
  * Default model when `memoryModel` is omitted. Standard Compute model IDs are listed
@@ -12,7 +13,7 @@ export const STANDARDCOMPUTE_API_URL = "https://api.stdcmpt.com/v1";
  * `StandardCompute` id picks the cheapest capable model for each request;
  * `vendor/model` ids pin one model.
  */
-export const STANDARDCOMPUTE_DEFAULT_MODEL = "StandardCompute";
+export const STANDARDCOMPUTE_DEFAULT_MODEL = MEMORY_PROVIDER_PRESET_DEFAULTS.standardcompute.model;
 
 /**
  * Standard Compute provider.

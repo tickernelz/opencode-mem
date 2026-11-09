@@ -1,5 +1,6 @@
 import type { ProviderConfig } from "./providers/base-provider.js";
 import { isPlaceholderApiKey } from "./api-key-placeholder.js";
+import { isMemoryProviderPreset } from "./memory-provider-presets.js";
 
 interface MemoryProviderRuntimeConfig {
   memoryProvider?: string;
@@ -27,16 +28,10 @@ export function buildMemoryProviderConfig(
   const memoryApiKey = config.memoryApiKey;
   const issues: string[] = [];
 
-  // Preset providers fill endpoint/model themselves, so memoryModel /
-  // memoryApiUrl are optional there. An API key is always required.
-  const isPresetProvider =
-    config.memoryProvider === "orcarouter" ||
-    config.memoryProvider === "atlas-cloud" ||
-    config.memoryProvider === "cheaper-inference" ||
-    config.memoryProvider === "api-route" ||
-    config.memoryProvider === "runcrate" ||
-    config.memoryProvider === "cloudgpu" ||
-    config.memoryProvider === "standardcompute";
+  // Preset providers fill endpoint/model themselves (and config resolution
+  // materializes those defaults into CONFIG), so memoryModel / memoryApiUrl
+  // are optional there. An API key is always required.
+  const isPresetProvider = isMemoryProviderPreset(config.memoryProvider);
 
   if (!memoryModel && !isPresetProvider) issues.push("missing memoryModel");
   if (!memoryApiUrl && !isPresetProvider) issues.push("missing memoryApiUrl");

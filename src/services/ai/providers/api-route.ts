@@ -2,15 +2,16 @@ import { OpenAIChatCompletionProvider } from "./openai-chat-completion.js";
 import type { ProviderConfig } from "./base-provider.js";
 import type { AISessionManager } from "../session/ai-session-manager.js";
 import type { AIProviderType } from "../session/session-types.js";
+import { MEMORY_PROVIDER_PRESET_DEFAULTS } from "../memory-provider-presets.js";
 
 /** API Route OpenAI-compatible endpoint used when `memoryApiUrl` is omitted. */
-export const API_ROUTE_API_URL = "https://global.api-route.com/v1";
+export const API_ROUTE_API_URL = MEMORY_PROVIDER_PRESET_DEFAULTS["api-route"].apiUrl;
 
 /**
  * Default model when `memoryModel` is omitted. API Route model IDs are
  * sent unchanged (e.g. `gpt-6.1-sol`).
  */
-export const API_ROUTE_DEFAULT_MODEL = "gpt-6.1-sol";
+export const API_ROUTE_DEFAULT_MODEL = MEMORY_PROVIDER_PRESET_DEFAULTS["api-route"].model;
 
 /**
  * API Route provider.
