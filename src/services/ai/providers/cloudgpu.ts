@@ -2,15 +2,16 @@ import { OpenAIChatCompletionProvider } from "./openai-chat-completion.js";
 import type { ProviderConfig } from "./base-provider.js";
 import type { AISessionManager } from "../session/ai-session-manager.js";
 import type { AIProviderType } from "../session/session-types.js";
+import { MEMORY_PROVIDER_PRESET_DEFAULTS } from "../memory-provider-presets.js";
 
 /** CloudGPU OpenAI-compatible endpoint used when `memoryApiUrl` is omitted. */
-export const CLOUDGPU_API_URL = "https://cloudgpu.app/v1";
+export const CLOUDGPU_API_URL = MEMORY_PROVIDER_PRESET_DEFAULTS.cloudgpu.apiUrl;
 
 /**
  * Default model when `memoryModel` is omitted. CloudGPU model IDs are listed
  * at `https://cloudgpu.app/v1/models` and are sent unchanged (e.g. `deepseek-v4.1-flash`).
  */
-export const CLOUDGPU_DEFAULT_MODEL = "deepseek-v4.1-flash";
+export const CLOUDGPU_DEFAULT_MODEL = MEMORY_PROVIDER_PRESET_DEFAULTS.cloudgpu.model;
 
 /**
  * CloudGPU provider.

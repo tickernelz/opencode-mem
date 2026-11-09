@@ -9,6 +9,7 @@ import {
   outerStructuredOutputTimeoutMs,
   OPENCODE_TIMEOUT_MS_DEFAULT,
 } from "../src/config.js";
+import { MEMORY_PROVIDER_PRESET_DEFAULTS } from "../src/services/ai/memory-provider-presets.js";
 
 describe("project-scoped config resolution", () => {
   let readSpy: ReturnType<typeof spyOn>;
@@ -351,8 +352,8 @@ describe("project-scoped config resolution", () => {
       initConfig("/my/project");
 
       expect(CONFIG.memoryProvider).toBe("atlas-cloud");
-      expect(CONFIG.memoryModel).toBeUndefined();
-      expect(CONFIG.memoryApiUrl).toBeUndefined();
+      expect(CONFIG.memoryModel).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS["atlas-cloud"].model);
+      expect(CONFIG.memoryApiUrl).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS["atlas-cloud"].apiUrl);
       expect(CONFIG.memoryApiKey).toBe("atlas-test-key");
       expect(CONFIG.autoCaptureProviderStatus).toEqual({
         ready: true,
@@ -405,8 +406,8 @@ describe("project-scoped config resolution", () => {
       initConfig("/my/project");
 
       expect(CONFIG.memoryProvider).toBe("cheaper-inference");
-      expect(CONFIG.memoryModel).toBeUndefined();
-      expect(CONFIG.memoryApiUrl).toBeUndefined();
+      expect(CONFIG.memoryModel).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS["cheaper-inference"].model);
+      expect(CONFIG.memoryApiUrl).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS["cheaper-inference"].apiUrl);
       expect(CONFIG.memoryApiKey).toBe("ci-test-key");
       expect(CONFIG.autoCaptureProviderStatus).toEqual({
         ready: true,
@@ -459,8 +460,8 @@ describe("project-scoped config resolution", () => {
       initConfig("/my/project");
 
       expect(CONFIG.memoryProvider).toBe("api-route");
-      expect(CONFIG.memoryModel).toBeUndefined();
-      expect(CONFIG.memoryApiUrl).toBeUndefined();
+      expect(CONFIG.memoryModel).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS["api-route"].model);
+      expect(CONFIG.memoryApiUrl).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS["api-route"].apiUrl);
       expect(CONFIG.memoryApiKey).toBe("route-test-key");
       expect(CONFIG.autoCaptureProviderStatus).toEqual({
         ready: true,
@@ -513,8 +514,8 @@ describe("project-scoped config resolution", () => {
       initConfig("/my/project");
 
       expect(CONFIG.memoryProvider).toBe("runcrate");
-      expect(CONFIG.memoryModel).toBeUndefined();
-      expect(CONFIG.memoryApiUrl).toBeUndefined();
+      expect(CONFIG.memoryModel).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.runcrate.model);
+      expect(CONFIG.memoryApiUrl).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.runcrate.apiUrl);
       expect(CONFIG.memoryApiKey).toBe("runcrate-test-key");
       expect(CONFIG.autoCaptureProviderStatus).toEqual({
         ready: true,
@@ -566,8 +567,8 @@ describe("project-scoped config resolution", () => {
       initConfig("/my/project");
 
       expect(CONFIG.memoryProvider).toBe("cloudgpu");
-      expect(CONFIG.memoryModel).toBeUndefined();
-      expect(CONFIG.memoryApiUrl).toBeUndefined();
+      expect(CONFIG.memoryModel).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.cloudgpu.model);
+      expect(CONFIG.memoryApiUrl).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.cloudgpu.apiUrl);
       expect(CONFIG.memoryApiKey).toBe("cloudgpu-test-key");
       expect(CONFIG.autoCaptureProviderStatus).toEqual({
         ready: true,
@@ -589,6 +590,66 @@ describe("project-scoped config resolution", () => {
       const path = normalizePath(p);
       if (path.includes(".opencode/opencode-mem")) {
         return JSON.stringify({ memoryProvider: "cloudgpu" }) as any;
+      }
+      return JSON.stringify({
+        memoryProvider: "openai-chat",
+        memoryModel: "global-model",
+        memoryApiUrl: "https://llm.example.com/v1",
+        memoryApiKey: "global-secret",
+      }) as any;
+    });
+
+    expect(() => initConfig("/my/project")).toThrow(
+      /Project config cannot set remote provider fields: memoryProvider/
+    );
+  });
+
+  it("resolves Standard Compute API key from STANDARDCOMPUTE_API_KEY and marks manual ready", () => {
+    const originalApiKey = process.env.STANDARDCOMPUTE_API_KEY;
+    process.env.STANDARDCOMPUTE_API_KEY = "standardcompute-test-key";
+
+    try {
+      existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+      readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
+        const path = normalizePath(p);
+        if (path.includes(".opencode/opencode-mem")) {
+          return JSON.stringify({ autoCaptureEnabled: true }) as any;
+        }
+        return JSON.stringify({ memoryProvider: "standardcompute" }) as any;
+      });
+
+      initConfig("/my/project");
+
+      expect(CONFIG.memoryProvider).toBe("standardcompute");
+      expect(CONFIG.memoryModel).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.standardcompute.model);
+      expect(CONFIG.memoryApiUrl).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.standardcompute.apiUrl);
+      expect(CONFIG.memoryApiKey).toBe("standardcompute-test-key");
+      // Key-only presets must materialize endpoint/model so auto-capture,
+      // dreaming, and profile learning (which gate on CONFIG fields) can run.
+      expect(Boolean(CONFIG.memoryModel && CONFIG.memoryApiUrl)).toBe(true);
+      expect(CONFIG.autoCaptureProviderStatus).toEqual({
+        ready: true,
+        mode: "manual",
+        issues: [],
+      });
+      const providerConfig = buildMemoryProviderConfig(CONFIG);
+      expect(providerConfig.model).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.standardcompute.model);
+      expect(providerConfig.apiUrl).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.standardcompute.apiUrl);
+    } finally {
+      if (originalApiKey === undefined) {
+        delete process.env.STANDARDCOMPUTE_API_KEY;
+      } else {
+        process.env.STANDARDCOMPUTE_API_KEY = originalApiKey;
+      }
+    }
+  });
+
+  it("refuses a project config that switches memoryProvider to Standard Compute", () => {
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+    readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
+      const path = normalizePath(p);
+      if (path.includes(".opencode/opencode-mem")) {
+        return JSON.stringify({ memoryProvider: "standardcompute" }) as any;
       }
       return JSON.stringify({
         memoryProvider: "openai-chat",

@@ -607,6 +607,12 @@ memory({ mode: "import", inputPath: "./memories.json" });
   "memoryApiKey": "env://CLOUDGPU_API_KEY",
   ```
   选择此提供商时，自动捕获 / 画像提示、模型响应与相关对话上下文会传输到 `https://cloudgpu.app`。
+- `standardcompute`：面向 [Standard Compute](https://standardcompute.com) 的 OpenAI 兼容 Chat Completions 预设。`memoryApiUrl` 与 `memoryModel` 可选 — 它们默认为 `https://api.stdcmpt.com/v1` 与 `StandardCompute`。若省略 `memoryApiKey`，则使用环境中的 `STANDARDCOMPUTE_API_KEY`（在 https://standardcompute.com/dashboard 创建密钥；API 文档：https://docs.standardcompute.com）。示例：
+  ```jsonc
+  "memoryProvider": "standardcompute",
+  "memoryApiKey": "env://STANDARDCOMPUTE_API_KEY",
+  ```
+  选择此提供商时，自动捕获 / 画像提示、模型响应与相关对话上下文会传输到 `https://api.stdcmpt.com`。
 
 故障排除：
 
@@ -619,7 +625,7 @@ memory({ mode: "import", inputPath: "./memories.json" });
 - 若自动捕获报告提供商未连接，请用 `opencode providers list` 确认提供商名称，并先在 opencode 中配置该提供商。
 - 若代理或自定义提供商返回纯文本而非结构化/工具输出，请选择另一模型/提供商，或使用上方手动提供商模式之一。
 - 对于拒绝 `temperature` 的模型，在使用手动 API 配置时添加 `"memoryTemperature": false`。
-- 对于拒绝强制工具调用（`tool_choice: "required"`，例如某些思考模式）的模型，在使用 `openai-chat` / `orcarouter` / `atlas-cloud` / `cheaper-inference` / `api-route` / `runcrate` / `cloudgpu` 时添加 `"forceToolChoice": false`。
+- 对于拒绝强制工具调用（`tool_choice: "required"`，例如某些思考模式）的模型，在使用 `openai-chat` / `orcarouter` / `atlas-cloud` / `cheaper-inference` / `api-route` / `runcrate` / `cloudgpu` / `standardcompute` 时添加 `"forceToolChoice": false`。
 - 对于 `opencodeProvider` / `opencodeModel`（例如 DeepSeek V4 thinking），OpenCode 仍会为结构化输出发送强制的 `tool_choice`。opencode-mem 在内部 `opencode-mem-structured` 代理上禁用思考（并在变体合并后在 `chat.params` 中重新应用），以便自动捕获与画像学习可以完成。你的交互式聊天代理不变。若捕获仍因 thinking/`tool_choice` 错误失败，请为 `opencodeModel` 选择非思考模型，或配置完整的手动回退（`memoryModel` + `memoryApiUrl`）。
 - **`opencode-claude-auth` / Claude Code：** 自动捕获使用带有你已认证 `anthropic` 提供商的 OpenCode。强制的 `format: json_schema` 常与 Claude-auth 循环，因此 opencode-mem 对 `opencodeProvider: "anthropic"` 使用保留认证的 **text-JSON** 路径（无强制 `StructuredOutput` 工具；用 Zod 解析回复）。步骤看门狗仍会在 2 步后中止失控的内部会话。若捕获仍失败，请配置完整的手动 Anthropic API 密钥回退（`memoryProvider: "anthropic"` + `memoryModel` + `memoryApiUrl` + `memoryApiKey`）— Claude Pro/Max OAuth 无法在 OpenCode 外重用。
 - **不支持的平台：** 不支持 Intel Mac（`darwin/x64`） — `@tursodatabase/database` 与固定版本的 `onnxruntime-node` 发行版（固定 `1.31.1`）不提供 x64 原生绑定。请使用 Apple Silicon、Linux 或 Windows，或通过 `embeddingApiUrl` + `embeddingApiKey` 使用远程嵌入端点。不支持 MLX。
