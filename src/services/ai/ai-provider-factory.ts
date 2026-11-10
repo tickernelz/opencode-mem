@@ -11,6 +11,7 @@ import { OrcaRouterProvider } from "./providers/orcarouter.js";
 import { RuncrateProvider } from "./providers/runcrate.js";
 import { CloudGPUProvider } from "./providers/cloudgpu.js";
 import { StandardComputeProvider } from "./providers/standardcompute.js";
+import { UberLLMProvider } from "./providers/uberllm.js";
 import { aiSessionManager } from "./session/ai-session-manager.js";
 import type { AIProviderType } from "./session/session-types.js";
 
@@ -31,6 +32,9 @@ export class AIProviderFactory {
 
       case "standardcompute":
         return new StandardComputeProvider(config, aiSessionManager);
+
+      case "uberllm":
+        return new UberLLMProvider(config, aiSessionManager);
 
       case "cheaper-inference":
         return new CheaperInferenceProvider(config, aiSessionManager);
@@ -72,6 +76,7 @@ export class AIProviderFactory {
       "runcrate",
       "cloudgpu",
       "standardcompute",
+      "uberllm",
     ];
   }
 
