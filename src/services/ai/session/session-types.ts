@@ -10,7 +10,8 @@ export type AIProviderType =
   | "orcarouter"
   | "runcrate"
   | "cloudgpu"
-  | "standardcompute";
+  | "standardcompute"
+  | "uberllm";
 
 export interface AIMessage {
   id?: number;

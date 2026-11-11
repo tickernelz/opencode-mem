@@ -117,7 +117,8 @@ interface OpenCodeMemConfig {
     | "orcarouter"
     | "runcrate"
     | "cloudgpu"
-    | "standardcompute";
+    | "standardcompute"
+    | "uberllm";
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
@@ -331,7 +332,8 @@ const DEFAULTS: Required<
     | "orcarouter"
     | "runcrate"
     | "cloudgpu"
-    | "standardcompute";
+    | "standardcompute"
+    | "uberllm";
   memoryTemperature?: number | false;
   forceToolChoice?: boolean;
   memoryExtraParams?: Record<string, unknown>;
@@ -657,7 +659,7 @@ const CONFIG_TEMPLATE = `{
   // "updateOnCaptureSimilarityThreshold": 0.75,
   // "updateOnCaptureMaxCandidates": 5,
   
-  // Provider type: "api-route" | "atlas-cloud" | "cheaper-inference" | "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "orcarouter" | "runcrate" | "cloudgpu" | "standardcompute"
+  // Provider type: "api-route" | "atlas-cloud" | "cheaper-inference" | "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "orcarouter" | "runcrate" | "cloudgpu" | "standardcompute" | "uberllm"
   // Note: "openai-chat" is a generic OpenAI API-compatible mode.
   // Any service that follows the OpenAI Chat Completions API can use it via custom "memoryApiUrl".
   "memoryProvider": "openai-chat",
@@ -777,6 +779,16 @@ const CONFIG_TEMPLATE = `{
   //   // conversation context are sent to api.stdcmpt.com.
   //   // "memoryModel": "StandardCompute"
 
+  // UberLLM (OpenAI-compatible Chat Completions preset, with session support):
+  //   "memoryProvider": "uberllm"
+  //   "memoryApiKey": "env://UBERLLM_API_KEY"
+  //   // memoryApiUrl and memoryModel are optional — they default to
+  //   // https://api.uberllm.dev/v1 and "deepseek/deepseek-v4-flash".
+  //   // Create a key at https://uberllm.dev/signup (docs: https://uberllm.dev/docs/quickstart).
+  //   // When selected, auto-capture/profile prompts, responses, and relevant
+  //   // conversation context are sent to api.uberllm.dev.
+  //   // "memoryModel": "deepseek/deepseek-v4-flash"
+
   // Groq (OpenAI-compatible, use openai-chat provider):
   //   "memoryProvider": "openai-chat"
   //   "memoryModel": "llama-3.3-70b-versatile"
@@ -812,7 +824,7 @@ const CONFIG_TEMPLATE = `{
   // Set to false and add "memoryTemperature": false in config when using such models
   "memoryTemperature": 0.3,
 
-  // Force tool calls on openai-chat / orcarouter / atlas-cloud / cheaper-inference / api-route / runcrate / cloudgpu / standardcompute (tool_choice: "required"). Default true.
+  // Force tool calls on openai-chat / orcarouter / atlas-cloud / cheaper-inference / api-route / runcrate / cloudgpu / standardcompute / uberllm (tool_choice: "required"). Default true.
   // Some thinking/reasoning models reject forced tool choice — set false to fall back to "auto":
   // "forceToolChoice": false,
 
@@ -1291,7 +1303,8 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     | "orcarouter"
     | "runcrate"
     | "cloudgpu"
-    | "standardcompute";
+    | "standardcompute"
+    | "uberllm";
   const memoryApiKey =
     resolveSecretValue(fileConfig.memoryApiKey) ??
     (memoryProvider === "atlas-cloud"
@@ -1306,7 +1319,9 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
               ? process.env.CLOUDGPU_API_KEY
               : memoryProvider === "standardcompute"
                 ? process.env.STANDARDCOMPUTE_API_KEY
-                : undefined);
+                : memoryProvider === "uberllm"
+                  ? process.env.UBERLLM_API_KEY
+                  : undefined);
   // Preset providers advertise optional memoryModel / memoryApiUrl in docs and
   // factory code, but auto-capture / dreaming / profile learning gate on the
   // resolved CONFIG fields. Fill preset defaults here so key-only configs work.
