@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { extractTextFromPromptResult } from "../src/services/user-profile/ai-cleanup.js";
@@ -74,6 +74,8 @@ function runCleanupScenario(opts: {
   promptThrows?: boolean;
   clientAvailable?: boolean;
   withExternalApi?: boolean;
+  opencodeModel?: string;
+  recentOpencodeModel?: { providerID: string; modelID: string };
 }) {
   const dir = mkdtempSync(join(tmpdir(), "opencode-mem-ai-cleanup-"));
   tempDirs.push(dir);
@@ -81,6 +83,17 @@ function runCleanupScenario(opts: {
   const promptThrows = opts.promptThrows ?? false;
   const clientAvailable = opts.clientAvailable ?? true;
   const withExternalApi = opts.withExternalApi ?? false;
+
+  // Isolated OpenCode state: `opencodeModel: "inherit"` reads the recent model
+  // list from there, so a developer's own model.json cannot leak into a test.
+  const stateDir = join(dir, "state");
+  if (opts.recentOpencodeModel) {
+    mkdirSync(join(stateDir, "opencode"), { recursive: true });
+    writeFileSync(
+      join(stateDir, "opencode", "model.json"),
+      JSON.stringify({ recent: [opts.recentOpencodeModel] })
+    );
+  }
 
   const script = `
 import { mock } from "bun:test";
@@ -104,7 +117,7 @@ const cleanupJson = JSON.stringify({
 mock.module(${JSON.stringify(configUrl)}, () => ({
   CONFIG: {
     opencodeProvider: "openai",
-    opencodeModel: "gpt-test",
+    opencodeModel: ${JSON.stringify(opts.opencodeModel ?? "gpt-test")},
     memoryModel: ${withExternalApi ? '"gpt-ext"' : "undefined"},
     memoryApiUrl: ${withExternalApi ? '"http://example.test/v1"' : "undefined"},
     memoryApiKey: "test-key",
@@ -203,6 +216,7 @@ console.log(
     cmd: [process.execPath, scriptPath],
     stdout: "pipe",
     stderr: "pipe",
+    env: { ...process.env, XDG_STATE_HOME: stateDir },
   });
 
   const stdout = Buffer.from(spawned.stdout).toString("utf8").trim();
@@ -264,5 +278,31 @@ describe("AI cleanup opencode provider path (#177)", () => {
     });
     expect(result.parsed?.externalRequestBody?.stream).toBeUndefined();
     expect(result.parsed?.externalRequestBody?.messages).toHaveLength(2);
+  });
+
+  it('resolves opencodeModel "inherit" to a concrete model before prompting', () => {
+    // Differs from the configured provider, so the resolved pair is what gets sent.
+    const result = runCleanupScenario({
+      opencodeModel: "inherit",
+      recentOpencodeModel: { providerID: "test-provider", modelID: "test-model" },
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.parsed?.errorMessage).toBeNull();
+    expect(result.parsed?.promptCalls[0]?.model).toEqual({
+      providerID: "test-provider",
+      modelID: "test-model",
+    });
+    expect(result.parsed?.kept).toEqual(["Prefer concise answers"]);
+  });
+
+  it('reports an explicit error when "inherit" cannot be resolved', () => {
+    const result = runCleanupScenario({ opencodeModel: "inherit" });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.parsed?.errorMessage).toContain("opencodeModel is 'inherit'");
+    expect(result.parsed?.errorMessage).toContain("no session model was recorded");
+    // Resolution happens before session.create: nothing is prompted.
+    expect(result.parsed?.promptCalls).toHaveLength(0);
   });
 });
