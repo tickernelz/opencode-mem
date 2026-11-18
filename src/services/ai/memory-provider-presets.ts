@@ -13,7 +13,8 @@ export type MemoryProviderPresetId =
   | "api-route"
   | "runcrate"
   | "cloudgpu"
-  | "standardcompute";
+  | "standardcompute"
+  | "uberllm";
 
 export interface MemoryProviderPresetDefaults {
   apiUrl: string;
@@ -52,6 +53,10 @@ export const MEMORY_PROVIDER_PRESET_DEFAULTS: Record<
     apiUrl: "https://api.stdcmpt.com/v1",
     model: "StandardCompute",
   },
+  uberllm: {
+    apiUrl: "https://api.uberllm.dev/v1",
+    model: "deepseek/deepseek-v4-flash",
+  },
 };
 
 export function isMemoryProviderPreset(
@@ -64,7 +69,8 @@ export function isMemoryProviderPreset(
     provider === "api-route" ||
     provider === "runcrate" ||
     provider === "cloudgpu" ||
-    provider === "standardcompute"
+    provider === "standardcompute" ||
+    provider === "uberllm"
   );
 }
 

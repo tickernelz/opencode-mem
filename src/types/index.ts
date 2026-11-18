@@ -29,4 +29,5 @@ export type AIProviderType =
   | "orcarouter"
   | "runcrate"
   | "cloudgpu"
-  | "standardcompute";
+  | "standardcompute"
+  | "uberllm";

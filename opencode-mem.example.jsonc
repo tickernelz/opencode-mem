@@ -221,7 +221,7 @@
   // Faster opencode failover: also lower "opencodeTimeoutMs" (default 90000).
   // "autoCaptureProviderOrder": "external-first",
 
-  // Provider type: "api-route" | "atlas-cloud" | "cheaper-inference" | "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "orcarouter" | "runcrate" | "cloudgpu" | "standardcompute"
+  // Provider type: "api-route" | "atlas-cloud" | "cheaper-inference" | "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "orcarouter" | "runcrate" | "cloudgpu" | "standardcompute" | "uberllm"
   // Note: "openai-chat" is a generic OpenAI API-compatible mode.
   // Any service that follows the OpenAI Chat Completions API can use it via custom "memoryApiUrl".
   "memoryProvider": "openai-chat",
@@ -341,6 +341,16 @@
   //   // conversation context are sent to api.stdcmpt.com.
   //   // "memoryModel": "StandardCompute"
 
+  // UberLLM (OpenAI-compatible Chat Completions preset, with session support):
+  //   "memoryProvider": "uberllm"
+  //   "memoryApiKey": "env://UBERLLM_API_KEY"
+  //   // memoryApiUrl and memoryModel are optional — they default to
+  //   // https://api.uberllm.dev/v1 and "deepseek/deepseek-v4-flash".
+  //   // Create a key at https://uberllm.dev/signup (docs: https://uberllm.dev/docs/quickstart).
+  //   // When selected, auto-capture/profile prompts, responses, and relevant
+  //   // conversation context are sent to api.uberllm.dev.
+  //   // "memoryModel": "deepseek/deepseek-v4-flash"
+
   // Groq (OpenAI-compatible, use openai-chat provider):
   //   "memoryProvider": "openai-chat"
   //   "memoryModel": "llama-3.3-70b-versatile"
@@ -369,7 +379,7 @@
   // Set to false and add "memoryTemperature": false in config when using such models
   "memoryTemperature": 0.3,
 
-  // Force tool calls on openai-chat / orcarouter / atlas-cloud / cheaper-inference / api-route / runcrate / cloudgpu / standardcompute (tool_choice: "required"). Default true.
+  // Force tool calls on openai-chat / orcarouter / atlas-cloud / cheaper-inference / api-route / runcrate / cloudgpu / standardcompute / uberllm (tool_choice: "required"). Default true.
   // Some thinking/reasoning models reject forced tool choice — set false to fall back to "auto":
   // "forceToolChoice": false,
 

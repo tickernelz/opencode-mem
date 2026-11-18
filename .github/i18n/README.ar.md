@@ -638,6 +638,12 @@ memory({ mode: "import", inputPath: "./memories.json" });
   "memoryApiKey": "env://STANDARDCOMPUTE_API_KEY",
   ```
   عند اختيار هذا المزود، تُرسل مطالبات الالتقاط التلقائي / الملف، واستجابات النموذج، وسياق المحادثة ذي الصلة إلى `https://api.stdcmpt.com`.
+- `uberllm`: إعداد مسبق لـ OpenAI-compatible Chat Completions لـ [UberLLM](https://uberllm.dev). `memoryApiUrl` و`memoryModel` اختياريان — الافتراضي `https://api.uberllm.dev/v1` و`deepseek/deepseek-v4-flash`. إذا حُذف `memoryApiKey`، يُستخدم `UBERLLM_API_KEY` من البيئة (أنشئ مفتاحًا من https://uberllm.dev/signup؛ توثيق API: https://uberllm.dev/docs/quickstart). مثال:
+  ```jsonc
+  "memoryProvider": "uberllm",
+  "memoryApiKey": "env://UBERLLM_API_KEY",
+  ```
+  عند اختيار هذا المزود، تُرسل مطالبات الالتقاط التلقائي / الملف، واستجابات النموذج، وسياق المحادثة ذي الصلة إلى `https://api.uberllm.dev`.
 
 استكشاف الأخطاء:
 
@@ -681,7 +687,7 @@ memory({ mode: "import", inputPath: "./memories.json" });
 - إذا أبلغ الالتقاط التلقائي أن مزودًا غير متصل، أكّد اسم المزود بـ `opencode providers list` وأعد ذلك المزود في opencode أولًا.
 - إذا أعاد وكيل أو مزود مخصص نصًا عاديًا بدل مخرجات منظمة/أدوات، اختر نموذجًا/مزودًا آخر أو استخدم أحد أوضاع المزود اليدوية أعلاه.
 - للنماذج التي ترفض `temperature`، أضف `"memoryTemperature": false` عند استخدام إعداد API اليدوي.
-- للنماذج التي ترفض استدعاءات الأدوات المفروضة (`tool_choice: "required"`، مثل بعض أوضاع التفكير)، أضف `"forceToolChoice": false` عند استخدام `openai-chat` / `orcarouter` / `atlas-cloud` / `cheaper-inference` / `api-route` / `runcrate` / `cloudgpu` / `standardcompute`.
+- للنماذج التي ترفض استدعاءات الأدوات المفروضة (`tool_choice: "required"`، مثل بعض أوضاع التفكير)، أضف `"forceToolChoice": false` عند استخدام `openai-chat` / `orcarouter` / `atlas-cloud` / `cheaper-inference` / `api-route` / `runcrate` / `cloudgpu` / `standardcompute` / `uberllm`.
 - لـ `opencodeProvider` / `opencodeModel` (مثل DeepSeek V4 thinking)، ما زال OpenCode يرسل `tool_choice` مفروضًا للمخرجات المنظمة. يعطّل opencode-mem التفكير على الوكيل الداخلي `opencode-mem-structured` (ويعيده في `chat.params` بعد دمج المتغير) حتى يكتمل الالتقاط التلقائي وتعلّم الملف. وكيل الدردشة التفاعلي لديك دون تغيير. إذا فشل الالتقاط ما زال بخطأ تفكير/`tool_choice`، اختر نموذجًا غير تفكير لـ `opencodeModel` أو أعد رجوعًا يدويًا كاملًا (`memoryModel` + `memoryApiUrl`).
 - **`opencode-claude-auth` / Claude Code:** يستخدم الالتقاط التلقائي OpenCode مع مزودك `anthropic` المصادق. غالبًا ما يتكرر `format: json_schema` المفروض مع Claude-auth، لذا يستخدم opencode-mem مسار **نص-JSON** يحافظ على المصادقة لـ `opencodeProvider: "anthropic"` (بدون أدوات `StructuredOutput` مفروضة؛ تُحلَّل الرد بـ Zod). ما زال مراقب الخطوات يجهض الجلسات الداخلية الجامحة بعد خطوتين. إذا فشل الالتقاط ما زال، أعد رجوع Anthropic بمفتاح API يدوي كامل (`memoryProvider: "anthropic"` + `memoryModel` + `memoryApiUrl` + `memoryApiKey`) — لا يمكن إعادة استخدام Claude Pro/Max OAuth خارج OpenCode.
 - **المنصات غير المدعومة:** Intel Mac (`darwin/x64`) غير مدعوم — `@tursodatabase/database` وإصدارات `onnxruntime-node` الثابتة (المثبّت `1.31.1`) لا توفّر ربطًا أصليًا لـ x64. استخدم Apple Silicon أو Linux أو Windows، أو نقطة نهاية تضمين بعيدة عبر `embeddingApiUrl` + `embeddingApiKey`. MLX غير مدعوم.
