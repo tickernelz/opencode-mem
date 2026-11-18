@@ -496,7 +496,9 @@ Le plugin émet des requêtes à sortie structurée vers l'API de session d'open
 
 Optionnellement, épinglez une variante de raisonnement du modèle avec `"opencodeVariant": "xhigh"` (p. ex. pour grok-4.7). Elle s'applique aux appels LLM internes du plugin (résumés d'auto-capture, apprentissage du profil, nettoyage du profil), y compris quand `opencodeModel` vaut `"inherit"`, pour que le travail d'arrière-plan puisse utiliser un niveau de raisonnement différent de la session interactive.
 
-Les modèles de raisonnement lents (ou les très gros prompts de profil) peuvent dépasser le budget de sortie structurée par défaut de 90 s. Définissez `"opencodeTimeoutMs"` (millisecondes) pour l'étendre pour les appels internes à sortie structurée (résumés d'auto-capture, apprentissage du profil) — p. ex. `"opencodeTimeoutMs": 180000` pour 3 minutes. Les valeurs sont bornées à 10000..600000 ; le défaut reste 90000. Les chaînes numériques sont converties. Le nettoyage du profil utilise un timeout séparé, plus long.
+Les modèles de raisonnement lents (ou les très gros prompts de profil) peuvent dépasser le budget de sortie structurée par défaut de 90 s. Définissez `"opencodeTimeoutMs"` (millisecondes) pour l'étendre pour les appels internes à sortie structurée (résumés d'auto-capture, apprentissage du profil) — p. ex. `"opencodeTimeoutMs": 180000` pour 3 minutes. Les valeurs sont bornées à 10000..600000 ; le défaut reste 90000. Les chaînes numériques sont converties.
+
+Les timeouts de nettoyage du profil sont séparés : le nettoyage API externe/manuel vaut 60 s par défaut via `"userProfileCleanupTimeoutMs"` (même borne 10000..600000 ; p. ex. `"userProfileCleanupTimeoutMs": 180000`). Le nettoyage via session OpenCode garde un budget fixe de 300 s. Le timeout d'inactivité HTTP Node est dérivé comme `max(userProfileCleanupTimeoutMs, 300000) + 30000`, et le fetch Web UI de `/ai-cleanup` autorise jusqu'à 630 s pour qu'aucune couche ne sous-coupe une échéance externe relevée.
 
 Fournisseurs pris en charge : tout fournisseur listé par `opencode providers list` (p. ex. `anthropic`, `openai`, `github-copilot`, `openrouter`, ...).
 

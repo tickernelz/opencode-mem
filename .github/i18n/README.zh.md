@@ -536,7 +536,9 @@ memory({ mode: "import", inputPath: "./memories.json" });
 
 可选地用 `"opencodeVariant": "xhigh"` 固定模型推理变体（例如用于 grok-4.7）。它会应用于插件的内部 LLM 调用（自动捕获摘要、画像学习、画像清理），包括当 `opencodeModel` 为 `"inherit"` 时，以便后台工作可以使用与交互式会话不同的推理级别。
 
-慢速推理模型（或非常大的画像提示）可能超过默认的 90 秒结构化输出预算。设置 `"opencodeTimeoutMs"`（毫秒）可为内部结构化输出调用（自动捕获摘要、画像学习）延长 — 例如 `"opencodeTimeoutMs": 180000` 表示 3 分钟。值钳制在 10000..600000；默认保持 90000。数字字符串会被强制转换。画像清理使用单独的、更长的超时。
+慢速推理模型（或非常大的画像提示）可能超过默认的 90 秒结构化输出预算。设置 `"opencodeTimeoutMs"`（毫秒）可为内部结构化输出调用（自动捕获摘要、画像学习）延长 — 例如 `"opencodeTimeoutMs": 180000` 表示 3 分钟。值钳制在 10000..600000；默认保持 90000。数字字符串会被强制转换。
+
+画像清理超时是单独的：外部/手动 API 清理默认 60 秒，通过 `"userProfileCleanupTimeoutMs"`（同样钳制在 10000..600000；例如 `"userProfileCleanupTimeoutMs": 180000`）。OpenCode 会话清理保持固定的 300 秒预算。Node HTTP 空闲超时按 `max(userProfileCleanupTimeoutMs, 300000) + 30000` 推导，Web UI 对 `/ai-cleanup` 的 fetch 最多允许 630 秒，这样任一层都不会低于提高后的外部截止时间。
 
 支持的提供商：`opencode providers list` 列出的任何提供商（例如 `anthropic`、`openai`、`github-copilot`、`openrouter` 等）。
 

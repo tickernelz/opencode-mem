@@ -2,10 +2,7 @@ import type { UserProfileData } from "./types.js";
 import { CONFIG } from "../../config.js";
 import { log } from "../logger.js";
 import { loadOpencodeProvider } from "../ai/opencode-provider-loader.js";
-import {
-  EXTERNAL_PROFILE_CLEANUP_TIMEOUT_MS,
-  OPENCODE_PROFILE_CLEANUP_TIMEOUT_MS,
-} from "../request-timeouts.js";
+import { OPENCODE_PROFILE_CLEANUP_TIMEOUT_MS } from "../request-timeouts.js";
 import { applySafeExtraParams } from "../ai/providers/base-provider.js";
 
 export interface AICleanupResult {
@@ -265,7 +262,7 @@ async function callViaExternalAPI(
       Authorization: `Bearer ${CONFIG.memoryApiKey}`,
     },
     body: JSON.stringify(requestBody),
-    signal: AbortSignal.timeout(EXTERNAL_PROFILE_CLEANUP_TIMEOUT_MS),
+    signal: AbortSignal.timeout(CONFIG.userProfileCleanupTimeoutMs),
   });
 
   log("AI cleanup: external API http done", { httpMs: Date.now() - t0, status: response.status });

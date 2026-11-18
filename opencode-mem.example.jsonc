@@ -482,6 +482,10 @@
   "userProfileAutoCleanupEnabled": true,
   // Number of analyzed user prompts between automatic AI cleanup runs
   "userProfileAutoCleanupInterval": 100,
+  // Abort deadline (ms) for external/manual-API profile cleanup (default 60000, clamped to 10000..600000).
+  // OpenCode-session cleanup keeps a separate longer timeout (300000). Node HTTP idle timeout
+  // is derived as max(this, opencode cleanup) + 30000 so the server never undercuts the provider call.
+  // "userProfileCleanupTimeoutMs": 180000,
 
   // Enable LLM validation of existing preferences against recent behavior.
   // When enabled, each analysis round checks if top-5 preferences still match recent prompts.

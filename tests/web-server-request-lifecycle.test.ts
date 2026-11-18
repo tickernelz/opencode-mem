@@ -5,6 +5,8 @@ import {
   EXTERNAL_PROFILE_CLEANUP_TIMEOUT_MS,
   NODE_HTTP_IDLE_TIMEOUT_MS,
   OPENCODE_PROFILE_CLEANUP_TIMEOUT_MS,
+  USER_PROFILE_CLEANUP_TIMEOUT_MS_MAX,
+  resolveNodeHttpIdleTimeoutMs,
 } from "../src/services/request-timeouts.js";
 
 class RequestStub extends EventEmitter {
@@ -66,5 +68,9 @@ describe("Node web request lifecycle", () => {
   it("keeps the HTTP timeout above every cleanup deadline", () => {
     expect(NODE_HTTP_IDLE_TIMEOUT_MS).toBeGreaterThan(EXTERNAL_PROFILE_CLEANUP_TIMEOUT_MS);
     expect(NODE_HTTP_IDLE_TIMEOUT_MS).toBeGreaterThan(OPENCODE_PROFILE_CLEANUP_TIMEOUT_MS);
+
+    const raised = resolveNodeHttpIdleTimeoutMs(USER_PROFILE_CLEANUP_TIMEOUT_MS_MAX);
+    expect(raised).toBeGreaterThan(USER_PROFILE_CLEANUP_TIMEOUT_MS_MAX);
+    expect(raised).toBeGreaterThan(OPENCODE_PROFILE_CLEANUP_TIMEOUT_MS);
   });
 });

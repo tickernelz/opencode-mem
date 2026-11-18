@@ -563,7 +563,9 @@ Das Plugin stellt strukturierte Output-Requests an die Session-API von opencode,
 
 Optional eine Reasoning-Variante des Modells mit `"opencodeVariant": "xhigh"` pinnen (z. B. für grok-4.7). Sie gilt für die internen LLM-Aufrufe des Plugins (Auto-Capture-Zusammenfassungen, Profil-Lernen, Profil-Cleanup), auch wenn `opencodeModel` `"inherit"` ist, sodass Hintergrundarbeit ein anderes Reasoning-Level als die interaktive Sitzung nutzen kann.
 
-Langsame Reasoning-Modelle (oder sehr große Profil-Prompts) können das Standard-Budget von 90 s für strukturierte Ausgabe überschreiten. `"opencodeTimeoutMs"` (Millisekunden) setzen, um es für interne Structured-Output-Aufrufe (Auto-Capture-Zusammenfassungen, Profil-Lernen) zu verlängern — z. B. `"opencodeTimeoutMs": 180000` für 3 Minuten. Werte werden auf 10000..600000 geklemmt; der Standard bleibt 90000. Numerische Strings werden coerced. Profil-Cleanup nutzt ein separates, längeres Timeout.
+Langsame Reasoning-Modelle (oder sehr große Profil-Prompts) können das Standard-Budget von 90 s für strukturierte Ausgabe überschreiten. `"opencodeTimeoutMs"` (Millisekunden) setzen, um es für interne Structured-Output-Aufrufe (Auto-Capture-Zusammenfassungen, Profil-Lernen) zu verlängern — z. B. `"opencodeTimeoutMs": 180000` für 3 Minuten. Werte werden auf 10000..600000 geklemmt; der Standard bleibt 90000. Numerische Strings werden coerced.
+
+Profil-Cleanup-Timeouts sind separat: externes/manuelles API-Cleanup defaultet auf 60 s über `"userProfileCleanupTimeoutMs"` (gleiche Klemme 10000..600000; z. B. `"userProfileCleanupTimeoutMs": 180000`). OpenCode-Session-Cleanup behält ein festes 300-s-Budget. Das Node-HTTP-Idle-Timeout wird als `max(userProfileCleanupTimeoutMs, 300000) + 30000` abgeleitet, und der Web-UI-Fetch für `/ai-cleanup` erlaubt bis 630 s, damit keine Schicht ein erhöhtes externes Deadline unterbietet.
 
 Unterstützte Provider: jeder von `opencode providers list` gelistete Provider (z. B. `anthropic`, `openai`, `github-copilot`, `openrouter`, ...).
 

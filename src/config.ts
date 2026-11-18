@@ -142,9 +142,10 @@ interface OpenCodeMemConfig {
   /**
    * Timeout in milliseconds for the plugin's internal structured-output LLM
    * calls (auto-capture summaries, profile learning). Profile cleanup keeps
-   * its own longer timeout. Clamped to 10000..600000; non-number/non-finite
-   * values (and non-numeric strings) fall back to the 90000 default. Numeric
-   * strings like "180000" are coerced.
+   * its own longer timeout (see `userProfileCleanupTimeoutMs` for the external
+   * path). Clamped to 10000..600000; non-number/non-finite values (and
+   * non-numeric strings) fall back to the 90000 default. Numeric strings like
+   * "180000" are coerced.
    */
   opencodeTimeoutMs?: number;
   aiSessionRetentionDays?: number;
@@ -188,6 +189,12 @@ interface OpenCodeMemConfig {
   userProfileMinEvidenceForRetention?: number;
   userProfileAutoCleanupEnabled?: boolean;
   userProfileAutoCleanupInterval?: number;
+  /**
+   * Abort deadline (ms) for external/manual-API profile cleanup. Default 60000,
+   * clamped to 10000..600000. OpenCode-session cleanup keeps its own longer
+   * timeout. The Node HTTP idle timeout is derived above this value.
+   */
+  userProfileCleanupTimeoutMs?: number;
   userProfileValidationEnabled?: boolean;
   showAutoCaptureToasts?: boolean;
   showUserProfileToasts?: boolean;
@@ -405,6 +412,7 @@ const DEFAULTS: Required<
   userProfileMinEvidenceForRetention: 3,
   userProfileAutoCleanupEnabled: true,
   userProfileAutoCleanupInterval: 100,
+  userProfileCleanupTimeoutMs: 60_000,
   userProfileValidationEnabled: false,
   showAutoCaptureToasts: true,
   showUserProfileToasts: true,
@@ -916,6 +924,10 @@ const CONFIG_TEMPLATE = `{
   "userProfileAutoCleanupEnabled": true,
   // Number of analyzed user prompts between automatic AI cleanup runs
   "userProfileAutoCleanupInterval": 100,
+  // Abort deadline (ms) for external/manual-API profile cleanup (default 60000, clamped to 10000..600000).
+  // OpenCode-session cleanup keeps a separate longer timeout (300000). Node HTTP idle timeout
+  // is derived as max(this, opencode cleanup) + 30000 so the server never undercuts the provider call.
+  // "userProfileCleanupTimeoutMs": 180000,
 
   // Enable LLM validation of existing preferences against recent behavior.
   // When enabled, each analysis round checks if top-5 preferences still match recent prompts.
@@ -1184,16 +1196,44 @@ export const OPENCODE_TIMEOUT_MS_DEFAULT = 90_000;
  * clamped to [OPENCODE_TIMEOUT_MS_MIN, OPENCODE_TIMEOUT_MS_MAX].
  */
 export function normalizeOpencodeTimeoutMs(value: unknown): number {
+  return normalizeClampedTimeoutMs(value, {
+    min: OPENCODE_TIMEOUT_MS_MIN,
+    max: OPENCODE_TIMEOUT_MS_MAX,
+    fallback: OPENCODE_TIMEOUT_MS_DEFAULT,
+  });
+}
+
+export const USER_PROFILE_CLEANUP_TIMEOUT_MS_MIN = 10_000;
+export const USER_PROFILE_CLEANUP_TIMEOUT_MS_MAX = 600_000;
+export const USER_PROFILE_CLEANUP_TIMEOUT_MS_DEFAULT = 60_000;
+
+/**
+ * External profile-cleanup abort deadline: non-number/non-finite values fall
+ * back to the default (numeric strings are coerced first), otherwise clamped
+ * to [USER_PROFILE_CLEANUP_TIMEOUT_MS_MIN, USER_PROFILE_CLEANUP_TIMEOUT_MS_MAX].
+ */
+export function normalizeUserProfileCleanupTimeoutMs(value: unknown): number {
+  return normalizeClampedTimeoutMs(value, {
+    min: USER_PROFILE_CLEANUP_TIMEOUT_MS_MIN,
+    max: USER_PROFILE_CLEANUP_TIMEOUT_MS_MAX,
+    fallback: USER_PROFILE_CLEANUP_TIMEOUT_MS_DEFAULT,
+  });
+}
+
+function normalizeClampedTimeoutMs(
+  value: unknown,
+  opts: { min: number; max: number; fallback: number }
+): number {
   let numeric = value;
   if (typeof value === "string") {
     const trimmed = value.trim();
-    if (trimmed.length === 0) return OPENCODE_TIMEOUT_MS_DEFAULT;
+    if (trimmed.length === 0) return opts.fallback;
     numeric = Number(trimmed);
   }
   if (typeof numeric !== "number" || !Number.isFinite(numeric)) {
-    return OPENCODE_TIMEOUT_MS_DEFAULT;
+    return opts.fallback;
   }
-  return Math.min(OPENCODE_TIMEOUT_MS_MAX, Math.max(OPENCODE_TIMEOUT_MS_MIN, numeric));
+  return Math.min(opts.max, Math.max(opts.min, numeric));
 }
 
 /**
@@ -1512,6 +1552,9 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     userProfileAutoCleanupEnabled:
       fileConfig.userProfileAutoCleanupEnabled ?? DEFAULTS.userProfileAutoCleanupEnabled,
     userProfileAutoCleanupInterval,
+    userProfileCleanupTimeoutMs: normalizeUserProfileCleanupTimeoutMs(
+      fileConfig.userProfileCleanupTimeoutMs
+    ),
     userProfileValidationEnabled:
       fileConfig.userProfileValidationEnabled ?? DEFAULTS.userProfileValidationEnabled,
     userProfileStaleDays: fileConfig.userProfileStaleDays ?? DEFAULTS.userProfileStaleDays,

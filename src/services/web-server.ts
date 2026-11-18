@@ -8,7 +8,8 @@ import { corsPreflightResponse, disallowedCorsResponse, isAllowedBrowserOrigin }
 import { assertWebServerNetworkAuth, authorizeApiRequest } from "./web-api-auth.js";
 import { getOrCreateAuthToken, isAuthorizedApiRequest } from "./auth-token.js";
 import { WebAuth } from "./web-auth.js";
-import { NODE_HTTP_IDLE_TIMEOUT_MS } from "./request-timeouts.js";
+import { CONFIG } from "../config.js";
+import { resolveNodeHttpIdleTimeoutMs } from "./request-timeouts.js";
 import {
   handleListTags,
   handleListMemories,
@@ -185,7 +186,7 @@ function serveFetch(opts: {
   // rebind after a crashed predecessor left orphaned sockets behind.
   server.listen({ port: opts.port, host: opts.hostname, reuseAddr: true, exclusive: false });
   server.unref();
-  server.timeout = NODE_HTTP_IDLE_TIMEOUT_MS;
+  server.timeout = resolveNodeHttpIdleTimeoutMs(CONFIG.userProfileCleanupTimeoutMs);
   server.keepAliveTimeout = 10000;
   server.headersTimeout = 11000;
 
