@@ -47,8 +47,10 @@
         </p>
         <p class="chat__line chat__line--agent">
           <span class="chat__who" data-recall-anchor>{copy.hero.agent}</span><span
-            class="chat__answer">{copy.hero.answer}</span
+            class="chat__answer"
           >
+            {copy.hero.answer}
+          </span>
         </p>
         <p class="chat__memory">
           <span class="chat__chip">{copy.hero.recalled}</span>
