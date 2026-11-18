@@ -337,6 +337,16 @@ async function callViaOpencodeWithClient(
   const systemPrompt =
     "You are a user profile cleanup assistant. Merge duplicate entries and return only JSON without markdown wrapping.";
 
+  // Resolve `opencodeModel: "inherit"` before creating the session, so the
+  // literal "inherit" never reaches session.prompt. callAICleanup only routes
+  // here when both opencodeProvider and opencodeModel are set.
+  const { resolveOpencodeModelRef } = await loadOpencodeProvider();
+  const model = resolveOpencodeModelRef({
+    providerID: CONFIG.opencodeProvider!,
+    modelID: CONFIG.opencodeModel!,
+  });
+  log("AI cleanup: model resolved", model);
+
   const created = (await raceWithTimeout(
     v2Client.session.create({
       title: "opencode-mem profile cleanup",
@@ -362,10 +372,7 @@ async function callViaOpencodeWithClient(
     const promptResult = await raceWithTimeout(
       v2Client.session.prompt({
         sessionID,
-        model: {
-          providerID: CONFIG.opencodeProvider || "bs-aigw",
-          modelID: CONFIG.opencodeModel || "deepseek-v4-flash",
-        },
+        model,
         // V1 prompt body: variant is a sibling of `model`, not inside it.
         ...(CONFIG.opencodeVariant ? { variant: CONFIG.opencodeVariant } : {}),
         system: systemPrompt,
