@@ -38,6 +38,7 @@
           ar: "العربية",
           tr: "Türkçe",
           nl: "Nederlands",
+          fr: "Français",
         } as const
       )[code],
     })),
