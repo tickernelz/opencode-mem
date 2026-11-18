@@ -40,9 +40,10 @@ export async function fetchAPI<T = unknown>(
 ): Promise<ApiResult<T>> {
   try {
     const controller = new AbortController();
+    // /ai-cleanup must outlive userProfileCleanupTimeoutMs (max 600s) + server grace.
     const timeoutMs =
       options.timeout ||
-      (options.method === "POST" && endpoint.includes("/ai-cleanup") ? 180000 : 60000);
+      (options.method === "POST" && endpoint.includes("/ai-cleanup") ? 630000 : 60000);
     const { timeout: _timeout, headers: extraHeaders, ...fetchOptions } = options;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const response = await fetch(endpoint, {

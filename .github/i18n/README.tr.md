@@ -565,7 +565,9 @@ Eklenti, sağlayıcı uç noktalarını doğrudan çağırmak yerine yapılandı
 
 İsteğe bağlı olarak `"opencodeVariant": "xhigh"` ile bir model muhakeme varyantını sabitleyin (örn. grok-4.7 için). Eklentinin dahili LLM çağrılarına uygulanır (otomatik yakalama özetleri, profil öğrenme, profil temizleme); `opencodeModel` `"inherit"` olsa bile, böylece arka plan çalışması etkileşimli oturumdan farklı bir muhakeme düzeyi kullanabilir.
 
-Yavaş muhakeme modelleri (veya çok büyük profil prompt’ları) varsayılan 90 sn yapılandırılmış çıktı bütçesini aşabilir. Dahili yapılandırılmış çıktı çağrıları (otomatik yakalama özetleri, profil öğrenme) için uzatmak üzere `"opencodeTimeoutMs"` (milisaniye) ayarlayın — örn. 3 dakika için `"opencodeTimeoutMs": 180000`. Değerler 10000..600000’e sıkıştırılır; varsayılan 90000 kalır. Sayısal dizgeler zorlanır. Profil temizleme ayrı, daha uzun bir zaman aşımı kullanır.
+Yavaş muhakeme modelleri (veya çok büyük profil prompt’ları) varsayılan 90 sn yapılandırılmış çıktı bütçesini aşabilir. Dahili yapılandırılmış çıktı çağrıları (otomatik yakalama özetleri, profil öğrenme) için uzatmak üzere `"opencodeTimeoutMs"` (milisaniye) ayarlayın — örn. 3 dakika için `"opencodeTimeoutMs": 180000`. Değerler 10000..600000’e sıkıştırılır; varsayılan 90000 kalır. Sayısal dizgeler zorlanır.
+
+Profil temizleme zaman aşımları ayrıdır: harici/manuel API temizleme `"userProfileCleanupTimeoutMs"` ile varsayılan 60 sn’dir (aynı 10000..600000 sıkıştırma; örn. `"userProfileCleanupTimeoutMs": 180000`). OpenCode oturum temizliği sabit 300 sn bütçesini korur. Node HTTP boşta kalma zaman aşımı `max(userProfileCleanupTimeoutMs, 300000) + 30000` olarak türetilir ve Web UI `/ai-cleanup` fetch’i 630 sn’ye kadar izin verir; böylece hiçbir katman yükseltilmiş harici son tarihi altından kesmez.
 
 Desteklenen sağlayıcılar: `opencode providers list` tarafından listelenen herhangi bir sağlayıcı (örn. `anthropic`, `openai`, `github-copilot`, `openrouter`, ...).
 

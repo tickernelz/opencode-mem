@@ -567,7 +567,9 @@ De plugin stuurt structured-output-verzoeken naar de session-API van opencode in
 
 Optioneel kun je een model-reasoningvariant vastzetten met `"opencodeVariant": "xhigh"` (bijv. voor grok-4.7). Die wordt toegepast op de interne LLM-calls van de plugin (auto-capture-samenvattingen, profiel-leren, profielopschoning), ook wanneer `opencodeModel` `"inherit"` is, zodat achtergrondwerk een ander reasoningniveau kan gebruiken dan de interactieve sessie.
 
-Trage reasoningmodellen (of zeer grote profielprompts) kunnen het standaard 90 s structured-output-budget overschrijden. Stel `"opencodeTimeoutMs"` (milliseconden) in om het te verlengen voor interne structured-output-calls (auto-capture-samenvattingen, profiel-leren) — bijv. `"opencodeTimeoutMs": 180000` voor 3 minuten. Waarden worden geclampt tot 10000..600000; de standaard blijft 90000. Numerieke strings worden gecoeerd. Profielopschoning gebruikt een aparte, langere timeout.
+Trage reasoningmodellen (of zeer grote profielprompts) kunnen het standaard 90 s structured-output-budget overschrijden. Stel `"opencodeTimeoutMs"` (milliseconden) in om het te verlengen voor interne structured-output-calls (auto-capture-samenvattingen, profiel-leren) — bijv. `"opencodeTimeoutMs": 180000` voor 3 minuten. Waarden worden geclampt tot 10000..600000; de standaard blijft 90000. Numerieke strings worden gecoeerd.
+
+Profielopschonings-timeouts zijn apart: externe/handmatige API-opschoning default naar 60 s via `"userProfileCleanupTimeoutMs"` (zelfde clamp 10000..600000; bijv. `"userProfileCleanupTimeoutMs": 180000`). OpenCode-sessie-opschoning houdt een vast 300 s-budget. De Node HTTP-idle-timeout wordt afgeleid als `max(userProfileCleanupTimeoutMs, 300000) + 30000`, en de Web UI-fetch voor `/ai-cleanup` staat tot 630 s toe zodat geen laag een verhoogde externe deadline ondermijnt.
 
 Ondersteunde providers: elke provider uit `opencode providers list` (bijv. `anthropic`, `openai`, `github-copilot`, `openrouter`, ...).
 

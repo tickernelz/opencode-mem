@@ -123,6 +123,7 @@ mock.module(${JSON.stringify(configUrl)}, () => ({
     memoryModel: ${withExternalApi ? '"gpt-ext"' : "undefined"},
     memoryApiUrl: ${withExternalApi ? '"http://example.test/v1"' : "undefined"},
     memoryApiKey: "test-key",
+    userProfileCleanupTimeoutMs: 60_000,
     memoryExtraParams: {
       enable_thinking: false,
       top_p: 0.7,

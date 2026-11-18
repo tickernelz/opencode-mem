@@ -285,6 +285,39 @@ describe("project-scoped config resolution", () => {
     expect(CONFIG.opencodeTimeoutMs).toBe(90000);
   });
 
+  it("parses userProfileCleanupTimeoutMs with clamping and default fallback", () => {
+    existsSpy = spyOn(fs, "existsSync").mockImplementation((p) =>
+      normalizePath(p).includes(".config/opencode/opencode-mem")
+    );
+    readSpy = spyOn(fs, "readFileSync");
+
+    readSpy.mockReturnValue(JSON.stringify({ userProfileCleanupTimeoutMs: 180000 }) as any);
+    initConfig("/some/project");
+    expect(CONFIG.userProfileCleanupTimeoutMs).toBe(180000);
+
+    readSpy.mockReturnValue(JSON.stringify({ userProfileCleanupTimeoutMs: 500 }) as any);
+    initConfig("/some/project");
+    expect(CONFIG.userProfileCleanupTimeoutMs).toBe(10000);
+
+    readSpy.mockReturnValue(JSON.stringify({ userProfileCleanupTimeoutMs: 9_999_999 }) as any);
+    initConfig("/some/project");
+    expect(CONFIG.userProfileCleanupTimeoutMs).toBe(600000);
+
+    readSpy.mockReturnValue(
+      JSON.stringify({ userProfileCleanupTimeoutMs: Number.POSITIVE_INFINITY }) as any
+    );
+    initConfig("/some/project");
+    expect(CONFIG.userProfileCleanupTimeoutMs).toBe(60000);
+
+    readSpy.mockReturnValue(JSON.stringify({ userProfileCleanupTimeoutMs: "180000" }) as any);
+    initConfig("/some/project");
+    expect(CONFIG.userProfileCleanupTimeoutMs).toBe(180000);
+
+    readSpy.mockReturnValue(JSON.stringify({}) as any);
+    initConfig("/some/project");
+    expect(CONFIG.userProfileCleanupTimeoutMs).toBe(60000);
+  });
+
   it("parses autoCaptureProviderOrder with default fallback", () => {
     existsSpy = spyOn(fs, "existsSync").mockImplementation((p) =>
       normalizePath(p).includes(".config/opencode/opencode-mem")

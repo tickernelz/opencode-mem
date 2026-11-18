@@ -624,7 +624,9 @@ The plugin issues structured-output requests to opencode's session API instead o
 
 Optionally pin a model reasoning variant with `"opencodeVariant": "xhigh"` (e.g. for grok-4.7). It is applied to the plugin's internal LLM calls (auto-capture summaries, profile learning, profile cleanup), including when `opencodeModel` is `"inherit"`, so background work can use a different reasoning level than the interactive session.
 
-Slow reasoning models (or very large profile prompts) can exceed the default 90 s structured-output budget. Set `"opencodeTimeoutMs"` (milliseconds) to extend it for internal structured-output calls (auto-capture summaries, profile learning) — e.g. `"opencodeTimeoutMs": 180000` for 3 minutes. Values are clamped to 10000..600000; the default stays 90000. Numeric strings are coerced. Profile cleanup uses a separate, longer timeout.
+Slow reasoning models (or very large profile prompts) can exceed the default 90 s structured-output budget. Set `"opencodeTimeoutMs"` (milliseconds) to extend it for internal structured-output calls (auto-capture summaries, profile learning) — e.g. `"opencodeTimeoutMs": 180000` for 3 minutes. Values are clamped to 10000..600000; the default stays 90000. Numeric strings are coerced.
+
+Profile cleanup timeouts are separate: external/manual-API cleanup defaults to 60 s via `"userProfileCleanupTimeoutMs"` (same 10000..600000 clamp; e.g. `"userProfileCleanupTimeoutMs": 180000`). OpenCode-session cleanup keeps a fixed 300 s budget. The Node HTTP idle timeout is derived as `max(userProfileCleanupTimeoutMs, 300000) + 30000`, and the Web UI `/ai-cleanup` fetch allows up to 630 s so neither layer undercuts a raised external deadline.
 
 Supported providers: any provider listed by `opencode providers list` (e.g. `anthropic`, `openai`, `github-copilot`, `openrouter`, ...).
 

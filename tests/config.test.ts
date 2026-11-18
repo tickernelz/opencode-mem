@@ -171,6 +171,7 @@ describe("config", () => {
       expect(CONFIG.userProfileMinEvidenceForRetention).toBe(3);
       expect(CONFIG.userProfileAutoCleanupEnabled).toBe(true);
       expect(CONFIG.userProfileAutoCleanupInterval).toBe(100);
+      expect(CONFIG.userProfileCleanupTimeoutMs).toBe(60000);
     });
 
     it("should have toast settings as booleans", () => {

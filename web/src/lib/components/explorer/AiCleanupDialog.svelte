@@ -157,7 +157,8 @@
     const result = await fetchAPI<PendingCleanup>("/api/user-profile/ai-cleanup", {
       method: "POST",
       body: JSON.stringify({ includeIds: ids, profileVersion: profile?.version }),
-      timeout: 180000,
+      // Covers max userProfileCleanupTimeoutMs (600s) + HTTP idle grace (30s).
+      timeout: 630000,
     });
     if (
       !(await toastApiResult(result, { failKey: "toast-ai-cleanup-failed", translate: i18n.t })) ||
