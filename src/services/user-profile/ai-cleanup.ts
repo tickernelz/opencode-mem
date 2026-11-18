@@ -340,7 +340,7 @@ async function callViaOpencodeWithClient(
   // Resolve `opencodeModel: "inherit"` before creating the session, so the
   // literal "inherit" never reaches session.prompt. callAICleanup only routes
   // here when both opencodeProvider and opencodeModel are set.
-  const { resolveOpencodeModelRef } = await import("../ai/opencode-provider.js");
+  const { resolveOpencodeModelRef } = await loadOpencodeProvider();
   const model = resolveOpencodeModelRef({
     providerID: CONFIG.opencodeProvider!,
     modelID: CONFIG.opencodeModel!,

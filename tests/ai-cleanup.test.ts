@@ -65,6 +65,8 @@ describe("extractTextFromPromptResult", () => {
 const aiCleanupUrl = new URL("../src/services/user-profile/ai-cleanup.js", import.meta.url).href;
 const configUrl = new URL("../src/config.js", import.meta.url).href;
 const loggerUrl = new URL("../src/services/logger.js", import.meta.url).href;
+const opencodeProviderUrl = new URL("../src/services/ai/opencode-provider.js", import.meta.url)
+  .href;
 const opencodeProviderLoaderUrl = new URL(
   "../src/services/ai/opencode-provider-loader.js",
   import.meta.url
@@ -136,31 +138,36 @@ mock.module(${JSON.stringify(configUrl)}, () => ({
 mock.module(${JSON.stringify(loggerUrl)}, () => ({ log: () => {}, safeLog: () => {}, serializeError: (error) => ({ error: error instanceof Error ? error.message : String(error) }) }));
 
 mock.module(${JSON.stringify(opencodeProviderLoaderUrl)}, () => ({
-  loadOpencodeProvider: async () => ({
-    getV2Client: () =>
-      ${clientAvailable}
-        ? {
-            session: {
-              create: async () => ({ data: { id: "sess-cleanup-1" } }),
-              prompt: async (args) => {
-                promptCalls.push(args);
-                if (${promptThrows}) {
-                  throw new Error("prompt failed for test");
-                }
-                return {
-                  data: {
-                    info: {},
-                    parts: [{ type: "text", text: cleanupJson }],
-                  },
-                };
+  loadOpencodeProvider: async () => {
+    // Keep real helpers (e.g. resolveOpencodeModelRef for "inherit"); only stub the client.
+    const real = await import(${JSON.stringify(opencodeProviderUrl)});
+    return {
+      ...real,
+      getV2Client: () =>
+        ${clientAvailable}
+          ? {
+              session: {
+                create: async () => ({ data: { id: "sess-cleanup-1" } }),
+                prompt: async (args) => {
+                  promptCalls.push(args);
+                  if (${promptThrows}) {
+                    throw new Error("prompt failed for test");
+                  }
+                  return {
+                    data: {
+                      info: {},
+                      parts: [{ type: "text", text: cleanupJson }],
+                    },
+                  };
+                },
+                delete: async (args) => {
+                  deleteCalls.push(args);
+                },
               },
-              delete: async (args) => {
-                deleteCalls.push(args);
-              },
-            },
-          }
-        : null,
-  }),
+            }
+          : null,
+    };
+  },
 }));
 
 if (${withExternalApi}) {
