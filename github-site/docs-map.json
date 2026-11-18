@@ -6,7 +6,8 @@
     "zh": ".github/i18n/README.zh.md",
     "ar": ".github/i18n/README.ar.md",
     "tr": ".github/i18n/README.tr.md",
-    "nl": ".github/i18n/README.nl.md"
+    "nl": ".github/i18n/README.nl.md",
+    "fr": ".github/i18n/README.fr.md"
   },
   "untranslated": {
     "Memory credential redaction": ["de", "zh", "ar", "tr", "nl"]
