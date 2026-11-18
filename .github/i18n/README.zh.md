@@ -9,7 +9,7 @@
 
 ![OpenCode Memory Banner](../pics/banner.png)
 
-语言: [🇬🇧](../../README.md) | [🇩🇪](./README.de.md) | **🇨🇳** | [🇸🇦](./README.ar.md) | [🇹🇷](./README.tr.md) | [🇳🇱](./README.nl.md)
+语言: [🇬🇧](../../README.md) | [🇩🇪](./README.de.md) | **🇨🇳** | [🇸🇦](./README.ar.md) | [🇹🇷](./README.tr.md) | [🇳🇱](./README.nl.md) | [🇫🇷](./README.fr.md)
 
 面向 AI 编程代理的持久记忆系统，基于本地向量数据库技术，实现跨会话的长期上下文保留。
 
@@ -678,7 +678,7 @@ bun run check
 
 本项目积极寻求贡献，以成为 AI 编程代理的权威记忆插件。无论你是修复缺陷、添加功能、改进文档，还是扩展嵌入模型支持，你的贡献都至关重要。代码库结构良好，已准备好增强。请使用 Issue 或 Feature request 模板提出问题，并在提交 PR 时填写 pull request 模板 — 我们会快速审查并合并贡献。
 
-**README 翻译：** `README.md`（英文）为唯一权威来源。更改其内容时，请同步更新 `.github/i18n/` 下的文件（`README.de.md`、`README.zh.md`、`README.ar.md`、`README.tr.md` 和 `README.nl.md`）。
+**README 翻译：** `README.md`（英文）为唯一权威来源。更改其内容时，请同步更新 `.github/i18n/` 下的文件（`README.de.md`、`README.zh.md`、`README.ar.md`、`README.tr.md`、`README.nl.md` 和 `README.fr.md`）。
 
 ## 许可证与链接
 

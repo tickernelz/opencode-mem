@@ -9,7 +9,7 @@
 
 ![OpenCode Memory Banner](../pics/banner.png)
 
-Talen: [🇬🇧](../../README.md) | [🇩🇪](./README.de.md) | [🇨🇳](./README.zh.md) | [🇸🇦](./README.ar.md) | [🇹🇷](./README.tr.md) | **🇳🇱**
+Talen: [🇬🇧](../../README.md) | [🇩🇪](./README.de.md) | [🇨🇳](./README.zh.md) | [🇸🇦](./README.ar.md) | [🇹🇷](./README.tr.md) | **🇳🇱** | [🇫🇷](./README.fr.md)
 
 Een persistent geheugensysteem voor AI-codingagents dat langetermijncontextbehoud over sessies mogelijk maakt met lokale vectordatabasetechnologie.
 
@@ -742,7 +742,7 @@ De [docs](https://opencode-mem.zhafron.my.id/docs/) worden gegenereerd uit deze 
 
 Dit project zoekt actief bijdragen om de definitieve geheugenplugin voor AI-codingagents te worden. Of je bugs fixt, features toevoegt, documentatie verbetert of embeddingmodelondersteuning uitbreidt: je bijdragen zijn cruciaal. De codebase is goed gestructureerd en klaar voor verbetering. Open issues met de Issue- of Feature request-templates, en vul het pull request-template in wanneer je een PR indient — we reviewen en mergen bijdragen snel.
 
-**README-vertalingen:** `README.md` (Engels) is de bron van waarheid. Wanneer je de inhoud wijzigt, werk dan de bestanden onder `.github/i18n/` (`README.de.md`, `README.zh.md`, `README.ar.md`, `README.tr.md` en `README.nl.md`) bij zodat ze overeenkomen.
+**README-vertalingen:** `README.md` (Engels) is de bron van waarheid. Wanneer je de inhoud wijzigt, werk dan de bestanden onder `.github/i18n/` (`README.de.md`, `README.zh.md`, `README.ar.md`, `README.tr.md`, `README.nl.md` en `README.fr.md`) bij zodat ze overeenkomen.
 
 ## Licentie & links
 

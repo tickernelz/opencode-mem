@@ -17,6 +17,10 @@ describe("i18n translations", () => {
     expect(langs).toContain("tr");
   });
 
+  test("includes French in the language catalog", () => {
+    expect(langs).toContain("fr");
+  });
+
   test("every language has exactly the English keys", () => {
     for (const lang of langs) {
       expect(keysOf(lang)).toEqual(enKeys);

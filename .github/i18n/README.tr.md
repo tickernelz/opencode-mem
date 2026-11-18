@@ -9,7 +9,7 @@
 
 ![OpenCode Memory Banner](../pics/banner.png)
 
-Diller: [🇬🇧](../../README.md) | [🇩🇪](./README.de.md) | [🇨🇳](./README.zh.md) | [🇸🇦](./README.ar.md) | **🇹🇷** | [🇳🇱](./README.nl.md)
+Diller: [🇬🇧](../../README.md) | [🇩🇪](./README.de.md) | [🇨🇳](./README.zh.md) | [🇸🇦](./README.ar.md) | **🇹🇷** | [🇳🇱](./README.nl.md) | [🇫🇷](./README.fr.md)
 
 Yerel vektör veritabanı teknolojisi kullanarak oturumlar arasında uzun vadeli bağlam saklamayı sağlayan, yapay zeka kodlama ajanları için kalıcı bir bellek sistemi.
 
@@ -744,7 +744,7 @@ bun run check
 
 Bu proje, AI kodlama ajanları için nihai bellek eklentisi olmak üzere aktif olarak katkı arıyor. Hataları düzeltmek, özellik eklemek, belgeleri iyileştirmek veya embedding model desteğini genişletmek olsun, katkılarınız kritiktir. Kod tabanı iyi yapılandırılmış ve iyileştirmeye hazırdır. Lütfen Issue veya Feature request şablonlarıyla issue açın ve bir PR gönderdiğinizde pull request şablonunu doldurun — katkıları hızlıca inceler ve birleştiririz.
 
-**README çevirileri:** `README.md` (İngilizce) esas kaynaktır. İçeriğini değiştirdiğinizde `.github/i18n/` altındaki dosyaları (`README.de.md`, `README.zh.md`, `README.ar.md`, `README.tr.md` ve `README.nl.md`) buna uyacak şekilde güncelleyin.
+**README çevirileri:** `README.md` (İngilizce) esas kaynaktır. İçeriğini değiştirdiğinizde `.github/i18n/` altındaki dosyaları (`README.de.md`, `README.zh.md`, `README.ar.md`, `README.tr.md`, `README.nl.md` ve `README.fr.md`) buna uyacak şekilde güncelleyin.
 
 ## Lisans ve Bağlantılar
 
