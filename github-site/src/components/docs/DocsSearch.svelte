@@ -148,12 +148,14 @@
     <span class="ms-auto inline-flex gap-0.5" aria-hidden="true">
       <kbd
         class="rounded-md border border-border/50 bg-background px-1.5 font-sans text-[0.7rem] text-muted-foreground"
-        >⌘</kbd
       >
+        ⌘
+      </kbd>
       <kbd
         class="rounded-md border border-border/50 bg-background px-1.5 font-sans text-[0.7rem] text-muted-foreground"
-        >K</kbd
       >
+        K
+      </kbd>
     </span>
   </button>
 {/if}
@@ -193,8 +195,9 @@
         />
         <kbd
           class="hidden rounded-md border border-border/50 bg-background px-1.5 font-sans text-[0.7rem] text-muted-foreground sm:inline-block"
-          >Esc</kbd
         >
+          Esc
+        </kbd>
         <button
           class="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:hidden"
           type="button"
@@ -226,9 +229,9 @@
               >
                 <span class="text-[0.9rem] font-semibold text-foreground-bright">{hit.title}</span>
                 {#if hit.description}
-                  <span class="line-clamp-2 text-[0.78rem] leading-snug text-muted-foreground"
-                    >{hit.description}</span
-                  >
+                  <span class="line-clamp-2 text-[0.78rem] leading-snug text-muted-foreground">
+                    {hit.description}
+                  </span>
                 {/if}
               </a>
             </li>

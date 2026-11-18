@@ -179,9 +179,9 @@
               {#each daily as day (day.date)}
                 {@const buckets = errorBuckets(day)}
                 <tr>
-                  <th scope="row" class="whitespace-nowrap font-normal"
-                    ><time datetime={day.date}>{day.date}</time></th
-                  >
+                  <th scope="row" class="whitespace-nowrap font-normal">
+                    <time datetime={day.date}>{day.date}</time>
+                  </th>
                   {#each metrics as metric}
                     <td>
                       <div class="flex min-w-24 items-center gap-3">
@@ -202,9 +202,9 @@
                   <td>
                     {#if buckets.length}
                       <details class="min-w-24 text-destructive">
-                        <summary class="cursor-pointer rounded focus-ring"
-                          >{buckets.reduce((sum, [, count]) => sum + count, 0)}</summary
-                        >
+                        <summary class="cursor-pointer rounded focus-ring">
+                          {buckets.reduce((sum, [, count]) => sum + count, 0)}
+                        </summary>
                         <ul class="mt-2 space-y-1 text-xs">
                           {#each buckets as [bucket, count]}<li class="break-words">
                               <bdi>{bucket}</bdi> ×{count}
@@ -214,10 +214,11 @@
                     {:else}
                       <span
                         class="inline-flex items-center gap-1.5 whitespace-nowrap text-muted-foreground"
-                        ><Check class={cn(ICON_SM, "text-primary")} aria-hidden="true" />{i18n.t(
-                          "stats-no-errors"
-                        )}</span
                       >
+                        <Check class={cn(ICON_SM, "text-primary")} aria-hidden="true" />{i18n.t(
+                          "stats-no-errors"
+                        )}
+                      </span>
                     {/if}
                   </td>
                 </tr>
@@ -235,8 +236,8 @@
       {#if shards.length}
         <div class={cn(SURFACE_CARD, "overflow-x-auto focus-ring")}>
           <table class="w-full text-sm tabular-nums">
-            <thead
-              ><tr>
+            <thead>
+              <tr>
                 <th scope="col">{i18n.t("stats-scope")}</th>
                 <th scope="col">{i18n.t("stats-file")}</th>
                 <th scope="col">{i18n.t("stats-index")}</th>
@@ -244,8 +245,8 @@
                 <th scope="col">{i18n.t("stats-memory-vectors")}</th>
                 <th scope="col">{i18n.t("stats-memory-dates")}</th>
                 <th scope="col">{i18n.t("stats-duplicate-tags")}</th>
-              </tr></thead
-            >
+              </tr>
+            </thead>
             <tbody>
               {#each shards as shard}
                 <tr>
@@ -253,9 +254,9 @@
                     <p>
                       {i18n.t(shard.scope === "user" ? "stats-scope-user" : "stats-scope-project")}
                     </p>
-                    <bdi class="font-mono text-xs text-muted-foreground" title={shard.scopeHash}
-                      >{shard.scopeHash.slice(0, 8) || "—"}</bdi
-                    >
+                    <bdi class="font-mono text-xs text-muted-foreground" title={shard.scopeHash}>
+                      {shard.scopeHash.slice(0, 8) || "—"}
+                    </bdi>
                   </td>
                   <td class="min-w-40 max-w-64 break-words">
                     <bdi class="text-xs">{shard.fileName}</bdi>
@@ -270,11 +271,11 @@
                     {#if shard.error}<p class="mt-2 text-xs text-destructive">{shard.error}</p>{/if}
                   </td>
                   <td>{shard.shardIndex}</td>
-                  <td
-                    ><span class={META_CHIP}
-                      >{i18n.t(shard.isActive ? "stats-active" : "stats-inactive")}</span
-                    ></td
-                  >
+                  <td>
+                    <span class={META_CHIP}>
+                      {i18n.t(shard.isActive ? "stats-active" : "stats-inactive")}
+                    </span>
+                  </td>
                   <td>
                     <p class="whitespace-nowrap">
                       {shard.memoryCount} / {shard.registeredVectorCount}
@@ -292,8 +293,10 @@
                   <td
                     class={shard.duplicateTagCount > 0
                       ? "font-medium text-warning"
-                      : "text-muted-foreground"}>{shard.duplicateTagCount}</td
+                      : "text-muted-foreground"}
                   >
+                    {shard.duplicateTagCount}
+                  </td>
                 </tr>
               {/each}
             </tbody>
