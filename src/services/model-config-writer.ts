@@ -6,8 +6,8 @@ export type ModelOverride = {
   modelID: string;
 };
 
-/** Provider/model ids as the host reports them (dot, dash, underscore allowed). */
-export const MODEL_ID_PATTERN = /^[a-z0-9][a-z0-9._-]*$/;
+/** Provider/model ids as the host reports them; slashes appear in ids like "auto/glm-5.3-flash". */
+export const MODEL_ID_PATTERN = /^[a-z0-9][a-z0-9._/-]*$/;
 
 const KEYS = [
   ["providerID", "opencodeProvider"],
