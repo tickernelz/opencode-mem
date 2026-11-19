@@ -91,6 +91,22 @@ describe("applyModelOverride", () => {
     expect(MODEL_ID_PATTERN.test("auto/glm-5.3-flash")).toBe(true);
     expect(MODEL_ID_PATTERN.test("Inherit")).toBe(false);
   });
+
+  it("does not treat /* inside comments or strings as a block comment", () => {
+    const content = [
+      "{",
+      "  // Protects /api/* with a token.",
+      '  "opencodeProvider": "magpie",',
+      '  "opencodeModel": "inherit"',
+      "}",
+    ].join("\n");
+
+    const next = applyModelOverride(content, { providerID: "codearts", modelID: "auto/glm" });
+
+    expect(next.match(/"opencodeModel"/g)?.length).toBe(1);
+    expect(next).toContain('"opencodeProvider": "codearts"');
+    expect(next).toContain('"opencodeModel": "auto/glm"');
+  });
 });
 
 describe("writeModelOverride", () => {

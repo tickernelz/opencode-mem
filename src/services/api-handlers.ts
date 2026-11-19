@@ -1780,7 +1780,8 @@ export async function handleGetTagMigrationModel(
 
 export async function handleSetTagMigrationModel(
   body: unknown,
-  projectDirectory?: string
+  projectDirectory?: string,
+  reloadConfig?: () => void
 ): Promise<
   ApiResponse<{
     writtenTo: string;
@@ -1800,14 +1801,21 @@ export async function handleSetTagMigrationModel(
   }
 
   try {
+    // Loaded lazily so config mocks in the test suite keep working.
     const { initConfig, resolveModelConfigPath } = await import("../config.js");
     const writtenTo = resolveModelConfigPath(projectDirectory);
     writeModelOverride(writtenTo, { providerID, modelID });
 
     // Reload so the running process picks the new values up without a restart.
+    // The plugin's own reload wins: under bundling the lazily imported config
+    // module is a second copy, and reloading it would change nothing here.
     let requiresReload = true;
-    if (projectDirectory) {
+    if (reloadConfig) {
+      reloadConfig();
+    } else if (projectDirectory) {
       initConfig(projectDirectory);
+    }
+    if (reloadConfig || projectDirectory) {
       requiresReload = CONFIG.opencodeProvider !== providerID || CONFIG.opencodeModel !== modelID;
     }
 

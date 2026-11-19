@@ -463,6 +463,9 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   // empty when the host registers providers after the last event refresh. The
   // V2 host passes its native catalog, because its client only knows which
   // provider ids are connected.
+  // Reload through this module's config instance: a dynamic import inside the
+  // web handlers can resolve to a second copy of config.js under bundling.
+  const reloadConfig = () => initConfig(directory);
   const loadProviderDirectory =
     (ctx as { providerDirectory?: () => Promise<ProviderDirectoryEntry[]> }).providerDirectory ??
     (async (): Promise<ProviderDirectoryEntry[]> => {
@@ -580,6 +583,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       apiToken: CONFIG.webServerApiToken,
       projectDirectory: directory,
       loadProviderDirectory,
+      reloadConfig,
     })
       .then((server) => {
         webServer = server;
