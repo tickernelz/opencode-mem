@@ -7,6 +7,7 @@ import { formatTagsForEmbedding } from "./turso/vector-utils.js";
 import { extractScopeFromContainerTag, tryExtractScopeFromContainerTag } from "./memory-scope.js";
 import { log } from "./logger.js";
 import { CONFIG } from "../config.js";
+import { MODEL_ID_PATTERN, writeModelOverride, type ModelOverride } from "./model-config-writer.js";
 import type { MemoryType } from "../types/index.js";
 import { userPromptManager } from "./user-prompt/user-prompt-manager.js";
 import type { UserProfileData } from "./user-profile/types.js";
@@ -1706,6 +1707,106 @@ const migrationProgress: MigrationProgress = {
 
 export async function handleGetTagMigrationProgress(): Promise<ApiResponse<MigrationProgress>> {
   return { success: true, data: migrationProgress };
+}
+
+export interface TagMigrationModelStatus {
+  /** True when the migration path can run without a live session (inherit cannot). */
+  configured: boolean;
+  providerID: string | null;
+  modelID: string | null;
+}
+
+export interface TagMigrationModelCatalog extends TagMigrationModelStatus {
+  /** False when the host provider directory is not available in this process. */
+  available: boolean;
+  reason?: string;
+  providers: Array<{
+    id: string;
+    name: string;
+    connected: boolean;
+    models: Array<{ id: string; name: string }>;
+  }>;
+}
+
+export async function handleGetTagMigrationModel(): Promise<ApiResponse<TagMigrationModelCatalog>> {
+  const status: TagMigrationModelStatus = {
+    configured: isOpencodeTagMigrationConfigured(),
+    providerID: CONFIG.opencodeProvider ?? null,
+    modelID: CONFIG.opencodeModel ?? null,
+  };
+
+  try {
+    const { loadOpencodeProvider } = await import("./ai/opencode-provider-loader.js");
+    const { getProviderCatalog, isProviderConnected } = await loadOpencodeProvider();
+    const catalog = getProviderCatalog();
+    if (catalog.length === 0) {
+      return {
+        success: true,
+        data: {
+          ...status,
+          available: false,
+          reason: "provider directory not loaded",
+          providers: [],
+        },
+      };
+    }
+    return {
+      success: true,
+      data: {
+        ...status,
+        available: true,
+        providers: catalog.map((provider) => ({
+          id: provider.id,
+          name: provider.name,
+          connected: isProviderConnected(provider.id),
+          models: provider.models,
+        })),
+      },
+    };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleSetTagMigrationModel(
+  body: unknown,
+  projectDirectory?: string
+): Promise<
+  ApiResponse<{
+    writtenTo: string;
+    providerID: string;
+    modelID: string;
+    requiresReload: boolean;
+  }>
+> {
+  const input = (body ?? {}) as Partial<ModelOverride>;
+  const providerID = typeof input.providerID === "string" ? input.providerID.trim() : "";
+  const modelID = typeof input.modelID === "string" ? input.modelID.trim() : "";
+  if (!MODEL_ID_PATTERN.test(providerID) || !MODEL_ID_PATTERN.test(modelID)) {
+    return {
+      success: false,
+      error: "providerID and modelID must be non-empty provider/model identifiers",
+    };
+  }
+
+  try {
+    const { initConfig, resolveModelConfigPath } = await import("../config.js");
+    const writtenTo = resolveModelConfigPath(projectDirectory);
+    writeModelOverride(writtenTo, { providerID, modelID });
+
+    // Reload so the running process picks the new values up without a restart.
+    let requiresReload = true;
+    if (projectDirectory) {
+      initConfig(projectDirectory);
+      requiresReload = CONFIG.opencodeProvider !== providerID || CONFIG.opencodeModel !== modelID;
+    }
+
+    log("tag-migration model override saved", { writtenTo, providerID, modelID, requiresReload });
+    return { success: true, data: { writtenTo, providerID, modelID, requiresReload } };
+  } catch (error) {
+    log("tag-migration model override failed", { error: String(error) });
+    return { success: false, error: String(error) };
+  }
 }
 
 type TagMigrationChannel = "opencode" | "external";

@@ -32,6 +32,8 @@ import {
   handleDetectTagMigration,
   handleRunTagMigrationBatch,
   handleGetTagMigrationProgress,
+  handleGetTagMigrationModel,
+  handleSetTagMigrationModel,
   handleDeletePrompt,
   handleBulkDeletePrompts,
   handleGetUserProfile,
@@ -228,6 +230,8 @@ interface WebServerConfig {
   enabled: boolean;
   auth?: WebAuth;
   apiToken?: string;
+  /** Project root used for project-scoped config writes and reloads. */
+  projectDirectory?: string;
 }
 
 export class WebServer {
@@ -683,6 +687,17 @@ export class WebServer {
       if (path === "/api/migration/tags/progress" && method === "GET") {
         const result = await handleGetTagMigrationProgress();
         return this.jsonResponse(result);
+      }
+
+      if (path === "/api/config/model-provider" && method === "GET") {
+        const result = await handleGetTagMigrationModel();
+        return this.jsonResponse(result);
+      }
+
+      if (path === "/api/config/model-provider" && method === "PUT") {
+        const body = (await req.json()) as any;
+        const result = await handleSetTagMigrationModel(body, this.config.projectDirectory);
+        return this.jsonResponse(result, result.success ? 200 : 400);
       }
 
       if (path === "/api/migration/run" && method === "POST") {

@@ -422,8 +422,18 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     try {
       const providerResult = await ctx.client.provider.list();
       if (providerResult.data?.connected) {
-        const { setConnectedProviders } = await loadOpencodeProvider();
+        const { setConnectedProviders, setProviderCatalog } = await loadOpencodeProvider();
         setConnectedProviders(providerResult.data.connected);
+        setProviderCatalog(
+          (providerResult.data.all ?? []).map((provider) => ({
+            id: provider.id,
+            name: provider.name ?? provider.id,
+            models: Object.values(provider.models ?? {}).map((model) => ({
+              id: model.id,
+              name: model.name ?? model.id,
+            })),
+          }))
+        );
         log("opencode providers connected", {
           list: providerResult.data.connected,
           configured: CONFIG.opencodeProvider || "(not set)",
@@ -529,6 +539,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       enabled: CONFIG.webServerEnabled,
       auth: webAuth,
       apiToken: CONFIG.webServerApiToken,
+      projectDirectory: directory,
     })
       .then((server) => {
         webServer = server;
