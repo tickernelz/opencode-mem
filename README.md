@@ -276,6 +276,8 @@ Open `http://127.0.0.1:4747` to browse the memory–prompt timeline, inspect cap
 
 The timeline shows each memory and prompt once. If several capture prompts refer to one memory, its current prompt is paired with it when available on the page; earlier prompts remain visible as separate entries.
 
+The tag-migration dialog picks the provider/model used for tagging. Because tag migration has no live session, `opencodeModel: "inherit"` cannot be used there, so the dialog lists OpenCode's connected providers and models, lets you choose one, and writes `opencodeProvider` / `opencodeModel` back to the config file that supplied them (global or project). The running plugin reloads the config in place, so no restart is needed.
+
 ## Usage Examples
 
 ```typescript
