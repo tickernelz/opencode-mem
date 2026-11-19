@@ -1728,7 +1728,16 @@ export interface TagMigrationModelCatalog extends TagMigrationModelStatus {
   }>;
 }
 
-export async function handleGetTagMigrationModel(): Promise<ApiResponse<TagMigrationModelCatalog>> {
+export type ProviderDirectoryEntry = {
+  id: string;
+  name: string;
+  connected: boolean;
+  models: Array<{ id: string; name: string }>;
+};
+
+export async function handleGetTagMigrationModel(
+  loadDirectory?: () => Promise<ProviderDirectoryEntry[]>
+): Promise<ApiResponse<TagMigrationModelCatalog>> {
   const status: TagMigrationModelStatus = {
     configured: isOpencodeTagMigrationConfigured(),
     providerID: CONFIG.opencodeProvider ?? null,
@@ -1738,7 +1747,17 @@ export async function handleGetTagMigrationModel(): Promise<ApiResponse<TagMigra
   try {
     const { loadOpencodeProvider } = await import("./ai/opencode-provider-loader.js");
     const { getProviderCatalog, isProviderConnected } = await loadOpencodeProvider();
-    const catalog = getProviderCatalog();
+    let catalog: ProviderDirectoryEntry[] = getProviderCatalog().map((provider) => ({
+      id: provider.id,
+      name: provider.name,
+      connected: isProviderConnected(provider.id),
+      models: provider.models,
+    }));
+    // The snapshot is empty when the host has not refreshed it in this module
+    // instance yet; ask the host directly in that case.
+    if (catalog.length === 0 && loadDirectory) {
+      catalog = await loadDirectory();
+    }
     if (catalog.length === 0) {
       return {
         success: true,
@@ -1752,16 +1771,7 @@ export async function handleGetTagMigrationModel(): Promise<ApiResponse<TagMigra
     }
     return {
       success: true,
-      data: {
-        ...status,
-        available: true,
-        providers: catalog.map((provider) => ({
-          id: provider.id,
-          name: provider.name,
-          connected: isProviderConnected(provider.id),
-          models: provider.models,
-        })),
-      },
+      data: { ...status, available: true, providers: catalog },
     };
   } catch (error) {
     return { success: false, error: String(error) };
