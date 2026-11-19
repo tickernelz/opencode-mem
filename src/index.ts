@@ -13,6 +13,7 @@ import { CaptureEvidenceRecorder } from "./services/capture-evidence.js";
 import { performUserProfileLearning } from "./services/user-memory-learning.js";
 import { userPromptManager } from "./services/user-prompt/user-prompt-manager.js";
 import { startWebServer, WebServer } from "./services/web-server.js";
+import type { ProviderDirectoryEntry } from "./services/api-handlers.js";
 import { ensureTursoReady } from "./services/turso/ready.js";
 import { tursoConnectionManager } from "./services/turso/connection-manager.js";
 import { retainPluginTurso } from "./services/turso/plugin-refs.js";
@@ -458,6 +459,34 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     }
   };
 
+  // Fresh provider directory for the web UI: the module-level snapshot can be
+  // empty when the host registers providers after the last event refresh. The
+  // V2 host passes its native catalog, because its client only knows which
+  // provider ids are connected.
+  const loadProviderDirectory =
+    (ctx as { providerDirectory?: () => Promise<ProviderDirectoryEntry[]> }).providerDirectory ??
+    (async (): Promise<ProviderDirectoryEntry[]> => {
+      const providerResult = await ctx.client.provider.list();
+      const data = (providerResult.data ?? {}) as {
+        all?: Array<{
+          id: string;
+          name?: string;
+          models?: Record<string, { id: string; name?: string }>;
+        }>;
+        connected?: string[];
+      };
+      const connected = data.connected ?? [];
+      return (data.all ?? []).map((provider) => ({
+        id: provider.id,
+        name: provider.name ?? provider.id,
+        connected: connected.includes(provider.id),
+        models: Object.values(provider.models ?? {}).map((model) => ({
+          id: model.id,
+          name: model.name ?? model.id,
+        })),
+      }));
+    });
+
   // Coalesce refresh triggers into one in-flight pass plus trailing drain.
   // Event handlers and ensureProviderConnected (gate miss) share this path so
   // concurrent list() calls collapse; callers can await the same promise.
@@ -550,6 +579,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       auth: webAuth,
       apiToken: CONFIG.webServerApiToken,
       projectDirectory: directory,
+      loadProviderDirectory,
     })
       .then((server) => {
         webServer = server;

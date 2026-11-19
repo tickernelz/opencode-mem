@@ -18,6 +18,26 @@ const OpenCodeMemPluginV2: Plugin = {
       worktree: ctx.location.project.directory,
       project: ctx.location.project,
       serverUrl: undefined,
+      // The v2 client only exposes connected provider ids, so the web UI builds
+      // its picker straight from the native provider/model directories.
+      providerDirectory: async () => {
+        const [providers, models] = await Promise.all([ctx.provider.list(), ctx.model.list()]);
+        const connected = new Set(
+          providers.data
+            .filter(
+              (provider) => provider.activation === "auto" || provider.activation === "enabled"
+            )
+            .map((provider) => provider.id)
+        );
+        return providers.data.map((provider) => ({
+          id: provider.id,
+          name: provider.name ?? provider.id,
+          connected: connected.has(provider.id),
+          models: models.data
+            .filter((model) => model.providerID === provider.id)
+            .map((model) => ({ id: model.modelID, name: model.name ?? model.modelID })),
+        }));
+      },
     } as any)) as any;
 
     // The V1 initializer cannot discover a server URL from a native V2
