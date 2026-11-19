@@ -235,6 +235,8 @@ interface WebServerConfig {
   projectDirectory?: string;
   /** Fresh provider directory straight from the host (snapshot may be empty). */
   loadProviderDirectory?: () => Promise<ProviderDirectoryEntry[]>;
+  /** Reloads the running config after a config file write. */
+  reloadConfig?: () => void;
 }
 
 export class WebServer {
@@ -699,7 +701,11 @@ export class WebServer {
 
       if (path === "/api/config/model-provider" && method === "PUT") {
         const body = (await req.json()) as any;
-        const result = await handleSetTagMigrationModel(body, this.config.projectDirectory);
+        const result = await handleSetTagMigrationModel(
+          body,
+          this.config.projectDirectory,
+          this.config.reloadConfig
+        );
         return this.jsonResponse(result, result.success ? 200 : 400);
       }
 

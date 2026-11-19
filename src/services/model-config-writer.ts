@@ -15,6 +15,48 @@ const KEYS = [
 ] as const;
 
 /**
+ * Tracks block-comment state across lines. A "/*" inside a string or a //
+ * comment (e.g. the docs line mentioning /api/*) must not open a block.
+ */
+function endsInsideBlockComment(line: string, inBlock: boolean): boolean {
+  let i = 0;
+  while (i < line.length) {
+    if (inBlock) {
+      if (line.startsWith("*/", i)) {
+        inBlock = false;
+        i += 2;
+        continue;
+      }
+      i += 1;
+      continue;
+    }
+    if (line[i] === '"') {
+      i += 1;
+      while (i < line.length) {
+        if (line[i] === "\\") {
+          i += 2;
+          continue;
+        }
+        if (line[i] === '"') {
+          i += 1;
+          break;
+        }
+        i += 1;
+      }
+      continue;
+    }
+    if (line.startsWith("//", i)) return false;
+    if (line.startsWith("/*", i)) {
+      inBlock = true;
+      i += 2;
+      continue;
+    }
+    i += 1;
+  }
+  return inBlock;
+}
+
+/**
  * Rewrites only the opencodeProvider/opencodeModel values in place so comments
  * and layout survive. Missing keys are appended to the root object.
  * The caller must validate the result before writing it to disk.
@@ -28,10 +70,7 @@ export function applyModelOverride(content: string, override: ModelOverride): st
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
-    const matchable = !inBlockComment && !/^\s*\/[/*]/.test(line);
-    const opensBlock = line.includes("/*");
-
-    if (matchable) {
+    if (!inBlockComment) {
       for (const [field, key] of KEYS) {
         const pattern = new RegExp(`^(\\s*"${key}"\\s*:\\s*)("(?:[^"\\\\]|\\\\.)*")`);
         const match = pattern.exec(line);
@@ -40,9 +79,7 @@ export function applyModelOverride(content: string, override: ModelOverride): st
         found.add(key);
       }
     }
-
-    if (opensBlock && !line.includes("*/")) inBlockComment = true;
-    else if (inBlockComment && line.includes("*/")) inBlockComment = false;
+    inBlockComment = endsInsideBlockComment(line, inBlockComment);
   }
 
   const missing = KEYS.filter(([, key]) => !found.has(key));
