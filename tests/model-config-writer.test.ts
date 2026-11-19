@@ -3,7 +3,11 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveModelConfigPath } from "../src/config";
-import { applyModelOverride, writeModelOverride } from "../src/services/model-config-writer";
+import {
+  applyModelOverride,
+  MODEL_ID_PATTERN,
+  writeModelOverride,
+} from "../src/services/model-config-writer";
 import { stripJsoncComments } from "../src/services/jsonc";
 
 function parse(content: string): Record<string, unknown> {
@@ -81,6 +85,11 @@ describe("applyModelOverride", () => {
     expect(next).toContain("\r\n");
     expect(next.split(/\r?\n/).some((line) => line.includes(`"opencodeProvider"`))).toBe(true);
     expect(next.includes("\n\n")).toBe(false);
+  });
+
+  it("accepts model ids that contain a slash", () => {
+    expect(MODEL_ID_PATTERN.test("auto/glm-5.3-flash")).toBe(true);
+    expect(MODEL_ID_PATTERN.test("Inherit")).toBe(false);
   });
 });
 
