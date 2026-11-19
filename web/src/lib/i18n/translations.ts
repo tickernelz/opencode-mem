@@ -1,5 +1,8 @@
 export const translations = {
   en: {
+    "tab-model": "Model",
+    "model-settings-note":
+      "Both keys are shared: auto-capture and tag migration use the same provider and model.",
     "tab-stats": "Stats",
     "stats-overview": "Overview",
     "stats-total-memories": "Total memories",
@@ -277,6 +280,9 @@ export const translations = {
     "toast-skill-load-failed": "Failed to load skills",
   },
   de: {
+    "tab-model": "Modell",
+    "model-settings-note":
+      "Beide Schlüssel werden gemeinsam genutzt: automatisches Erfassen und Tag-Migration verwenden denselben Anbieter und dasselbe Modell.",
     "tab-stats": "Statistiken",
     "stats-overview": "Übersicht",
     "stats-total-memories": "Erinnerungen insgesamt",
@@ -558,6 +564,8 @@ export const translations = {
     "toast-skill-load-failed": "Skills konnten nicht geladen werden",
   },
   zh: {
+    "tab-model": "模型",
+    "model-settings-note": "这两个键是共用的：自动捕获与标签迁移使用同一个服务商与模型。",
     "tab-stats": "统计",
     "stats-overview": "概览",
     "stats-total-memories": "记忆总数",
@@ -832,6 +840,9 @@ export const translations = {
     "toast-skill-load-failed": "加载技能失败",
   },
   ar: {
+    "tab-model": "النموذج",
+    "model-settings-note":
+      "المفتاحان مشتركان: يستخدم الالتقاط التلقائي وترحيل الوسوم المزوّد والنموذج نفسيهما.",
     "tab-stats": "الإحصائيات",
     "stats-overview": "نظرة عامة",
     "stats-total-memories": "إجمالي الذكريات",
@@ -1148,6 +1159,9 @@ export const translations = {
     "toast-skill-load-failed": "فشل تحميل المهارات",
   },
   tr: {
+    "tab-model": "Model",
+    "model-settings-note":
+      "Bu iki anahtar ortaktır: otomatik yakalama ve etiket geçişi aynı sağlayıcıyı ve modeli kullanır.",
     "tab-stats": "İstatistikler",
     "stats-overview": "Genel bakış",
     "stats-total-memories": "Toplam anı",
@@ -1427,6 +1441,9 @@ export const translations = {
     "toast-skill-load-failed": "Beceriler yüklenemedi",
   },
   nl: {
+    "tab-model": "Model",
+    "model-settings-note":
+      "Beide sleutels worden gedeeld: automatische vastlegging en tag-migratie gebruiken dezelfde provider en hetzelfde model.",
     "tab-stats": "Statistieken",
     "stats-overview": "Overzicht",
     "stats-total-memories": "Totaal aantal herinneringen",
@@ -1708,6 +1725,9 @@ export const translations = {
     "toast-skill-load-failed": "Skills laden mislukt",
   },
   fr: {
+    "tab-model": "Modèle",
+    "model-settings-note":
+      "Ces deux clés sont partagées : la capture automatique et la migration des tags utilisent le même fournisseur et le même modèle.",
     "tab-stats": "Stats",
     "stats-overview": "Vue d'ensemble",
     "stats-total-memories": "Total des mémoires",

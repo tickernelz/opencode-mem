@@ -17,6 +17,7 @@
   import SkillsView from "$lib/components/explorer/SkillsView.svelte";
   import MarkdownVaultView from "$lib/components/explorer/MarkdownVaultView.svelte";
   import StatsView from "$lib/components/explorer/StatsView.svelte";
+  import ModelSettingsView from "$lib/components/explorer/ModelSettingsView.svelte";
   import TagMigrationDialog from "$lib/components/explorer/TagMigrationDialog.svelte";
   import TrashDialog from "$lib/components/explorer/TrashDialog.svelte";
   import TagFilter from "$lib/components/explorer/TagFilter.svelte";
@@ -83,7 +84,9 @@
           ? i18n.t("tab-markdown")
           : router.view === "stats"
             ? i18n.t("tab-stats")
-            : i18n.t("tab-profile")
+            : router.view === "model"
+              ? i18n.t("tab-model")
+              : i18n.t("tab-profile")
   );
 
   $effect(() => {
@@ -205,6 +208,7 @@
     skillsLabel={i18n.t("tab-skills")}
     markdownLabel={i18n.t("tab-markdown")}
     statsLabel={i18n.t("tab-stats")}
+    modelLabel={i18n.t("tab-model")}
     showMarkdown={markdownVault.enabled}
     {langLabel}
     languageLabel={i18n.t("nav-language")}
@@ -506,6 +510,8 @@
           error={stats.error}
           onRefresh={stats.loadStats}
         />
+      {:else if router.view === "model"}
+        <ModelSettingsView />
       {:else}
         <ProfileView
           profile={profile.userProfile}
