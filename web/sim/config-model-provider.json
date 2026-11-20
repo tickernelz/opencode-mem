@@ -1,0 +1,29 @@
+{
+  "success": true,
+  "data": {
+    "available": true,
+    "configured": false,
+    "providerID": "opencode",
+    "modelID": "inherit",
+    "providers": [
+      {
+        "id": "opencode",
+        "name": "OpenCode",
+        "connected": true,
+        "models": [
+          { "id": "opencode/big-pickle", "name": "Big Pickle" },
+          { "id": "opencode/gpt-5-nano", "name": "GPT-5 Nano" }
+        ]
+      },
+      {
+        "id": "ollama",
+        "name": "Ollama",
+        "connected": true,
+        "models": [
+          { "id": "qwen2.5vl:3b", "name": "Qwen2.5-VL 3B" },
+          { "id": "granite4.1:3b", "name": "Granite 4.1 3B" }
+        ]
+      }
+    ]
+  }
+}
