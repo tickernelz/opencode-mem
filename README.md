@@ -270,7 +270,7 @@ If you have chatted for a while and still see the message, check that auto-captu
 
 ### Web UI
 
-Open `http://127.0.0.1:4747` to browse the memory–prompt timeline, inspect captures, and manage the user profile. The UI has five views: **Project memories** (`/project-memories`), **User profile** (`/user-profile`), **Skill library** (`/skill-library`), **Markdown vault** (`/markdown-vault`) and **Stats** (`/stats`). Change the port with `webServerPort`, or set `webServerEnabled: false` to run without the web UI. If you bind the server beyond loopback, see [Web UI HTTP Basic Auth](#web-ui-http-basic-auth).
+Open `http://127.0.0.1:4747` to browse the memory–prompt timeline, inspect captures, and manage the user profile. The UI has six views: **Project memories** (`/project-memories`), **User profile** (`/user-profile`), **Skill library** (`/skill-library`), **Markdown vault** (`/markdown-vault`), **Stats** (`/stats`) and **Model** (`/model-settings`). Change the port with `webServerPort`, or set `webServerEnabled: false` to run without the web UI. If you bind the server beyond loopback, see [Web UI HTTP Basic Auth](#web-ui-http-basic-auth).
 
 The timeline shows each memory and prompt once. If several capture prompts refer to one memory, its current prompt is paired with it when available on the page; earlier prompts remain visible as separate entries.
 
