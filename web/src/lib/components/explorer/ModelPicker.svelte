@@ -11,7 +11,6 @@
     idPrefix?: string;
     disabled?: boolean;
     configured?: boolean;
-    onSaved?: () => void;
   };
 
   type ModelCatalog = {
@@ -28,12 +27,7 @@
     }>;
   };
 
-  let {
-    idPrefix = "model",
-    disabled = false,
-    configured = $bindable(false),
-    onSaved,
-  }: Props = $props();
+  let { idPrefix = "model", disabled = false, configured = $bindable(false) }: Props = $props();
 
   const i18n = useI18n();
   let catalog = $state<ModelCatalog | null>(null);
@@ -98,7 +92,6 @@
     await loadCatalog();
     if (catalog?.configured) {
       toast.success(i18n.t("toast-model-saved"));
-      onSaved?.();
     } else {
       toast.error(i18n.t("toast-model-save-failed"));
     }
