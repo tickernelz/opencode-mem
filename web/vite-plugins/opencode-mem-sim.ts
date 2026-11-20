@@ -53,6 +53,19 @@ type MarkdownStatus = {
   files: MarkdownVaultFile[];
 };
 
+type ModelProviderCatalog = {
+  available: boolean;
+  configured: boolean;
+  providerID: string | null;
+  modelID: string | null;
+  providers: Array<{
+    id: string;
+    name: string;
+    connected: boolean;
+    models: Array<{ id: string; name: string }>;
+  }>;
+};
+
 function readJson<T>(filePath: string): T {
   return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
 }
@@ -152,6 +165,9 @@ export function opencodeMemSimPlugin(simRoot: string): Plugin {
         ...markdownFixture,
         files: markdownFixture.files.map((file) => ({ ...file })),
       };
+      const modelProvider = readJson<{ data: ModelProviderCatalog }>(
+        path.join(simRoot, "config-model-provider.json")
+      ).data;
 
       function findMemory(id: string) {
         return memories.find((item) => item.id === id);
@@ -200,6 +216,43 @@ export function opencodeMemSimPlugin(simRoot: string): Plugin {
 
           if (pathname === "/api/migration/tags/detect" && method === "GET") {
             sendJson(res, 200, readJson(path.join(simRoot, "migration-tags-detect.json")));
+            return;
+          }
+
+          if (pathname === "/api/config/model-provider" && method === "GET") {
+            sendJson(res, 200, { success: true, data: modelProvider });
+            return;
+          }
+
+          if (pathname === "/api/config/model-provider" && method === "PUT") {
+            void readBody(req).then((raw) => {
+              try {
+                const parsed = raw
+                  ? (JSON.parse(raw) as { providerID?: string; modelID?: string })
+                  : {};
+                const providerID = String(parsed.providerID || "").trim();
+                const modelID = String(parsed.modelID || "").trim();
+                if (!providerID || !modelID) {
+                  sendJson(res, 400, {
+                    success: false,
+                    error: "providerID and modelID are required",
+                  });
+                  return;
+                }
+                modelProvider.providerID = providerID;
+                modelProvider.modelID = modelID;
+                modelProvider.configured = modelID !== "inherit";
+                sendJson(res, 200, {
+                  success: true,
+                  data: { writtenTo: "sim", providerID, modelID, requiresReload: false },
+                });
+              } catch (error) {
+                sendJson(res, 400, {
+                  success: false,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
+            });
             return;
           }
 
