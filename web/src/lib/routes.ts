@@ -6,9 +6,10 @@ export const ROUTES = {
   skills: "/skill-library",
   markdown: "/markdown-vault",
   stats: "/stats",
+  model: "/model-settings",
 } as const;
 
-export type AppView = "project" | "profile" | "skills" | "markdown" | "stats";
+export type AppView = "project" | "profile" | "skills" | "markdown" | "stats" | "model";
 
 export function normalizePath(pathname: string): string {
   const path = pathname.replace(/\/+$/, "") || "/";
@@ -21,6 +22,7 @@ export function viewFromPath(pathname: string): AppView {
   if (path === ROUTES.skills) return "skills";
   if (path === ROUTES.markdown) return "markdown";
   if (path === ROUTES.stats) return "stats";
+  if (path === ROUTES.model) return "model";
   return "project";
 }
 
@@ -29,6 +31,7 @@ export function pathForView(view: AppView): string {
   if (view === "skills") return ROUTES.skills;
   if (view === "markdown") return ROUTES.markdown;
   if (view === "stats") return ROUTES.stats;
+  if (view === "model") return ROUTES.model;
   return ROUTES.project;
 }
 
@@ -40,7 +43,8 @@ export function isAppPath(pathname: string): boolean {
     path === ROUTES.profile ||
     path === ROUTES.skills ||
     path === ROUTES.markdown ||
-    path === ROUTES.stats
+    path === ROUTES.stats ||
+    path === ROUTES.model
   );
 }
 
@@ -53,7 +57,8 @@ export function resolveAppPath(pathname: string): string {
     path === ROUTES.profile ||
     path === ROUTES.skills ||
     path === ROUTES.markdown ||
-    path === ROUTES.stats
+    path === ROUTES.stats ||
+    path === ROUTES.model
   )
     return path;
   return ROUTES.project;

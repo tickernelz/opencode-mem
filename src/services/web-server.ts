@@ -32,6 +32,9 @@ import {
   handleDetectTagMigration,
   handleRunTagMigrationBatch,
   handleGetTagMigrationProgress,
+  handleGetTagMigrationModel,
+  handleSetTagMigrationModel,
+  type ProviderDirectoryEntry,
   handleDeletePrompt,
   handleBulkDeletePrompts,
   handleGetUserProfile,
@@ -228,6 +231,12 @@ interface WebServerConfig {
   enabled: boolean;
   auth?: WebAuth;
   apiToken?: string;
+  /** Project root used for project-scoped config writes and reloads. */
+  projectDirectory?: string;
+  /** Fresh provider directory straight from the host (snapshot may be empty). */
+  loadProviderDirectory?: () => Promise<ProviderDirectoryEntry[]>;
+  /** Reloads the running config after a config file write. */
+  reloadConfig?: () => void;
 }
 
 export class WebServer {
@@ -683,6 +692,21 @@ export class WebServer {
       if (path === "/api/migration/tags/progress" && method === "GET") {
         const result = await handleGetTagMigrationProgress();
         return this.jsonResponse(result);
+      }
+
+      if (path === "/api/config/model-provider" && method === "GET") {
+        const result = await handleGetTagMigrationModel(this.config.loadProviderDirectory);
+        return this.jsonResponse(result);
+      }
+
+      if (path === "/api/config/model-provider" && method === "PUT") {
+        const body = (await req.json()) as any;
+        const result = await handleSetTagMigrationModel(
+          body,
+          this.config.projectDirectory,
+          this.config.reloadConfig
+        );
+        return this.jsonResponse(result, result.success ? 200 : 400);
       }
 
       if (path === "/api/migration/run" && method === "POST") {

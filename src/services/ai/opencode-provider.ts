@@ -132,6 +132,23 @@ export function setConnectedProviders(providers: string[]): void {
   _connectedProviders = new Set(providers);
 }
 
+/** Provider directory snapshot (id, display name, models) for config UIs. */
+export type ProviderCatalogEntry = {
+  id: string;
+  name: string;
+  models: Array<{ id: string; name: string }>;
+};
+
+let _providerCatalog: ProviderCatalogEntry[] = [];
+
+export function setProviderCatalog(providers: ProviderCatalogEntry[]): void {
+  _providerCatalog = providers;
+}
+
+export function getProviderCatalog(): ProviderCatalogEntry[] {
+  return _providerCatalog;
+}
+
 export function isProviderConnected(providerName: string): boolean {
   return _connectedProviders.has(providerName);
 }
