@@ -11,7 +11,8 @@ export type AIProviderType =
   | "runcrate"
   | "cloudgpu"
   | "standardcompute"
-  | "uberllm";
+  | "uberllm"
+  | "aigrow";
 
 export interface AIMessage {
   id?: number;

@@ -14,7 +14,8 @@ export type MemoryProviderPresetId =
   | "runcrate"
   | "cloudgpu"
   | "standardcompute"
-  | "uberllm";
+  | "uberllm"
+  | "aigrow";
 
 export interface MemoryProviderPresetDefaults {
   apiUrl: string;
@@ -57,6 +58,10 @@ export const MEMORY_PROVIDER_PRESET_DEFAULTS: Record<
     apiUrl: "https://api.uberllm.dev/v1",
     model: "deepseek/deepseek-v4-flash",
   },
+  aigrow: {
+    apiUrl: "https://aigrow.gg/v1",
+    model: "claude-haiku-5.5",
+  },
 };
 
 export function isMemoryProviderPreset(
@@ -70,7 +75,8 @@ export function isMemoryProviderPreset(
     provider === "runcrate" ||
     provider === "cloudgpu" ||
     provider === "standardcompute" ||
-    provider === "uberllm"
+    provider === "uberllm" ||
+    provider === "aigrow"
   );
 }
 
