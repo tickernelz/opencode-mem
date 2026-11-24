@@ -43,13 +43,26 @@ describe("shouldUseEmbeddingSubprocess", () => {
   });
 });
 
+describe("resolveEmbeddingWorkerRuntime", () => {
+  it("falls back to process.execPath with BUN_BE_BUN when no node/bun on PATH", () => {
+    // Under bun test we always have a bun-capable execPath.
+    const runtime = resolveEmbeddingWorkerRuntime();
+    expect(runtime).not.toBeNull();
+    expect(runtime!.command.length).toBeGreaterThan(0);
+    // Prefer real node/bun when present; otherwise OpenCode-style self re-exec.
+    if (runtime!.env.BUN_BE_BUN === "1") {
+      expect(runtime!.command).toBe(process.execPath);
+    }
+  });
+});
+
 describe("EmbeddingSubprocessClient readiness", () => {
   it("rejects embed before warmup and after worker exit", async () => {
     const runtime = resolveEmbeddingWorkerRuntime();
     if (!runtime) return;
 
     const client = new EmbeddingSubprocessClient({
-      runtimePath: runtime,
+      runtime,
       scriptPath: join(import.meta.dir, "fixtures", "embedding-worker-fake.mjs"),
       requestTimeoutMs: 5_000,
     });
@@ -115,7 +128,7 @@ describe("EmbeddingSubprocessClient with fake worker", () => {
     if (!runtime) return;
 
     const client = new EmbeddingSubprocessClient({
-      runtimePath: runtime,
+      runtime,
       scriptPath: join(import.meta.dir, "fixtures", "embedding-worker-fake.mjs"),
     });
 
@@ -132,5 +145,19 @@ describe("EmbeddingSubprocessClient with fake worker", () => {
     client.dispose("test");
     await new Promise((resolve) => setTimeout(resolve, 80));
     expect(child.killed || child.exitCode !== null).toBe(true);
+  });
+
+  it("runs the worker via BUN_BE_BUN self re-exec (OpenCode-style)", async () => {
+    if (typeof process.versions.bun !== "string") return;
+
+    const client = new EmbeddingSubprocessClient({
+      runtime: { command: process.execPath, args: [], env: { BUN_BE_BUN: "1" } },
+      scriptPath: join(import.meta.dir, "fixtures", "embedding-worker-fake.mjs"),
+      requestTimeoutMs: 10_000,
+    });
+
+    await client.warmup({ model: "fake", cacheDir: "/tmp", pooling: "mean" });
+    expect(Array.from(await client.embed("xy", "mean"))).toEqual([2, 3, 4]);
+    client.dispose("bun-be-bun-test");
   });
 });

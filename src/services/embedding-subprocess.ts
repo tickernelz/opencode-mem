@@ -102,23 +102,46 @@ function isBunOrNodeExecutable(path: string): boolean {
   return name === "bun" || name === "bun.exe" || name === "node" || name === "node.exe";
 }
 
+export type EmbeddingWorkerRuntime = {
+  /** Executable to spawn (node, bun, or a bun --compile host such as opencode.exe). */
+  command: string;
+  /** Extra argv before the worker script path. */
+  args: string[];
+  /** Extra env for the child (merged over process.env). */
+  env: Record<string, string>;
+};
+
 /**
  * Prefer Node so ORT runs outside Bun's NAPI host (#518). Fall back to a Bun
  * *subprocess* (still isolated from the OpenCode host) when Node is missing —
  * a child segfault kills only the worker, not `opencode serve`.
+ *
+ * When only a Bun `--compile` host is available (typical OpenCode standalone
+ * install with no Node/Bun on PATH), re-exec `process.execPath` with
+ * `BUN_BE_BUN=1` so the child acts as the Bun CLI and can run our worker
+ * script (Bun ≥ 1.2.16; OpenCode 2.3.x ships Bun 1.4.x).
  */
-export function resolveEmbeddingWorkerRuntime(): string | null {
+export function resolveEmbeddingWorkerRuntime(): EmbeddingWorkerRuntime | null {
   const node = resolveRuntimeCandidates("node")[0];
-  if (node) return node;
+  if (node) return { command: node, args: [], env: {} };
+
   const bun = resolveRuntimeCandidates("bun")[0];
-  if (bun) return bun;
-  // Real Bun/Node process (not a foreign compiled host like opencode.exe).
-  if (
-    (typeof process.versions.bun === "string" || typeof process.versions.node === "string") &&
-    isBunOrNodeExecutable(process.execPath)
-  ) {
-    return process.execPath;
+  if (bun) return { command: bun, args: [], env: {} };
+
+  if (typeof process.versions.bun === "string" && process.execPath) {
+    // OpenCode.exe / other bun --compile hosts: ignore the bundled entrypoint
+    // and run our worker as plain `bun <script>`.
+    return {
+      command: process.execPath,
+      args: [],
+      env: { BUN_BE_BUN: "1" },
+    };
   }
+
+  if (typeof process.versions.node === "string" && isBunOrNodeExecutable(process.execPath)) {
+    return { command: process.execPath, args: [], env: {} };
+  }
+
   return null;
 }
 
@@ -179,8 +202,8 @@ export function shouldUseEmbeddingSubprocess(): boolean {
 export type EmbeddingSubprocessClientOptions = {
   /** Override worker script path (tests). */
   scriptPath?: string;
-  /** Override Node/Bun executable (tests). */
-  runtimePath?: string;
+  /** Override resolved runtime (tests). */
+  runtime?: EmbeddingWorkerRuntime;
   /** Per-request timeout (warmup/embed). */
   requestTimeoutMs?: number;
 };
@@ -192,12 +215,12 @@ export class EmbeddingSubprocessClient {
   private startPromise: Promise<void> | null = null;
   private modelReady = false;
   private readonly scriptPath?: string;
-  private readonly runtimePath?: string;
+  private readonly runtimeOverride?: EmbeddingWorkerRuntime;
   private readonly requestTimeoutMs: number;
 
   constructor(options: EmbeddingSubprocessClientOptions = {}) {
     this.scriptPath = options.scriptPath;
-    this.runtimePath = options.runtimePath;
+    this.runtimeOverride = options.runtime;
     this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
@@ -217,18 +240,18 @@ export class EmbeddingSubprocessClient {
   }
 
   private async spawnChild(): Promise<void> {
-    const runtime = this.runtimePath ?? resolveEmbeddingWorkerRuntime();
+    const runtime = this.runtimeOverride ?? resolveEmbeddingWorkerRuntime();
     const script = this.scriptPath ?? resolveEmbeddingWorkerScript();
     if (!runtime) {
       throw new Error(
-        "Local embeddings on Windows require Node.js or Bun on PATH (or a standard install location) so onnxruntime can run in a subprocess (#518). Install Node.js, or configure remote embeddings via embeddingApiUrl + embeddingApiKey."
+        "Local embeddings on Windows could not find a JS runtime for the ONNX subprocess (#518). Install Node.js, or configure remote embeddings via embeddingApiUrl + embeddingApiKey."
       );
     }
     if (!existsSync(script)) {
       throw new Error(`embedding-worker script not found at ${script}`);
     }
 
-    if (script.endsWith(".ts") && /node(\.exe)?$/i.test(basename(runtime))) {
+    if (script.endsWith(".ts") && /node(\.exe)?$/i.test(basename(runtime.command))) {
       throw new Error(
         `embedding-worker.ts cannot run under Node; build the plugin first (expected ${script.replace(/\.ts$/, ".js")})`
       );
@@ -240,10 +263,11 @@ export class EmbeddingSubprocessClient {
       process.env.NODE_PATH,
     ].filter((part): part is string => Boolean(part));
 
-    const child = spawn(runtime, [script], {
+    const child = spawn(runtime.command, [...runtime.args, script], {
       cwd: packageRoot,
       env: {
         ...process.env,
+        ...runtime.env,
         OPENCODE_MEM_EMBEDDING_WORKER: "1",
         // Keep protocol stdout clean; transformers/ORT chatter goes to stderr.
         TRANSFORMERS_VERBOSITY: process.env.TRANSFORMERS_VERBOSITY ?? "error",
@@ -320,7 +344,12 @@ export class EmbeddingSubprocessClient {
       }
     });
 
-    log("embedding-subprocess started", { runtime, script, cwd: packageRoot ?? null });
+    log("embedding-subprocess started", {
+      runtime: runtime.command,
+      bunBeBun: runtime.env.BUN_BE_BUN === "1",
+      script,
+      cwd: packageRoot ?? null,
+    });
   }
 
   private request(message: EmbeddingWorkerRequest): Promise<EmbeddingWorkerResponse> {
