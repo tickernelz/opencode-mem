@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { join } from "node:path";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import {
+  collectEmbeddingWorkerDirs,
   EmbeddingSubprocessClient,
+  resolveEmbeddingWorkerPackageRoot,
   resolveEmbeddingWorkerRuntime,
+  resolveEmbeddingWorkerScript,
   shouldUseEmbeddingSubprocess,
 } from "../src/services/embedding-subprocess.js";
 import { parseWorkerResponse } from "../src/services/embedding-worker-protocol.js";
@@ -73,6 +78,34 @@ describe("parseWorkerResponse", () => {
       ok: false,
       error: "boom",
     });
+  });
+});
+
+describe("resolveEmbeddingWorkerScript anchors", () => {
+  it("finds the worker via import.meta.path when url is unusable", () => {
+    const root = mkdtempSync(join(tmpdir(), "opencode-mem-worker-"));
+    const services = join(root, "dist", "services");
+    mkdirSync(services, { recursive: true });
+    writeFileSync(join(root, "package.json"), JSON.stringify({ name: "opencode-mem" }));
+    const worker = join(services, "embedding-worker.js");
+    writeFileSync(worker, "export {}\n");
+
+    const resolved = resolveEmbeddingWorkerScript({
+      url: "",
+      path: join(services, "embedding-subprocess.js"),
+    } as ImportMeta & { path?: string });
+    expect(resolved).toBe(worker);
+    expect(resolveEmbeddingWorkerPackageRoot(resolved)).toBe(root);
+  });
+
+  it("collects dirs without throwing on a bad import.meta.url", () => {
+    const dirs = collectEmbeddingWorkerDirs({
+      url: "not-a-file-url",
+      path: "/tmp/opencode-mem/dist/services/embedding-subprocess.js",
+    } as ImportMeta & { path?: string });
+    expect(
+      dirs.some((dir) => dir.includes("dist/services") || dir.includes("dist\\services"))
+    ).toBe(true);
   });
 });
 

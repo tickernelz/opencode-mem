@@ -10,6 +10,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { log, safeLog } from "./logger.js";
 import {
@@ -31,6 +32,12 @@ type Pending = {
   timer: ReturnType<typeof setTimeout>;
 };
 
+type PluginImportMeta = ImportMeta & {
+  path?: string;
+  dirname?: string;
+  dir?: string;
+};
+
 const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 
 function which(cmd: string): string | null {
@@ -50,6 +57,46 @@ function which(cmd: string): string | null {
   return null;
 }
 
+/** PATH plus well-known install locations (OpenCode sandboxes often omit PATH entries). */
+export function resolveRuntimeCandidates(cmd: "node" | "bun"): string[] {
+  const found: string[] = [];
+  const seen = new Set<string>();
+  const add = (path: string | null | undefined) => {
+    if (!path || seen.has(path) || !existsSync(path)) return;
+    seen.add(path);
+    found.push(path);
+  };
+
+  add(which(cmd));
+
+  const home = homedir();
+  const local = process.env.LOCALAPPDATA;
+  const pf = process.env.ProgramFiles ?? "C:\\Program Files";
+  const pf86 = process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)";
+
+  if (cmd === "node") {
+    if (process.platform === "win32") {
+      add(join(pf, "nodejs", "node.exe"));
+      add(join(pf86, "nodejs", "node.exe"));
+      if (local) add(join(local, "Programs", "nodejs", "node.exe"));
+    } else {
+      add("/usr/local/bin/node");
+      add("/usr/bin/node");
+      add(join(home, ".nvm", "current", "bin", "node"));
+    }
+  } else {
+    if (process.platform === "win32") {
+      add(join(home, ".bun", "bin", "bun.exe"));
+      if (local) add(join(local, "bun", "bin", "bun.exe"));
+    } else {
+      add(join(home, ".bun", "bin", "bun"));
+      add("/usr/local/bin/bun");
+    }
+  }
+
+  return found;
+}
+
 function isBunOrNodeExecutable(path: string): boolean {
   const name = basename(path).toLowerCase();
   return name === "bun" || name === "bun.exe" || name === "node" || name === "node.exe";
@@ -61,9 +108,9 @@ function isBunOrNodeExecutable(path: string): boolean {
  * a child segfault kills only the worker, not `opencode serve`.
  */
 export function resolveEmbeddingWorkerRuntime(): string | null {
-  const node = which("node");
+  const node = resolveRuntimeCandidates("node")[0];
   if (node) return node;
-  const bun = which("bun");
+  const bun = resolveRuntimeCandidates("bun")[0];
   if (bun) return bun;
   // Real Bun/Node process (not a foreign compiled host like opencode.exe).
   if (
@@ -75,21 +122,51 @@ export function resolveEmbeddingWorkerRuntime(): string | null {
   return null;
 }
 
-export function resolveEmbeddingWorkerScript(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const asJs = join(here, "embedding-worker.js");
-  if (existsSync(asJs)) return asJs;
-  // Source checkout / bun test may resolve the .ts sibling.
-  const asTs = join(here, "embedding-worker.ts");
-  if (existsSync(asTs)) return asTs;
-  return asJs;
+/** Directories that may contain the sibling embedding-worker script. */
+export function collectEmbeddingWorkerDirs(meta: PluginImportMeta = import.meta): string[] {
+  const dirs: string[] = [];
+  const add = (dir: string | null | undefined) => {
+    if (!dir || !dir.trim() || dir === "undefined") return;
+    if (!dirs.includes(dir)) dirs.push(dir);
+  };
+
+  if (typeof meta.url === "string" && meta.url.trim()) {
+    try {
+      add(dirname(fileURLToPath(meta.url)));
+    } catch {
+      // OpenCode --compile hosts can expose unusable import.meta.url (#210).
+    }
+  }
+  if (typeof meta.path === "string" && meta.path.trim()) add(dirname(meta.path));
+  if (typeof meta.dirname === "string") add(meta.dirname);
+  if (typeof meta.dir === "string") add(meta.dir);
+  add(process.cwd());
+  return dirs;
+}
+
+export function resolveEmbeddingWorkerScript(meta: PluginImportMeta = import.meta): string {
+  for (const here of collectEmbeddingWorkerDirs(meta)) {
+    const asJs = join(here, "embedding-worker.js");
+    if (existsSync(asJs)) return asJs;
+    const asTs = join(here, "embedding-worker.ts");
+    if (existsSync(asTs)) return asTs;
+  }
+  throw new Error(
+    "embedding-worker script not found next to the plugin module (OpenCode may have cleared import.meta.url; see #210 / #518). Reinstall the plugin or configure remote embeddings via embeddingApiUrl + embeddingApiKey."
+  );
 }
 
 /** Package root that owns `node_modules` next to the built worker. */
 export function resolveEmbeddingWorkerPackageRoot(scriptPath: string): string | undefined {
-  // dist/services/embedding-worker.js → package root
-  const root = join(dirname(scriptPath), "..", "..");
-  return existsSync(join(root, "package.json")) ? root : undefined;
+  let dir = dirname(scriptPath);
+  for (let depth = 0; depth < 6; depth++) {
+    const pkg = join(dir, "package.json");
+    if (existsSync(pkg)) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return undefined;
 }
 
 /** True when local ONNX must not load in the host process. */
@@ -144,7 +221,7 @@ export class EmbeddingSubprocessClient {
     const script = this.scriptPath ?? resolveEmbeddingWorkerScript();
     if (!runtime) {
       throw new Error(
-        "Local embeddings on Windows require Node.js or Bun on PATH so onnxruntime can run in a subprocess (#518). Install Node.js, or configure remote embeddings via embeddingApiUrl + embeddingApiKey."
+        "Local embeddings on Windows require Node.js or Bun on PATH (or a standard install location) so onnxruntime can run in a subprocess (#518). Install Node.js, or configure remote embeddings via embeddingApiUrl + embeddingApiKey."
       );
     }
     if (!existsSync(script)) {
@@ -255,6 +332,8 @@ export class EmbeddingSubprocessClient {
       }
       const timer = setTimeout(() => {
         this.pending.delete(message.id);
+        // A wedged ORT child must not keep running after we give up (#518).
+        this.dispose("request-timeout");
         reject(new Error(`embedding-subprocess: timed out after ${this.requestTimeoutMs}ms`));
       }, this.requestTimeoutMs);
       (timer as { unref?: () => void }).unref?.();
