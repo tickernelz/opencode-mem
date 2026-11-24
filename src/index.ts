@@ -435,6 +435,16 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       }
     } catch (error) {
       log("Failed to refresh opencode provider state", { error: String(error) });
+      // The host provider directory may be unavailable (e.g. a plugin context
+      // without `ctx.provider`). Keep the explicitly configured provider
+      // connected so structured-output calls are attempted instead of being
+      // denied by the connectivity gate; a bad provider id still fails loudly
+      // on the call itself and falls back to the external API.
+      // Use the loader so we hit the same module instance as ensureProviderConnected.
+      if (CONFIG.opencodeProvider) {
+        const { setConnectedProviders } = await loadOpencodeProvider();
+        setConnectedProviders([CONFIG.opencodeProvider]);
+      }
     }
   };
 
