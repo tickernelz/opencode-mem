@@ -1,5 +1,8 @@
 export const translations = {
   en: {
+    "tab-model": "Model",
+    "model-settings-note":
+      "Both keys are shared: auto-capture and tag migration use the same provider and model.",
     "tab-stats": "Stats",
     "stats-overview": "Overview",
     "stats-total-memories": "Total memories",
@@ -103,6 +106,14 @@ export const translations = {
     "btn-cancel": "Cancel",
     "btn-save": "Save Changes",
     "btn-start-migration": "Start Migration",
+    "label-model-provider": "Provider",
+    "label-model-name": "Model",
+    "migration-model-unavailable":
+      "Provider list unavailable ({reason}). Set opencodeProvider/opencodeModel in your config file instead.",
+    "migration-model-required":
+      'Tag migration needs an explicit model: "inherit" only works with a live session. Pick a provider and model, then save.',
+    "toast-model-saved": "Model saved.",
+    "toast-model-save-failed": "Could not save the model.",
     "loading-init": "Initializing…",
     "loading-profile": "Loading profile…",
     "loading-changelog": "Loading changelog…",
@@ -269,6 +280,9 @@ export const translations = {
     "toast-skill-load-failed": "Failed to load skills",
   },
   de: {
+    "tab-model": "Modell",
+    "model-settings-note":
+      "Beide Schlüssel werden gemeinsam genutzt: automatisches Erfassen und Tag-Migration verwenden denselben Anbieter und dasselbe Modell.",
     "tab-stats": "Statistiken",
     "stats-overview": "Übersicht",
     "stats-total-memories": "Erinnerungen insgesamt",
@@ -372,6 +386,14 @@ export const translations = {
     "btn-cancel": "Abbrechen",
     "btn-save": "Änderungen speichern",
     "btn-start-migration": "Migration starten",
+    "label-model-provider": "Anbieter",
+    "label-model-name": "Modell",
+    "migration-model-unavailable":
+      "Anbieterliste nicht verfügbar ({reason}). Setze stattdessen opencodeProvider/opencodeModel in deiner Konfigurationsdatei.",
+    "migration-model-required":
+      "Die Tag-Migration benötigt ein explizites Modell: „inherit“ funktioniert nur mit einer aktiven Sitzung. Wähle Anbieter und Modell und speichere.",
+    "toast-model-saved": "Modell gespeichert.",
+    "toast-model-save-failed": "Modell konnte nicht gespeichert werden.",
     "loading-init": "Wird initialisiert…",
     "loading-profile": "Profil wird geladen…",
     "loading-changelog": "Changelog wird geladen…",
@@ -542,6 +564,8 @@ export const translations = {
     "toast-skill-load-failed": "Skills konnten nicht geladen werden",
   },
   zh: {
+    "tab-model": "模型",
+    "model-settings-note": "这两个键是共用的：自动捕获与标签迁移使用同一个服务商与模型。",
     "tab-stats": "统计",
     "stats-overview": "概览",
     "stats-total-memories": "记忆总数",
@@ -644,6 +668,14 @@ export const translations = {
     "btn-cancel": "取消",
     "btn-save": "保存更改",
     "btn-start-migration": "开始迁移",
+    "label-model-provider": "提供方",
+    "label-model-name": "模型",
+    "migration-model-unavailable":
+      "无法获取模型列表（{reason}）。请改为在配置文件中手动设置 opencodeProvider/opencodeModel。",
+    "migration-model-required":
+      "标签迁移需要一个明确的模型：“inherit” 只能在存在活动会话时使用。请选择提供方和模型后保存。",
+    "toast-model-saved": "模型已保存。",
+    "toast-model-save-failed": "模型保存失败。",
     "loading-init": "初始化中...",
     "loading-profile": "加载画像中...",
     "loading-changelog": "加载更新日志中...",
@@ -808,6 +840,9 @@ export const translations = {
     "toast-skill-load-failed": "加载技能失败",
   },
   ar: {
+    "tab-model": "النموذج",
+    "model-settings-note":
+      "المفتاحان مشتركان: يستخدم الالتقاط التلقائي وترحيل الوسوم المزوّد والنموذج نفسيهما.",
     "tab-stats": "الإحصائيات",
     "stats-overview": "نظرة عامة",
     "stats-total-memories": "إجمالي الذكريات",
@@ -917,6 +952,14 @@ export const translations = {
     "btn-cancel": "إلغاء",
     "btn-save": "حفظ التغييرات",
     "btn-start-migration": "بدء الترحيل",
+    "label-model-provider": "المزوّد",
+    "label-model-name": "النموذج",
+    "migration-model-unavailable":
+      "قائمة المزوّدين غير متاحة ({reason}). عيّن opencodeProvider/opencodeModel في ملف الإعدادات بدلاً من ذلك.",
+    "migration-model-required":
+      'تتطلب هجرة الوسوم نموذجًا صريحًا: "inherit" يعمل فقط مع جلسة نشطة. اختر المزوّد والنموذج ثم احفظ.',
+    "toast-model-saved": "تم حفظ النموذج.",
+    "toast-model-save-failed": "تعذّر حفظ النموذج.",
 
     "loading-init": "جاري التهيئة...",
     "loading-profile": "جاري تحميل الملف الشخصي...",
@@ -1116,6 +1159,9 @@ export const translations = {
     "toast-skill-load-failed": "فشل تحميل المهارات",
   },
   tr: {
+    "tab-model": "Model",
+    "model-settings-note":
+      "Bu iki anahtar ortaktır: otomatik yakalama ve etiket geçişi aynı sağlayıcıyı ve modeli kullanır.",
     "tab-stats": "İstatistikler",
     "stats-overview": "Genel bakış",
     "stats-total-memories": "Toplam anı",
@@ -1219,6 +1265,14 @@ export const translations = {
     "btn-cancel": "İptal",
     "btn-save": "Değişiklikleri kaydet",
     "btn-start-migration": "Geçişi başlat",
+    "label-model-provider": "Sağlayıcı",
+    "label-model-name": "Model",
+    "migration-model-unavailable":
+      "Sağlayıcı listesi kullanılamıyor ({reason}). Bunun yerine yapılandırma dosyanızda opencodeProvider/opencodeModel ayarlayın.",
+    "migration-model-required":
+      'Etiket geçişi açık bir model gerektirir: "inherit" yalnızca etkin bir oturumla çalışır. Bir sağlayıcı ve model seçip kaydedin.',
+    "toast-model-saved": "Model kaydedildi.",
+    "toast-model-save-failed": "Model kaydedilemedi.",
     "loading-init": "Başlatılıyor...",
     "loading-profile": "Profil yükleniyor...",
     "loading-changelog": "Değişiklik günlüğü yükleniyor...",
@@ -1387,6 +1441,9 @@ export const translations = {
     "toast-skill-load-failed": "Beceriler yüklenemedi",
   },
   nl: {
+    "tab-model": "Model",
+    "model-settings-note":
+      "Beide sleutels worden gedeeld: automatische vastlegging en tag-migratie gebruiken dezelfde provider en hetzelfde model.",
     "tab-stats": "Statistieken",
     "stats-overview": "Overzicht",
     "stats-total-memories": "Totaal aantal herinneringen",
@@ -1490,6 +1547,14 @@ export const translations = {
     "btn-cancel": "Annuleren",
     "btn-save": "Wijzigingen opslaan",
     "btn-start-migration": "Migratie starten",
+    "label-model-provider": "Provider",
+    "label-model-name": "Model",
+    "migration-model-unavailable":
+      "Providerlijst niet beschikbaar ({reason}). Stel in plaats daarvan opencodeProvider/opencodeModel in je configuratiebestand in.",
+    "migration-model-required":
+      'Tagmigratie vereist een expliciet model: "inherit" werkt alleen met een actieve sessie. Kies een provider en model en sla op.',
+    "toast-model-saved": "Model opgeslagen.",
+    "toast-model-save-failed": "Model opslaan mislukt.",
     "loading-init": "Initialiseren...",
     "loading-profile": "Profiel laden...",
     "loading-changelog": "Wijzigingslogboek laden...",
@@ -1660,6 +1725,9 @@ export const translations = {
     "toast-skill-load-failed": "Skills laden mislukt",
   },
   fr: {
+    "tab-model": "Modèle",
+    "model-settings-note":
+      "Ces deux clés sont partagées : la capture automatique et la migration des tags utilisent le même fournisseur et le même modèle.",
     "tab-stats": "Stats",
     "stats-overview": "Vue d'ensemble",
     "stats-total-memories": "Total des mémoires",
@@ -1763,6 +1831,14 @@ export const translations = {
     "btn-cancel": "Annuler",
     "btn-save": "Enregistrer les modifications",
     "btn-start-migration": "Lancer la migration",
+    "label-model-provider": "Fournisseur",
+    "label-model-name": "Modèle",
+    "migration-model-unavailable":
+      "Liste des fournisseurs indisponible ({reason}). Définissez plutôt opencodeProvider/opencodeModel dans votre fichier de configuration.",
+    "migration-model-required":
+      "La migration des tags nécessite un modèle explicite : « inherit » ne fonctionne qu'avec une session active. Choisissez un fournisseur et un modèle, puis enregistrez.",
+    "toast-model-saved": "Modèle enregistré.",
+    "toast-model-save-failed": "Impossible d'enregistrer le modèle.",
     "loading-init": "Initialisation…",
     "loading-profile": "Chargement du profil…",
     "loading-changelog": "Chargement de l'historique…",

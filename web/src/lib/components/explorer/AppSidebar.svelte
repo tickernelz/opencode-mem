@@ -1,6 +1,7 @@
 <script lang="ts">
   import Activity from "@lucide/svelte/icons/activity";
   import Brain from "@lucide/svelte/icons/brain";
+  import Cpu from "@lucide/svelte/icons/cpu";
   import FileText from "@lucide/svelte/icons/file-text";
   import Folder from "@lucide/svelte/icons/folder";
   import Languages from "@lucide/svelte/icons/languages";
@@ -36,6 +37,7 @@
     skillsLabel: string;
     markdownLabel: string;
     statsLabel: string;
+    modelLabel: string;
     showMarkdown?: boolean;
     langLabel: string;
     languageLabel: string;
@@ -55,6 +57,7 @@
     skillsLabel,
     markdownLabel,
     statsLabel,
+    modelLabel,
     showMarkdown = false,
     langLabel,
     languageLabel,
@@ -213,6 +216,19 @@
       <Activity class={cn(ICON, "shrink-0")} aria-hidden="true" />
       {#if !iconOnly}
         <span class="truncate text-start">{statsLabel}</span>
+      {/if}
+    </a>
+    <a
+      href={ROUTES.model}
+      class={navClass(currentView === "model")}
+      aria-current={currentView === "model" ? "page" : undefined}
+      title={modelLabel}
+      aria-label={modelLabel}
+      onclick={(e) => onNavClick(e, ROUTES.model)}
+    >
+      <Cpu class={cn(ICON, "shrink-0")} aria-hidden="true" />
+      {#if !iconOnly}
+        <span class="truncate text-start">{modelLabel}</span>
       {/if}
     </a>
   </nav>

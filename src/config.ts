@@ -1695,11 +1695,15 @@ export function hasAutoCaptureProviderConfig(config: RuntimeConfig = CONFIG): bo
   return getAutoCaptureProviderStatus(config).ready;
 }
 
-export function initConfig(directory: string): void {
-  const projectPaths = [
+function projectConfigPaths(directory: string): string[] {
+  return [
     join(directory, ".opencode", "opencode-mem.jsonc"),
     join(directory, ".opencode", "opencode-mem.json"),
   ];
+}
+
+export function initConfig(directory: string): void {
+  const projectPaths = projectConfigPaths(directory);
   const globalConfig = loadConfigFromPaths(CONFIG_FILES);
   const projectConfig = loadConfigFromPaths(projectPaths);
   assertProjectRemoteProviderConfigIsSafe(projectConfig);
@@ -1712,4 +1716,24 @@ export function initConfig(directory: string): void {
 
 export function isConfigured(): boolean {
   return true;
+}
+
+/**
+ * Config file that owns a model override written from the web UI: a project
+ * config that already sets opencodeProvider/opencodeModel wins (that is where
+ * the running value comes from), then the first existing global file, then a
+ * new global .jsonc.
+ */
+export function resolveModelConfigPath(projectDirectory?: string): string {
+  if (projectDirectory) {
+    for (const path of projectConfigPaths(projectDirectory)) {
+      if (!existsSync(path)) continue;
+      const config = loadConfigFromPaths([path]);
+      if (config.opencodeProvider || config.opencodeModel) return path;
+    }
+  }
+  for (const path of CONFIG_FILES) {
+    if (existsSync(path)) return path;
+  }
+  return CONFIG_FILES[0] ?? join(CONFIG_DIR, "opencode-mem.jsonc");
 }

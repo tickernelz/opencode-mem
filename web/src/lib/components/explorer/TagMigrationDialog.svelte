@@ -3,6 +3,7 @@
   import { fetchAPI } from "$lib/api";
   import AppDialog from "$lib/components/ui/app-dialog.svelte";
   import DialogActions from "$lib/components/ui/dialog-actions.svelte";
+  import ModelPicker from "$lib/components/explorer/ModelPicker.svelte";
   import { useI18n } from "$lib/i18n/context.svelte";
   import { STACK } from "$lib/ui/styles";
 
@@ -19,6 +20,7 @@
   let running = $state(false);
   let status = $state("");
   let progress = $state(0);
+  let modelConfigured = $state(false);
 
   $effect(() => {
     if (open && !running) {
@@ -122,6 +124,9 @@
         style={`width: ${progress}%`}
       ></div>
     </div>
+
+    <ModelPicker idPrefix="migration-model" disabled={running} bind:configured={modelConfigured} />
+
     <p class="text-xs text-muted-foreground">{i18n.t("migration-note")}</p>
   </div>
   {#snippet footer()}
@@ -129,6 +134,7 @@
       <DialogActions
         onCancel={() => handleOpenChange(false)}
         primaryLabel={i18n.t("btn-start-migration")}
+        primaryDisabled={!modelConfigured}
         onPrimary={() => void runTagMigration()}
       />
     {/if}
