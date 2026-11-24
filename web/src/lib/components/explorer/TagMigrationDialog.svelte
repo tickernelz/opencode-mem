@@ -20,7 +20,7 @@
   let running = $state(false);
   let status = $state("");
   let progress = $state(0);
-  let modelConfigured = $state(false);
+  let readyForMigration = $state(false);
 
   $effect(() => {
     if (open && !running) {
@@ -125,7 +125,7 @@
       ></div>
     </div>
 
-    <ModelPicker idPrefix="migration-model" disabled={running} bind:configured={modelConfigured} />
+    <ModelPicker idPrefix="migration-model" disabled={running} bind:readyForMigration />
 
     <p class="text-xs text-muted-foreground">{i18n.t("migration-note")}</p>
   </div>
@@ -134,7 +134,7 @@
       <DialogActions
         onCancel={() => handleOpenChange(false)}
         primaryLabel={i18n.t("btn-start-migration")}
-        primaryDisabled={!modelConfigured}
+        primaryDisabled={!readyForMigration}
         onPrimary={() => void runTagMigration()}
       />
     {/if}

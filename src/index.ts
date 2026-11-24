@@ -415,8 +415,9 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
   await configureOpencodeHostTransport(ctx);
 
-  // Re-reads the provider directory into the connectivity snapshot. Errors
-  // are logged and the previous snapshot retained. The host registers
+  // Re-reads the provider directory into the connectivity snapshot. On success
+  // the snapshot is replaced; on failure the configured opencodeProvider is
+  // seeded so structured-output is still attempted. The host registers
   // user-config providers after plugin setup (provider.updated/model.updated),
   // so this runs again on those events and on connectivity-gate misses.
   const refreshConnectedProviders = async (): Promise<void> => {

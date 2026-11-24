@@ -1710,8 +1710,12 @@ export async function handleGetTagMigrationProgress(): Promise<ApiResponse<Migra
 }
 
 export interface TagMigrationModelStatus {
-  /** True when the migration path can run without a live session (inherit cannot). */
+  /** True when the OpenCode path can run without a live session (inherit cannot). */
   configured: boolean;
+  /** True when memoryModel + memoryApiUrl are set (external tag-migration channel). */
+  externalConfigured: boolean;
+  /** True when either the OpenCode or external channel can run tag migration. */
+  readyForMigration: boolean;
   providerID: string | null;
   modelID: string | null;
 }
@@ -1735,14 +1739,22 @@ export type ProviderDirectoryEntry = {
   models: Array<{ id: string; name: string }>;
 };
 
-export async function handleGetTagMigrationModel(
-  loadDirectory?: () => Promise<ProviderDirectoryEntry[]>
-): Promise<ApiResponse<TagMigrationModelCatalog>> {
-  const status: TagMigrationModelStatus = {
-    configured: isOpencodeTagMigrationConfigured(),
+function tagMigrationModelStatus(): TagMigrationModelStatus {
+  const configured = isOpencodeTagMigrationConfigured();
+  const externalConfigured = isExternalTagMigrationConfigured();
+  return {
+    configured,
+    externalConfigured,
+    readyForMigration: configured || externalConfigured,
     providerID: CONFIG.opencodeProvider ?? null,
     modelID: CONFIG.opencodeModel ?? null,
   };
+}
+
+export async function handleGetTagMigrationModel(
+  loadDirectory?: () => Promise<ProviderDirectoryEntry[]>
+): Promise<ApiResponse<TagMigrationModelCatalog>> {
+  const status = tagMigrationModelStatus();
 
   try {
     const { loadOpencodeProvider } = await import("./ai/opencode-provider-loader.js");

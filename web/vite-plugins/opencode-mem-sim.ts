@@ -56,6 +56,8 @@ type MarkdownStatus = {
 type ModelProviderCatalog = {
   available: boolean;
   configured: boolean;
+  externalConfigured?: boolean;
+  readyForMigration?: boolean;
   providerID: string | null;
   modelID: string | null;
   providers: Array<{
@@ -242,6 +244,8 @@ export function opencodeMemSimPlugin(simRoot: string): Plugin {
                 modelProvider.providerID = providerID;
                 modelProvider.modelID = modelID;
                 modelProvider.configured = modelID !== "inherit";
+                modelProvider.readyForMigration =
+                  modelProvider.configured || Boolean(modelProvider.externalConfigured);
                 sendJson(res, 200, {
                   success: true,
                   data: { writtenTo: "sim", providerID, modelID, requiresReload: false },
