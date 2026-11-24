@@ -713,6 +713,12 @@ Manual `memoryProvider` modes:
   "memoryApiKey": "env://UBERLLM_API_KEY",
   ```
   When this provider is selected, auto-capture / profile prompts, model responses, and relevant conversation context are transmitted to `https://api.uberllm.dev`.
+- `aigrow`: OpenAI-compatible Chat Completions preset for [AIGROW](https://aigrow.gg/ai-api). `memoryApiUrl` and `memoryModel` are optional: they default to `https://aigrow.gg/v1` and `claude-haiku-5.5`. If `memoryApiKey` is omitted, `AIGROW_API_KEY` from the environment is used (create a key at https://aigrow.gg/dashboard/api; API docs: https://aigrow.gg/ai-api/guide). Example:
+  ```jsonc
+  "memoryProvider": "aigrow",
+  "memoryApiKey": "env://AIGROW_API_KEY",
+  ```
+  When this provider is selected, auto-capture / profile prompts, model responses, and relevant conversation context are transmitted to `https://aigrow.gg`.
 
 Troubleshooting:
 
@@ -756,7 +762,7 @@ Troubleshooting:
 - If auto-capture reports that a provider is not connected, confirm the provider name with `opencode providers list` and configure that provider in opencode first.
 - If a proxy or custom provider returns plain text instead of structured/tool output, choose another model/provider or use one of the manual provider modes above.
 - For models that reject `temperature`, add `"memoryTemperature": false` when using manual API configuration.
-- For models that reject forced tool calls (`tool_choice: "required"`, e.g. some thinking modes), add `"forceToolChoice": false` when using `openai-chat` / `orcarouter` / `atlas-cloud` / `cheaper-inference` / `api-route` / `runcrate` / `cloudgpu` / `standardcompute` / `uberllm`.
+- For models that reject forced tool calls (`tool_choice: "required"`, e.g. some thinking modes), add `"forceToolChoice": false` when using `openai-chat` / `orcarouter` / `atlas-cloud` / `cheaper-inference` / `api-route` / `runcrate` / `cloudgpu` / `standardcompute` / `uberllm` / `aigrow`.
 - For `opencodeProvider` / `opencodeModel` (e.g. DeepSeek V4 thinking), OpenCode still sends forced `tool_choice` for structured output. opencode-mem disables thinking on the internal `opencode-mem-structured` agent (and re-applies that in `chat.params` after variant merge) so auto-capture and profile learning can complete. Your interactive chat agent is unchanged. If capture still fails with a thinking/`tool_choice` error, pick a non-thinking model for `opencodeModel` or configure a complete manual fallback (`memoryModel` + `memoryApiUrl`).
 - **`opencode-claude-auth` / Claude Code:** auto-capture uses OpenCode with your authenticated `anthropic` provider. Forced `format: json_schema` often loops with Claude-auth, so opencode-mem uses an auth-preserving **text-JSON** path for `opencodeProvider: "anthropic"` (no forced `StructuredOutput` tools; reply is parsed with Zod). A step watchdog still aborts runaway internal sessions after 2 steps. If capture still fails, configure a complete manual Anthropic API-key fallback (`memoryProvider: "anthropic"` + `memoryModel` + `memoryApiUrl` + `memoryApiKey`) — Claude Pro/Max OAuth cannot be reused outside OpenCode.
 - **Unsupported platforms:** If the plugin fails to load a native binding, check the [native database requirements](#prerequisites). For containers that use musl, use a glibc-based Linux image. MLX is not supported.

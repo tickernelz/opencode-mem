@@ -30,4 +30,5 @@ export type AIProviderType =
   | "runcrate"
   | "cloudgpu"
   | "standardcompute"
-  | "uberllm";
+  | "uberllm"
+  | "aigrow";
