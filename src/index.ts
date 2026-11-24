@@ -454,8 +454,8 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       // on the call itself and falls back to the external API.
       // Use the loader so we hit the same module instance as ensureProviderConnected.
       if (CONFIG.opencodeProvider) {
-        const { setConnectedProviders } = await loadOpencodeProvider();
-        setConnectedProviders([CONFIG.opencodeProvider]);
+        const provider = await loadOpencodeProvider();
+        provider.setConnectedProviders?.([CONFIG.opencodeProvider]);
       }
     }
   };

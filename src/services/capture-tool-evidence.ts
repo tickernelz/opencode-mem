@@ -49,7 +49,12 @@ export function extractToolOutcome(state: any): Pick<ToolCallInfo, "status" | "o
   }
   if (typeof state?.error === "string") parts.push(state.error);
   else if (typeof state?.error?.message === "string") parts.push(state.error.message);
-  const text = sanitizeMemoryContent(parts.join("\n"));
+  // Bound before sanitizing: multi-megabyte tool logs must not run every
+  // credential regex over the full payload. The kept excerpt is only
+  // MAX_CAPTURE_TOOL_RESULT_BYTES; a 2× pre-bound leaves headroom so a split
+  // UTF-8 / private tag at the cut still fails closed under sanitize.
+  const bounded = truncateToMaxBytes(parts.join("\n"), MAX_CAPTURE_TOOL_RESULT_BYTES * 2, "");
+  const text = sanitizeMemoryContent(bounded);
   return {
     status: knownStatus,
     ...(text ? { output: truncateToMaxBytes(text, MAX_CAPTURE_TOOL_RESULT_BYTES, OMITTED) } : {}),
