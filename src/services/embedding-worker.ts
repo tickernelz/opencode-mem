@@ -36,6 +36,13 @@ function send(response: EmbeddingWorkerResponse): void {
   process.stdout.write(`${JSON.stringify(response)}\n`);
 }
 
+// Keep stdout reserved for JSON-line IPC; route casual logs to stderr.
+console.log = (...args: unknown[]) => {
+  process.stderr.write(`${args.map(String).join(" ")}\n`);
+};
+console.info = console.log;
+console.debug = console.log;
+
 async function loadPipeline(model: string, cacheDir: string, dtype?: string): Promise<Pipe> {
   const transformersSpecifier = getTransformersPackageSpecifier();
   const meta = import.meta as ImportMeta & { path?: string; dirname?: string; dir?: string };

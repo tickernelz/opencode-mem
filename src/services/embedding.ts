@@ -539,7 +539,25 @@ export class EmbeddingService {
         const data: any = await fetchRemoteEmbeddingWithRetry(fetch, input);
         result = new Float32Array(data.data[0].embedding);
       } else if (this.subprocess) {
-        result = await this.subprocess.embed(input, CONFIG.embeddingPooling);
+        const subprocess = this.subprocess;
+        try {
+          result = await subprocess.embed(input, CONFIG.embeddingPooling);
+        } catch (error) {
+          // Worker may have been SIGKILL'd / segfaulted; drop sticky warmup and
+          // re-spawn once so a single child death does not poison the host (#518).
+          if (subprocess.isReady) throw error;
+          subprocess.dispose("worker-exit");
+          if (this.subprocess === subprocess) this.subprocess = null;
+          this.isWarmedUp = false;
+          this.initPromise = null;
+          this.initError = null;
+          await this.warmup();
+          const restarted: EmbeddingSubprocessClient | null = this.subprocess;
+          if (!restarted) {
+            throw error instanceof Error ? error : new Error(String(error));
+          }
+          result = await restarted.embed(input, CONFIG.embeddingPooling);
+        }
       } else {
         const pipe = this.pipe;
         if (!pipe) {

@@ -38,6 +38,29 @@ describe("shouldUseEmbeddingSubprocess", () => {
   });
 });
 
+describe("EmbeddingSubprocessClient readiness", () => {
+  it("rejects embed before warmup and after worker exit", async () => {
+    const runtime = resolveEmbeddingWorkerRuntime();
+    if (!runtime) return;
+
+    const client = new EmbeddingSubprocessClient({
+      runtimePath: runtime,
+      scriptPath: join(import.meta.dir, "fixtures", "embedding-worker-fake.mjs"),
+      requestTimeoutMs: 5_000,
+    });
+
+    expect(client.isReady).toBe(false);
+    await expect(client.embed("x", "mean")).rejects.toThrow(/not warmed up/);
+
+    await client.warmup({ model: "fake", cacheDir: "/tmp", pooling: "mean" });
+    expect(client.isReady).toBe(true);
+    expect(Array.from(await client.embed("ab", "mean"))).toEqual([2, 3, 4]);
+
+    client.dispose("test-exit");
+    expect(client.isReady).toBe(false);
+  });
+});
+
 describe("parseWorkerResponse", () => {
   it("accepts ok and error payloads", () => {
     expect(parseWorkerResponse(JSON.stringify({ id: 1, ok: true, vector: [1, 2] }))).toEqual({
