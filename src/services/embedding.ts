@@ -11,6 +11,7 @@ import {
   getTransformersPackageSpecifier,
   resolveTransformersCjsEntry,
 } from "./transformers-resolve.js";
+import { EmbeddingSubprocessClient, shouldUseEmbeddingSubprocess } from "./embedding-subprocess.js";
 
 const requireFromHere = createRuntimeRequire(import.meta);
 
@@ -344,6 +345,7 @@ export async function fetchRemoteEmbeddingWithRetry(
 
 export class EmbeddingService {
   private pipe: any = null;
+  private subprocess: EmbeddingSubprocessClient | null = null;
   private initPromise: Promise<void> | null = null;
   public isWarmedUp: boolean = false;
   /** Set when warmup fails permanently; prevents "initializing forever" (#184). */
@@ -356,6 +358,8 @@ export class EmbeddingService {
   private pendingDispose: string | null = null;
   /** Bumped by dispose so a slow initialize cannot resurrect a released pipeline. */
   private generation = 0;
+  /** Windows hosts keep local ONNX in a Node child (#518); elsewhere in-process. */
+  private readonly useSubprocess = shouldUseEmbeddingSubprocess();
 
   static getInstance(): EmbeddingService {
     if (!(globalThis as any)[GLOBAL_EMBEDDING_KEY]) {
@@ -395,9 +399,21 @@ export class EmbeddingService {
     this.generation++;
     const pipe = this.pipe;
     this.pipe = null;
+    const subprocess = this.subprocess;
+    this.subprocess = null;
     this.isWarmedUp = false;
     this.initPromise = null;
     this.initError = null;
+    // Windows/Bun: SIGKILL the child so ORT's NAPI finalizer never runs in-host (#518).
+    if (subprocess) {
+      subprocess.dispose(reason);
+      safeLog("Embedding model released", {
+        reason,
+        model: CONFIG.embeddingModel,
+        via: "subprocess",
+      });
+      return;
+    }
     if (pipe?.dispose) {
       try {
         await pipe.dispose();
@@ -432,8 +448,6 @@ export class EmbeddingService {
 
       // Local model path
       const generation = this.generation;
-      const { pipeline } = await ensureTransformersLoaded();
-      // Explicit config wins; otherwise auto-resolve from model declaration / cache (#393).
       const dtype = CONFIG.embeddingDtype ?? resolveLocalOnnxDtype(CONFIG.embeddingModel);
       if (dtype) {
         log("Resolved local ONNX dtype for embedding warmup", {
@@ -442,6 +456,35 @@ export class EmbeddingService {
           source: CONFIG.embeddingDtype ? "config" : "auto",
         });
       }
+
+      if (this.useSubprocess) {
+        // Keep onnxruntime-node out of the OpenCode/Bun host on Windows (#518).
+        void progressCallback;
+        const client = new EmbeddingSubprocessClient();
+        await client.warmup({
+          model: CONFIG.embeddingModel,
+          cacheDir: join(CONFIG.storagePath, ".cache"),
+          pooling: CONFIG.embeddingPooling,
+          ...(dtype ? { dtype } : {}),
+        });
+        if (generation !== this.generation) {
+          client.dispose("stale-generation");
+          return;
+        }
+        this.subprocess = client;
+        this.isWarmedUp = true;
+        this.initError = null;
+        this.scheduleIdleDispose();
+        log("Embedding model warmed up", {
+          model: CONFIG.embeddingModel,
+          pooling: CONFIG.embeddingPooling,
+          dtype: dtype ?? null,
+          via: "subprocess",
+        });
+        return;
+      }
+
+      const { pipeline } = await ensureTransformersLoaded();
       const pipe = await pipeline("feature-extraction", CONFIG.embeddingModel, {
         ...(dtype ? { dtype } : {}),
         progress_callback: progressCallback,
@@ -495,6 +538,8 @@ export class EmbeddingService {
       if (CONFIG.embeddingApiUrl && CONFIG.embeddingApiKey) {
         const data: any = await fetchRemoteEmbeddingWithRetry(fetch, input);
         result = new Float32Array(data.data[0].embedding);
+      } else if (this.subprocess) {
+        result = await this.subprocess.embed(input, CONFIG.embeddingPooling);
       } else {
         const pipe = this.pipe;
         if (!pipe) {
