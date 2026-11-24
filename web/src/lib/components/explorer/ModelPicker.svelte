@@ -11,12 +11,16 @@
     idPrefix?: string;
     disabled?: boolean;
     configured?: boolean;
+    /** True when OpenCode or the external memory provider can run tag migration. */
+    readyForMigration?: boolean;
   };
 
   type ModelCatalog = {
     available: boolean;
     reason?: string;
     configured: boolean;
+    externalConfigured?: boolean;
+    readyForMigration?: boolean;
     providerID: string | null;
     modelID: string | null;
     providers: Array<{
@@ -27,7 +31,12 @@
     }>;
   };
 
-  let { idPrefix = "model", disabled = false, configured = $bindable(false) }: Props = $props();
+  let {
+    idPrefix = "model",
+    disabled = false,
+    configured = $bindable(false),
+    readyForMigration = $bindable(false),
+  }: Props = $props();
 
   const i18n = useI18n();
   let catalog = $state<ModelCatalog | null>(null);
@@ -53,15 +62,21 @@
         available: false,
         reason: result.error ?? "",
         configured: false,
+        externalConfigured: false,
+        readyForMigration: false,
         providerID: null,
         modelID: null,
         providers: [],
       };
       configured = false;
+      readyForMigration = false;
       return;
     }
     catalog = result.data;
     configured = result.data.configured;
+    readyForMigration =
+      result.data.readyForMigration ??
+      (result.data.configured || Boolean(result.data.externalConfigured));
     const data = result.data;
     const provider = data.providers.find((entry) => entry.id === data.providerID);
     if (provider) {
@@ -147,7 +162,7 @@
     </p>
   {/if}
 
-  {#if catalog && !catalog.configured}
+  {#if catalog && !(catalog.readyForMigration ?? catalog.configured)}
     <p class="text-xs text-muted-foreground">{i18n.t("migration-model-required")}</p>
   {/if}
 </div>

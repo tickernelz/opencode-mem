@@ -3,6 +3,8 @@
   "data": {
     "available": true,
     "configured": false,
+    "externalConfigured": false,
+    "readyForMigration": false,
     "providerID": "opencode",
     "modelID": "inherit",
     "providers": [
