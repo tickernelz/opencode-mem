@@ -15,7 +15,8 @@ export type MemoryProviderPresetId =
   | "cloudgpu"
   | "standardcompute"
   | "uberllm"
-  | "aigrow";
+  | "aigrow"
+  | "teamorouter";
 
 export interface MemoryProviderPresetDefaults {
   apiUrl: string;
@@ -62,6 +63,10 @@ export const MEMORY_PROVIDER_PRESET_DEFAULTS: Record<
     apiUrl: "https://aigrow.gg/v1",
     model: "claude-haiku-5.5",
   },
+  teamorouter: {
+    apiUrl: "https://api.teamorouter.com/v1",
+    model: "deepseek-v4-flash",
+  },
 };
 
 export function isMemoryProviderPreset(
@@ -76,7 +81,8 @@ export function isMemoryProviderPreset(
     provider === "cloudgpu" ||
     provider === "standardcompute" ||
     provider === "uberllm" ||
-    provider === "aigrow"
+    provider === "aigrow" ||
+    provider === "teamorouter"
   );
 }
 

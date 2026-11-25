@@ -797,12 +797,72 @@ describe("project-scoped config resolution", () => {
     }
   });
 
+  it("resolves TeamoRouter API key from TEAMOROUTER_API_KEY and marks manual ready", () => {
+    const originalApiKey = process.env.TEAMOROUTER_API_KEY;
+    process.env.TEAMOROUTER_API_KEY = "teamorouter-test-key";
+
+    try {
+      existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+      readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
+        const path = normalizePath(p);
+        if (path.includes(".opencode/opencode-mem")) {
+          return JSON.stringify({ autoCaptureEnabled: true }) as any;
+        }
+        return JSON.stringify({ memoryProvider: "teamorouter" }) as any;
+      });
+
+      initConfig("/my/project");
+
+      expect(CONFIG.memoryProvider).toBe("teamorouter");
+      expect(CONFIG.memoryModel).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.teamorouter.model);
+      expect(CONFIG.memoryApiUrl).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.teamorouter.apiUrl);
+      expect(CONFIG.memoryApiKey).toBe("teamorouter-test-key");
+      // Key-only presets must materialize endpoint/model so auto-capture,
+      // dreaming, and profile learning (which gate on CONFIG fields) can run.
+      expect(Boolean(CONFIG.memoryModel && CONFIG.memoryApiUrl)).toBe(true);
+      expect(CONFIG.autoCaptureProviderStatus).toEqual({
+        ready: true,
+        mode: "manual",
+        issues: [],
+      });
+      const providerConfig = buildMemoryProviderConfig(CONFIG);
+      expect(providerConfig.model).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.teamorouter.model);
+      expect(providerConfig.apiUrl).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.teamorouter.apiUrl);
+    } finally {
+      if (originalApiKey === undefined) {
+        delete process.env.TEAMOROUTER_API_KEY;
+      } else {
+        process.env.TEAMOROUTER_API_KEY = originalApiKey;
+      }
+    }
+  });
+
   it("refuses a project config that switches memoryProvider to AIGROW", () => {
     existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
     readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
       const path = normalizePath(p);
       if (path.includes(".opencode/opencode-mem")) {
         return JSON.stringify({ memoryProvider: "aigrow" }) as any;
+      }
+      return JSON.stringify({
+        memoryProvider: "openai-chat",
+        memoryModel: "global-model",
+        memoryApiUrl: "https://llm.example.com/v1",
+        memoryApiKey: "global-secret",
+      }) as any;
+    });
+
+    expect(() => initConfig("/my/project")).toThrow(
+      /Project config cannot set remote provider fields: memoryProvider/
+    );
+  });
+
+  it("refuses a project config that switches memoryProvider to TeamoRouter", () => {
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+    readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
+      const path = normalizePath(p);
+      if (path.includes(".opencode/opencode-mem")) {
+        return JSON.stringify({ memoryProvider: "teamorouter" }) as any;
       }
       return JSON.stringify({
         memoryProvider: "openai-chat",

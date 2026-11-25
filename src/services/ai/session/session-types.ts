@@ -12,7 +12,8 @@ export type AIProviderType =
   | "cloudgpu"
   | "standardcompute"
   | "uberllm"
-  | "aigrow";
+  | "aigrow"
+  | "teamorouter";
 
 export interface AIMessage {
   id?: number;
