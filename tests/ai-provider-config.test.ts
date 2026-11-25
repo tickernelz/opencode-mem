@@ -348,10 +348,34 @@ describe("AI provider config", () => {
     });
   });
 
+  it("builds teamorouter config from only an API key, defaulting model and endpoint", () => {
+    const providerConfig = buildMemoryProviderConfig({
+      memoryProvider: "teamorouter",
+      memoryApiKey: "teamorouter-test-key",
+    });
+
+    expect(providerConfig).toEqual({
+      model: "",
+      apiUrl: "",
+      apiKey: "teamorouter-test-key",
+      forceToolChoice: undefined,
+      maxIterations: undefined,
+      iterationTimeout: undefined,
+    });
+  });
+
   it("still requires an API key for the aigrow provider", () => {
     expect(() =>
       buildMemoryProviderConfig({
         memoryProvider: "aigrow",
+      })
+    ).toThrow("missing memoryApiKey");
+  });
+
+  it("still requires an API key for the teamorouter provider", () => {
+    expect(() =>
+      buildMemoryProviderConfig({
+        memoryProvider: "teamorouter",
       })
     ).toThrow("missing memoryApiKey");
   });
