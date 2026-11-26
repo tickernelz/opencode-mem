@@ -646,12 +646,12 @@ Handmatige `memoryProvider`-modi:
   "memoryApiKey": "env://STANDARDCOMPUTE_API_KEY",
   ```
   Wanneer deze provider is geselecteerd, worden auto-capture- / profielprompts, modelantwoorden en relevante conversatiecontext verzonden naar `https://api.stdcmpt.com`.
-- `uberllm`: OpenAI-compatibel Chat Completions-preset voor [UberLLM](https://uberllm.dev). `memoryApiUrl` en `memoryModel` zijn optioneel — ze defaulten naar `https://api.uberllm.dev/v1` en `deepseek/deepseek-v4-flash`. Als `memoryApiKey` wordt weggelaten, wordt `UBERLLM_API_KEY` uit de omgeving gebruikt (maak een key aan via https://uberllm.dev/signup; API-docs: https://uberllm.dev/docs/quickstart). Voorbeeld:
+- `uberllm`: OpenAI-compatibel Chat Completions-preset voor [MartLLM](https://martllm.com). `memoryApiUrl` en `memoryModel` zijn optioneel — ze defaulten naar `https://api.martllm.com/v1` en `deepseek/deepseek-v4-flash`. Als `memoryApiKey` wordt weggelaten, wordt `UBERLLM_API_KEY` uit de omgeving gebruikt (maak een key aan via https://martllm.com/signup; API-docs: https://martllm.com/docs/quickstart). Voorbeeld:
   ```jsonc
   "memoryProvider": "uberllm",
   "memoryApiKey": "env://UBERLLM_API_KEY",
   ```
-  Wanneer deze provider is geselecteerd, worden auto-capture- / profielprompts, modelantwoorden en relevante conversatiecontext verzonden naar `https://api.uberllm.dev`.
+  Wanneer deze provider is geselecteerd, worden auto-capture- / profielprompts, modelantwoorden en relevante conversatiecontext verzonden naar `https://api.martllm.com`.
 - `aigrow`: OpenAI-compatibel Chat Completions-preset voor [AIGROW](https://aigrow.gg/ai-api). `memoryApiUrl` en `memoryModel` zijn optioneel: ze defaulten naar `https://aigrow.gg/v1` en `claude-haiku-5.5`. Als `memoryApiKey` wordt weggelaten, wordt `AIGROW_API_KEY` uit de omgeving gebruikt (maak een key aan via https://aigrow.gg/dashboard/api; API-docs: https://aigrow.gg/ai-api/guide). Voorbeeld:
   ```jsonc
   "memoryProvider": "aigrow",

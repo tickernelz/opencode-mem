@@ -640,12 +640,12 @@ memory({ mode: "import", inputPath: "./memories.json" });
   "memoryApiKey": "env://STANDARDCOMPUTE_API_KEY",
   ```
   عند اختيار هذا المزود، تُرسل مطالبات الالتقاط التلقائي / الملف، واستجابات النموذج، وسياق المحادثة ذي الصلة إلى `https://api.stdcmpt.com`.
-- `uberllm`: إعداد مسبق لـ OpenAI-compatible Chat Completions لـ [UberLLM](https://uberllm.dev). `memoryApiUrl` و`memoryModel` اختياريان — الافتراضي `https://api.uberllm.dev/v1` و`deepseek/deepseek-v4-flash`. إذا حُذف `memoryApiKey`، يُستخدم `UBERLLM_API_KEY` من البيئة (أنشئ مفتاحًا من https://uberllm.dev/signup؛ توثيق API: https://uberllm.dev/docs/quickstart). مثال:
+- `uberllm`: إعداد مسبق لـ OpenAI-compatible Chat Completions لـ [MartLLM](https://martllm.com). `memoryApiUrl` و`memoryModel` اختياريان — الافتراضي `https://api.martllm.com/v1` و`deepseek/deepseek-v4-flash`. إذا حُذف `memoryApiKey`، يُستخدم `UBERLLM_API_KEY` من البيئة (أنشئ مفتاحًا من https://martllm.com/signup؛ توثيق API: https://martllm.com/docs/quickstart). مثال:
   ```jsonc
   "memoryProvider": "uberllm",
   "memoryApiKey": "env://UBERLLM_API_KEY",
   ```
-  عند اختيار هذا المزود، تُرسل مطالبات الالتقاط التلقائي / الملف، واستجابات النموذج، وسياق المحادثة ذي الصلة إلى `https://api.uberllm.dev`.
+  عند اختيار هذا المزود، تُرسل مطالبات الالتقاط التلقائي / الملف، واستجابات النموذج، وسياق المحادثة ذي الصلة إلى `https://api.martllm.com`.
 - `aigrow`: إعداد مسبق لـ OpenAI-compatible Chat Completions لـ [AIGROW](https://aigrow.gg/ai-api). `memoryApiUrl` و`memoryModel` اختياريان: الافتراضي `https://aigrow.gg/v1` و`claude-haiku-5.5`. إذا حُذف `memoryApiKey`، يُستخدم `AIGROW_API_KEY` من البيئة (أنشئ مفتاحًا من https://aigrow.gg/dashboard/api؛ توثيق API: https://aigrow.gg/ai-api/guide). مثال:
   ```jsonc
   "memoryProvider": "aigrow",

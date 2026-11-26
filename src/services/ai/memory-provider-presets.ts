@@ -55,7 +55,7 @@ export const MEMORY_PROVIDER_PRESET_DEFAULTS: Record<
     model: "StandardCompute",
   },
   uberllm: {
-    apiUrl: "https://api.uberllm.dev/v1",
+    apiUrl: "https://api.martllm.com/v1",
     model: "deepseek/deepseek-v4-flash",
   },
   aigrow: {

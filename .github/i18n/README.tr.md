@@ -644,12 +644,12 @@ Manuel `memoryProvider` modları:
   "memoryApiKey": "env://STANDARDCOMPUTE_API_KEY",
   ```
   Bu sağlayıcı seçildiğinde otomatik yakalama / profil prompt’ları, model yanıtları ve ilgili konuşma bağlamı `https://api.stdcmpt.com` adresine iletilir.
-- `uberllm`: [UberLLM](https://uberllm.dev) için OpenAI uyumlu Chat Completions ön ayarı. `memoryApiUrl` ve `memoryModel` isteğe bağlıdır — varsayılanları `https://api.uberllm.dev/v1` ve `deepseek/deepseek-v4-flash`’tir. `memoryApiKey` atlanırsa ortamdan `UBERLLM_API_KEY` kullanılır (anahtar oluşturma: https://uberllm.dev/signup; API belgeleri: https://uberllm.dev/docs/quickstart). Örnek:
+- `uberllm`: [MartLLM](https://martllm.com) için OpenAI uyumlu Chat Completions ön ayarı. `memoryApiUrl` ve `memoryModel` isteğe bağlıdır — varsayılanları `https://api.martllm.com/v1` ve `deepseek/deepseek-v4-flash`’tir. `memoryApiKey` atlanırsa ortamdan `UBERLLM_API_KEY` kullanılır (anahtar oluşturma: https://martllm.com/signup; API belgeleri: https://martllm.com/docs/quickstart). Örnek:
   ```jsonc
   "memoryProvider": "uberllm",
   "memoryApiKey": "env://UBERLLM_API_KEY",
   ```
-  Bu sağlayıcı seçildiğinde otomatik yakalama / profil prompt’ları, model yanıtları ve ilgili konuşma bağlamı `https://api.uberllm.dev` adresine iletilir.
+  Bu sağlayıcı seçildiğinde otomatik yakalama / profil prompt’ları, model yanıtları ve ilgili konuşma bağlamı `https://api.martllm.com` adresine iletilir.
 - `aigrow`: [AIGROW](https://aigrow.gg/ai-api) için OpenAI uyumlu Chat Completions ön ayarı. `memoryApiUrl` ve `memoryModel` isteğe bağlıdır: varsayılanları `https://aigrow.gg/v1` ve `claude-haiku-5.5`’tir. `memoryApiKey` atlanırsa ortamdan `AIGROW_API_KEY` kullanılır (anahtar oluşturma: https://aigrow.gg/dashboard/api; API belgeleri: https://aigrow.gg/ai-api/guide). Örnek:
   ```jsonc
   "memoryProvider": "aigrow",

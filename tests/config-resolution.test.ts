@@ -697,7 +697,7 @@ describe("project-scoped config resolution", () => {
     );
   });
 
-  it("resolves UberLLM API key from UBERLLM_API_KEY and marks manual ready", () => {
+  it("resolves MartLLM API key from UBERLLM_API_KEY and marks manual ready", () => {
     const originalApiKey = process.env.UBERLLM_API_KEY;
     process.env.UBERLLM_API_KEY = "uberllm-test-key";
 
@@ -737,7 +737,7 @@ describe("project-scoped config resolution", () => {
     }
   });
 
-  it("refuses a project config that switches memoryProvider to UberLLM", () => {
+  it("refuses a project config that switches memoryProvider to MartLLM", () => {
     existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
     readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
       const path = normalizePath(p);

@@ -789,14 +789,14 @@ const CONFIG_TEMPLATE = `{
   //   // conversation context are sent to api.stdcmpt.com.
   //   // "memoryModel": "StandardCompute"
 
-  // UberLLM (OpenAI-compatible Chat Completions preset, with session support):
+  // MartLLM (OpenAI-compatible Chat Completions preset, with session support):
   //   "memoryProvider": "uberllm"
   //   "memoryApiKey": "env://UBERLLM_API_KEY"
   //   // memoryApiUrl and memoryModel are optional — they default to
-  //   // https://api.uberllm.dev/v1 and "deepseek/deepseek-v4-flash".
-  //   // Create a key at https://uberllm.dev/signup (docs: https://uberllm.dev/docs/quickstart).
+  //   // https://api.martllm.com/v1 and "deepseek/deepseek-v4-flash".
+  //   // Create a key at https://martllm.com/signup (docs: https://martllm.com/docs/quickstart).
   //   // When selected, auto-capture/profile prompts, responses, and relevant
-  //   // conversation context are sent to api.uberllm.dev.
+  //   // conversation context are sent to api.martllm.com.
   //   // "memoryModel": "deepseek/deepseek-v4-flash"
 
   // AIGROW (OpenAI-compatible Chat Completions preset, with session support):
