@@ -587,6 +587,12 @@ Modes manuels de `memoryProvider` :
   "memoryApiKey": "env://AIGROW_API_KEY",
   ```
   Quand ce fournisseur est choisi, les prompts d'auto-capture / de profil, les réponses du modèle et le contexte de conversation pertinent sont transmis à `https://aigrow.gg`.
+- `onomeo` : préréglage Chat Completions compatible OpenAI pour [onomeo](https://onomeo.com). `memoryApiUrl` et `memoryModel` sont optionnels: ils valent par défaut `https://onomeo.com/v1` et `deepseek-v4.1-flash`. Si `memoryApiKey` est omis, `ONOMEO_API_KEY` de l'environnement est utilisée (créez une clé sur https://onomeo.com/dashboard ; docs API : https://onomeo.com/integrations). Exemple :
+  ```jsonc
+  "memoryProvider": "onomeo",
+  "memoryApiKey": "env://ONOMEO_API_KEY",
+  ```
+  Quand ce fournisseur est choisi, les prompts d'auto-capture / de profil, les réponses du modèle et le contexte de conversation pertinent sont transmis à `https://onomeo.com`.
 
 Dépannage :
 
@@ -599,7 +605,7 @@ Dépannage :
 - Si l'auto-capture rapporte qu'un fournisseur n'est pas connecté, confirmez le nom du fournisseur avec `opencode providers list` et configurez d'abord ce fournisseur dans opencode.
 - Si un proxy ou un fournisseur personnalisé renvoie du texte brut au lieu d'une sortie structurée/par outil, choisissez un autre modèle/fournisseur ou utilisez l'un des modes de fournisseur manuels ci-dessus.
 - Pour les modèles qui rejettent `temperature`, ajoutez `"memoryTemperature": false` avec la configuration API manuelle.
-- Pour les modèles qui rejettent les appels d'outils forcés (`tool_choice: "required"`, p. ex. certains modes de réflexion), ajoutez `"forceToolChoice": false` avec `openai-chat` / `orcarouter` / `atlas-cloud` / `cheaper-inference` / `api-route` / `runcrate` / `cloudgpu` / `standardcompute` / `uberllm` / `aigrow`.
+- Pour les modèles qui rejettent les appels d'outils forcés (`tool_choice: "required"`, p. ex. certains modes de réflexion), ajoutez `"forceToolChoice": false` avec `openai-chat` / `orcarouter` / `atlas-cloud` / `cheaper-inference` / `api-route` / `runcrate` / `cloudgpu` / `standardcompute` / `uberllm` / `aigrow` / `onomeo`.
 - Pour `opencodeProvider` / `opencodeModel` (p. ex. DeepSeek V4 thinking), OpenCode envoie toujours un `tool_choice` forcé pour la sortie structurée. opencode-mem désactive la réflexion sur l'agent interne `opencode-mem-structured` (et la ré-applique dans `chat.params` après fusion de variante) pour que l'auto-capture et l'apprentissage du profil puissent aboutir. Votre agent de chat interactif est inchangé. Si la capture échoue encore avec une erreur de réflexion/`tool_choice`, choisissez un modèle sans réflexion pour `opencodeModel` ou configurez un repli manuel complet (`memoryModel` + `memoryApiUrl`).
 - **`opencode-claude-auth` / Claude Code :** l'auto-capture utilise OpenCode avec votre fournisseur `anthropic` authentifié. Le `format: json_schema` forcé boucle souvent avec Claude-auth, si bien qu'opencode-mem utilise un chemin **texte-JSON** préservant l'authentification pour `opencodeProvider: "anthropic"` (pas d'outils `StructuredOutput` forcés ; la réponse est analysée avec Zod). Un watchdog d'étape interrompt toujours les sessions internes emballées après 2 étapes. Si la capture échoue encore, configurez un repli manuel complet à clé API Anthropic (`memoryProvider: "anthropic"` + `memoryModel` + `memoryApiUrl` + `memoryApiKey`) — l'OAuth Claude Pro/Max ne peut pas être réutilisé hors d'OpenCode.
 - **Plateformes non prises en charge :** les Mac Intel (`darwin/x64`) ne sont pas pris en charge — `@tursodatabase/database` et les releases figées d'`onnxruntime-node` (`1.31.1` épinglée) ne livrent pas de binding natif x64. Utilisez Apple Silicon, Linux ou Windows, ou un endpoint d'embedding distant via `embeddingApiUrl` + `embeddingApiKey`. MLX n'est pas pris en charge.

@@ -816,6 +816,66 @@ describe("project-scoped config resolution", () => {
       /Project config cannot set remote provider fields: memoryProvider/
     );
   });
+
+  it("resolves onomeo API key from ONOMEO_API_KEY and marks manual ready", () => {
+    const originalApiKey = process.env.ONOMEO_API_KEY;
+    process.env.ONOMEO_API_KEY = "onomeo-test-key";
+
+    try {
+      existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+      readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
+        const path = normalizePath(p);
+        if (path.includes(".opencode/opencode-mem")) {
+          return JSON.stringify({ autoCaptureEnabled: true }) as any;
+        }
+        return JSON.stringify({ memoryProvider: "onomeo" }) as any;
+      });
+
+      initConfig("/my/project");
+
+      expect(CONFIG.memoryProvider).toBe("onomeo");
+      expect(CONFIG.memoryModel).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.onomeo.model);
+      expect(CONFIG.memoryApiUrl).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.onomeo.apiUrl);
+      expect(CONFIG.memoryApiKey).toBe("onomeo-test-key");
+      // Key-only presets must materialize endpoint/model so auto-capture,
+      // dreaming, and profile learning (which gate on CONFIG fields) can run.
+      expect(Boolean(CONFIG.memoryModel && CONFIG.memoryApiUrl)).toBe(true);
+      expect(CONFIG.autoCaptureProviderStatus).toEqual({
+        ready: true,
+        mode: "manual",
+        issues: [],
+      });
+      const providerConfig = buildMemoryProviderConfig(CONFIG);
+      expect(providerConfig.model).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.onomeo.model);
+      expect(providerConfig.apiUrl).toBe(MEMORY_PROVIDER_PRESET_DEFAULTS.onomeo.apiUrl);
+    } finally {
+      if (originalApiKey === undefined) {
+        delete process.env.ONOMEO_API_KEY;
+      } else {
+        process.env.ONOMEO_API_KEY = originalApiKey;
+      }
+    }
+  });
+
+  it("refuses a project config that switches memoryProvider to onomeo", () => {
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+    readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
+      const path = normalizePath(p);
+      if (path.includes(".opencode/opencode-mem")) {
+        return JSON.stringify({ memoryProvider: "onomeo" }) as any;
+      }
+      return JSON.stringify({
+        memoryProvider: "openai-chat",
+        memoryModel: "global-model",
+        memoryApiUrl: "https://llm.example.com/v1",
+        memoryApiKey: "global-secret",
+      }) as any;
+    });
+
+    expect(() => initConfig("/my/project")).toThrow(
+      /Project config cannot set remote provider fields: memoryProvider/
+    );
+  });
 });
 
 describe("structured-output timeout derivation", () => {

@@ -119,7 +119,8 @@ interface OpenCodeMemConfig {
     | "cloudgpu"
     | "standardcompute"
     | "uberllm"
-    | "aigrow";
+    | "aigrow"
+    | "onomeo";
   memoryModel?: string;
   memoryApiUrl?: string;
   memoryApiKey?: string;
@@ -342,7 +343,8 @@ const DEFAULTS: Required<
     | "cloudgpu"
     | "standardcompute"
     | "uberllm"
-    | "aigrow";
+    | "aigrow"
+    | "onomeo";
   memoryTemperature?: number | false;
   forceToolChoice?: boolean;
   memoryExtraParams?: Record<string, unknown>;
@@ -669,7 +671,7 @@ const CONFIG_TEMPLATE = `{
   // "updateOnCaptureSimilarityThreshold": 0.75,
   // "updateOnCaptureMaxCandidates": 5,
   
-  // Provider type: "api-route" | "atlas-cloud" | "cheaper-inference" | "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "orcarouter" | "runcrate" | "cloudgpu" | "standardcompute" | "uberllm" | "aigrow"
+  // Provider type: "api-route" | "atlas-cloud" | "cheaper-inference" | "openai-chat" | "openai-responses" | "anthropic" | "minimax" | "orcarouter" | "runcrate" | "cloudgpu" | "standardcompute" | "uberllm" | "aigrow" | "onomeo"
   // Note: "openai-chat" is a generic OpenAI API-compatible mode.
   // Any service that follows the OpenAI Chat Completions API can use it via custom "memoryApiUrl".
   "memoryProvider": "openai-chat",
@@ -809,6 +811,16 @@ const CONFIG_TEMPLATE = `{
   //   // conversation context are sent to aigrow.gg.
   //   // "memoryModel": "claude-haiku-5.5"
 
+  // onomeo (OpenAI-compatible Chat Completions preset, with session support):
+  //   "memoryProvider": "onomeo"
+  //   "memoryApiKey": "env://ONOMEO_API_KEY"
+  //   // memoryApiUrl and memoryModel are optional; they default to
+  //   // https://onomeo.com/v1 and "deepseek-v4.1-flash".
+  //   // Create a key at https://onomeo.com/dashboard (docs: https://onomeo.com/integrations).
+  //   // When selected, auto-capture/profile prompts, responses, and relevant
+  //   // conversation context are sent to onomeo.com.
+  //   // "memoryModel": "deepseek-v4.1-flash"
+
   // Groq (OpenAI-compatible, use openai-chat provider):
   //   "memoryProvider": "openai-chat"
   //   "memoryModel": "llama-3.3-70b-versatile"
@@ -844,7 +856,7 @@ const CONFIG_TEMPLATE = `{
   // Set to false and add "memoryTemperature": false in config when using such models
   "memoryTemperature": 0.3,
 
-  // Force tool calls on openai-chat / orcarouter / atlas-cloud / cheaper-inference / api-route / runcrate / cloudgpu / standardcompute / uberllm / aigrow (tool_choice: "required"). Default true.
+  // Force tool calls on openai-chat / orcarouter / atlas-cloud / cheaper-inference / api-route / runcrate / cloudgpu / standardcompute / uberllm / aigrow / onomeo (tool_choice: "required"). Default true.
   // Some thinking/reasoning models reject forced tool choice — set false to fall back to "auto":
   // "forceToolChoice": false,
 
@@ -1357,7 +1369,8 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     | "cloudgpu"
     | "standardcompute"
     | "uberllm"
-    | "aigrow";
+    | "aigrow"
+    | "onomeo";
   const memoryApiKey =
     resolveSecretValue(fileConfig.memoryApiKey) ??
     (memoryProvider === "atlas-cloud"
@@ -1376,7 +1389,9 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
                   ? process.env.UBERLLM_API_KEY
                   : memoryProvider === "aigrow"
                     ? process.env.AIGROW_API_KEY
-                    : undefined);
+                    : memoryProvider === "onomeo"
+                      ? process.env.ONOMEO_API_KEY
+                      : undefined);
   // Preset providers advertise optional memoryModel / memoryApiUrl in docs and
   // factory code, but auto-capture / dreaming / profile learning gate on the
   // resolved CONFIG fields. Fill preset defaults here so key-only configs work.
