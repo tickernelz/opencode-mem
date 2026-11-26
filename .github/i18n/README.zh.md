@@ -615,12 +615,12 @@ memory({ mode: "import", inputPath: "./memories.json" });
   "memoryApiKey": "env://STANDARDCOMPUTE_API_KEY",
   ```
   选择此提供商时，自动捕获 / 画像提示、模型响应与相关对话上下文会传输到 `https://api.stdcmpt.com`。
-- `uberllm`：面向 [UberLLM](https://uberllm.dev) 的 OpenAI 兼容 Chat Completions 预设。`memoryApiUrl` 与 `memoryModel` 可选 — 它们默认为 `https://api.uberllm.dev/v1` 与 `deepseek/deepseek-v4-flash`。若省略 `memoryApiKey`，则使用环境中的 `UBERLLM_API_KEY`（在 https://uberllm.dev/signup 创建密钥；API 文档：https://uberllm.dev/docs/quickstart）。示例：
+- `uberllm`：面向 [MartLLM](https://martllm.com) 的 OpenAI 兼容 Chat Completions 预设。`memoryApiUrl` 与 `memoryModel` 可选 — 它们默认为 `https://api.martllm.com/v1` 与 `deepseek/deepseek-v4-flash`。若省略 `memoryApiKey`，则使用环境中的 `UBERLLM_API_KEY`（在 https://martllm.com/signup 创建密钥；API 文档：https://martllm.com/docs/quickstart）。示例：
   ```jsonc
   "memoryProvider": "uberllm",
   "memoryApiKey": "env://UBERLLM_API_KEY",
   ```
-  选择此提供商时，自动捕获 / 画像提示、模型响应与相关对话上下文会传输到 `https://api.uberllm.dev`。
+  选择此提供商时，自动捕获 / 画像提示、模型响应与相关对话上下文会传输到 `https://api.martllm.com`。
 - `aigrow`：面向 [AIGROW](https://aigrow.gg/ai-api) 的 OpenAI 兼容 Chat Completions 预设。`memoryApiUrl` 与 `memoryModel` 可选，它们默认为 `https://aigrow.gg/v1` 与 `claude-haiku-5.5`。若省略 `memoryApiKey`，则使用环境中的 `AIGROW_API_KEY`（在 https://aigrow.gg/dashboard/api 创建密钥；API 文档：https://aigrow.gg/ai-api/guide）。示例：
   ```jsonc
   "memoryProvider": "aigrow",

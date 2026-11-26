@@ -80,7 +80,7 @@ describe("UberLLMProvider", () => {
     expect(provider.supportsSession()).toBe(true);
   });
 
-  it("defaults to the UberLLM endpoint when apiUrl is not configured", () => {
+  it("defaults to the MartLLM endpoint when apiUrl is not configured", () => {
     const { provider } = makeProvider();
     expect(provider.resolveEndpoint()).toBe(UBERLLM_API_URL);
   });
@@ -115,7 +115,7 @@ describe("UberLLMProvider", () => {
     expect(sessionManager.lastCreateSessionArgs?.provider).toBe("uberllm");
   });
 
-  it("targets /chat/completions on UberLLM and authenticates with Bearer", async () => {
+  it("targets /chat/completions on MartLLM and authenticates with Bearer", async () => {
     let capturedUrl: string | undefined;
     let capturedHeaders: Record<string, string> | undefined;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -193,7 +193,7 @@ describe("UberLLMProvider", () => {
 });
 
 describe("AIProviderFactory uberllm wiring", () => {
-  it("creates an UberLLM provider and lists it as supported", () => {
+  it("creates a MartLLM provider and lists it as supported", () => {
     const provider = AIProviderFactory.createProvider("uberllm", {
       model: "",
       apiUrl: "",

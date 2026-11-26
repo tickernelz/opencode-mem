@@ -711,12 +711,12 @@ Manual `memoryProvider` modes:
   "memoryApiKey": "env://STANDARDCOMPUTE_API_KEY",
   ```
   When this provider is selected, auto-capture / profile prompts, model responses, and relevant conversation context are transmitted to `https://api.stdcmpt.com`.
-- `uberllm`: OpenAI-compatible Chat Completions preset for [UberLLM](https://uberllm.dev). `memoryApiUrl` and `memoryModel` are optional — they default to `https://api.uberllm.dev/v1` and `deepseek/deepseek-v4-flash`. If `memoryApiKey` is omitted, `UBERLLM_API_KEY` from the environment is used (create a key at https://uberllm.dev/signup; API docs: https://uberllm.dev/docs/quickstart). Example:
+- `uberllm`: OpenAI-compatible Chat Completions preset for [MartLLM](https://martllm.com). `memoryApiUrl` and `memoryModel` are optional — they default to `https://api.martllm.com/v1` and `deepseek/deepseek-v4-flash`. If `memoryApiKey` is omitted, `UBERLLM_API_KEY` from the environment is used (create a key at https://martllm.com/signup; API docs: https://martllm.com/docs/quickstart). Example:
   ```jsonc
   "memoryProvider": "uberllm",
   "memoryApiKey": "env://UBERLLM_API_KEY",
   ```
-  When this provider is selected, auto-capture / profile prompts, model responses, and relevant conversation context are transmitted to `https://api.uberllm.dev`.
+  When this provider is selected, auto-capture / profile prompts, model responses, and relevant conversation context are transmitted to `https://api.martllm.com`.
 - `aigrow`: OpenAI-compatible Chat Completions preset for [AIGROW](https://aigrow.gg/ai-api). `memoryApiUrl` and `memoryModel` are optional: they default to `https://aigrow.gg/v1` and `claude-haiku-5.5`. If `memoryApiKey` is omitted, `AIGROW_API_KEY` from the environment is used (create a key at https://aigrow.gg/dashboard/api; API docs: https://aigrow.gg/ai-api/guide). Example:
   ```jsonc
   "memoryProvider": "aigrow",
