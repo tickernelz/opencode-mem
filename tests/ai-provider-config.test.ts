@@ -356,6 +356,30 @@ describe("AI provider config", () => {
     ).toThrow("missing memoryApiKey");
   });
 
+  it("builds llmtr config from only an API key, defaulting model and endpoint", () => {
+    const providerConfig = buildMemoryProviderConfig({
+      memoryProvider: "llmtr",
+      memoryApiKey: "llmtr-test-key",
+    });
+
+    expect(providerConfig).toEqual({
+      model: "",
+      apiUrl: "",
+      apiKey: "llmtr-test-key",
+      forceToolChoice: undefined,
+      maxIterations: undefined,
+      iterationTimeout: undefined,
+    });
+  });
+
+  it("still requires an API key for the llmtr provider", () => {
+    expect(() =>
+      buildMemoryProviderConfig({
+        memoryProvider: "llmtr",
+      })
+    ).toThrow("missing memoryApiKey");
+  });
+
   it("omits temperature for openai-chat when memoryTemperature is false", async () => {
     let capturedBody: Record<string, unknown> | undefined;
     globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
