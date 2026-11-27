@@ -294,7 +294,7 @@ export class UserPromptManager {
       `
       SELECT content FROM user_prompts
       WHERE session_id = ?
-      ORDER BY created_at DESC
+      ORDER BY created_at DESC, rowid DESC
       LIMIT 1
     `,
       [sessionId]

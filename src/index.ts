@@ -4,7 +4,10 @@ import { tool } from "@opencode-ai/plugin";
 
 import { memoryClient } from "./services/client.js";
 import { formatContextForPrompt } from "./services/context.js";
-import { shouldRefreshRecallOnPrompt } from "./services/memory-recall.js";
+import {
+  loadRecallMemoriesForSession,
+  shouldRefreshRecallOnPrompt,
+} from "./services/memory-recall.js";
 import { buildMemoryProvenanceSuffix } from "./services/memory-provenance.js";
 import { getTags } from "./services/tags.js";
 import { stripPrivateContent, isFullyPrivate, sanitizeMemoryContent } from "./services/privacy.js";
@@ -731,10 +734,17 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     process.off("beforeExit", beforeExitHandler);
     process.off("exit", exitHandler);
     CHILD_SESSION_LOOKUPS.clear();
+    latestAuthoredPrompts.clear();
     await cleanupPlugin();
   };
 
   void resumePendingCaptures();
+
+  // In-memory cache of the most recent authored prompt per session so relevance
+  // recall in V2/V1 always has the active prompt text even if user-prompts.db
+  // lookup returns empty or is mocked independently (#524).
+  const latestAuthoredPrompts = new Map<string, string>();
+  const LATEST_AUTHORED_PROMPTS_LIMIT = 1000;
 
   // Capture remains tied to authored prompts. V2 can rebuild request context
   // independently when its in-memory session cache is lost on host/plugin reload.
@@ -743,6 +753,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     messageID: string,
     parts: Part[]
   ): Promise<boolean> => {
+    initConfig(directory, { onlyIfChanged: true });
     if (!isConfigured() || !CONFIG.chatMessage.enabled) return false;
 
     const textParts = parts.filter(
@@ -776,13 +787,24 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
       return false;
     }
 
+    if (
+      !latestAuthoredPrompts.has(sessionID) &&
+      latestAuthoredPrompts.size >= LATEST_AUTHORED_PROMPTS_LIMIT
+    ) {
+      const oldest = latestAuthoredPrompts.keys().next().value;
+      if (oldest !== undefined) latestAuthoredPrompts.delete(oldest);
+    }
+    latestAuthoredPrompts.set(sessionID, userMessage.trim());
     await userPromptManager.savePrompt(sessionID, messageID, directory, userMessage);
     return true;
   };
 
   const loadMemoryContext = async (sessionID: string): Promise<string> => {
-    const { loadRecallMemoriesForSession } = await import("./services/memory-recall.js");
-    const queryText = await userPromptManager.getLatestPromptTextForSession(sessionID);
+    initConfig(directory, { onlyIfChanged: true });
+    const queryText =
+      (await userPromptManager.getLatestPromptTextForSession(sessionID)) ??
+      latestAuthoredPrompts.get(sessionID) ??
+      null;
     const memories = await loadRecallMemoriesForSession(tags.project.tag, sessionID, queryText);
 
     // Still format an empty project-memory payload so injectProfile can emit
@@ -814,17 +836,23 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
         isConfigured() &&
         CONFIG.autoCaptureEnabled &&
         userPromptManager.hasPendingCaptureSession(sessionID, directory),
-      enabled: () => isConfigured() && CONFIG.chatMessage.enabled,
-      refreshOnPrompt: () =>
-        shouldRefreshRecallOnPrompt(
+      enabled: () => {
+        initConfig(directory, { onlyIfChanged: true });
+        return isConfigured() && CONFIG.chatMessage.enabled;
+      },
+      refreshOnPrompt: () => {
+        initConfig(directory, { onlyIfChanged: true });
+        return shouldRefreshRecallOnPrompt(
           CONFIG.chatMessage.recall ?? "relevant",
           CONFIG.chatMessage.injectOn ?? "first"
-        ),
+        );
+      },
       capturePrompt: async (
         input: { sessionID: string },
         output: { message: { id: string }; parts: Part[] }
       ) => capturePrompt(input.sessionID, output.message.id, output.parts),
       load: async (sessionID: string) => {
+        initConfig(directory, { onlyIfChanged: true });
         if (
           !isConfigured() ||
           !CONFIG.chatMessage.enabled ||
@@ -846,6 +874,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
     },
 
     "chat.message": async (input, output) => {
+      initConfig(directory, { onlyIfChanged: true });
       if (!isConfigured() || !CONFIG.chatMessage.enabled) return;
 
       try {

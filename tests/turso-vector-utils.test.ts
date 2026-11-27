@@ -22,6 +22,11 @@ describe("turso vector utils", () => {
 
   it("tokenizes query text and escapes LIKE wildcards", () => {
     expect(tokenizeQueryText("Hello, world_test")).toEqual(["hello", "world", "test"]);
+    expect(tokenizeQueryText("目前mem 跳过捕获的原因是否正常")).toEqual([
+      "目前",
+      "mem",
+      "跳过捕获的原因是否正常",
+    ]);
     expect(escapeLikePattern("100%_done")).toBe("100\\%\\_done");
     expect(parseSessionIdFromMetadata(JSON.stringify({ sessionID: "s1" }))).toBe("s1");
     expect(parseSessionIdFromMetadata("{bad")).toBeNull();

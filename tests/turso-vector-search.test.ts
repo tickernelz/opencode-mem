@@ -277,4 +277,74 @@ describe("turso vector search", () => {
       CONFIG.storagePath = previousStoragePath;
     }
   });
+
+  it("does not penalize semantic vector similarity when natural-language queryText has no LIKE keyword hits", async () => {
+    baseDir = mkdtempSync(join(tmpdir(), "turso-semantic-no-kw-"));
+
+    const { CONFIG } = await import("../src/config.js");
+    const previousStoragePath = CONFIG.storagePath;
+    const previousDims = CONFIG.embeddingDimensions;
+    CONFIG.storagePath = baseDir;
+    CONFIG.embeddingDimensions = 8;
+
+    try {
+      const { tursoConnectionManager } =
+        await import("../src/services/turso/connection-manager.js");
+      const { tursoShardManager } = await import("../src/services/turso/shard-manager.js");
+      const { tursoVectorSearch } = await import("../src/services/turso/vector-search.js");
+
+      const scopeHash = "c3d4e5f678901234";
+      const containerTag = `opencode_project_${scopeHash}`;
+      const shard = await tursoShardManager.createShard("project", scopeHash, 0);
+      const db = await tursoConnectionManager.getConnection(shard.dbPath);
+
+      const queryVector = new Float32Array(8);
+      queryVector[0] = 1;
+      const contentVector = new Float32Array(8);
+      contentVector[0] = 0.8;
+      contentVector[1] = 0.6;
+      const tagsVector = new Float32Array(8);
+      tagsVector[0] = 0.35;
+      tagsVector[1] = Math.sqrt(1 - 0.35 * 0.35);
+
+      await tursoVectorSearch.insertVector(db, {
+        id: "mem_semantic_cjk",
+        content: "自动捕获在内部会话和子会话中会被跳过",
+        vector: contentVector,
+        tagsVector,
+        tags: "capture,skip",
+        containerTag,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      const webSearchResults = await tursoVectorSearch.searchInShard(
+        shard,
+        queryVector,
+        containerTag,
+        5
+      );
+      expect(webSearchResults).toHaveLength(1);
+      // 0.6 * 0.8 + 0.4 * 0.35 = 0.62 (>= 0.60 default threshold)
+      expect(webSearchResults[0]!.similarity).toBeCloseTo(0.62, 2);
+
+      // Automatic recall passes the full user prompt as queryText. Even when
+      // unsegmented CJK clauses have 0 SQL LIKE hits, semantic similarity must
+      // not drop by 20% below the 0.60 threshold (0.5*0.8 + 0.3*0.35 = 0.505).
+      const recallResults = await tursoVectorSearch.searchAcrossShards(
+        [shard],
+        queryVector,
+        containerTag,
+        5,
+        0.6,
+        "目前跳过捕获的原因是否正常"
+      );
+      expect(recallResults.results).toHaveLength(1);
+      expect(recallResults.results[0]?.id).toBe("mem_semantic_cjk");
+      expect(recallResults.results[0]!.similarity).toBeCloseTo(webSearchResults[0]!.similarity, 4);
+    } finally {
+      CONFIG.storagePath = previousStoragePath;
+      CONFIG.embeddingDimensions = previousDims;
+    }
+  });
 });

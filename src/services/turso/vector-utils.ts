@@ -70,12 +70,20 @@ export function formatTagsForEmbedding(tags: string[]): string {
   return `Topics: ${tags.join(", ")}`;
 }
 
+const CJK_BOUNDARY_RE =
+  /([\u4e00-\u9fff\u3400-\u4dbf])([^\s\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\uff00-\uffef])/g;
+const NON_CJK_BOUNDARY_RE =
+  /([^\s\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\uff00-\uffef])([\u4e00-\u9fff\u3400-\u4dbf])/g;
+const QUERY_TOKEN_SPLIT_RE = /[\s,._/\-\u3000-\u303f\uff00-\uffef“”‘’]+/;
+
 /** Split free text into lowercase tokens for keyword / hybrid search. */
 export function tokenizeQueryText(text: string | undefined | null): string[] {
   if (!text) return [];
   return text
     .toLowerCase()
-    .split(/[\s,._/-]+/)
+    .replace(CJK_BOUNDARY_RE, "$1 $2")
+    .replace(NON_CJK_BOUNDARY_RE, "$1 $2")
+    .split(QUERY_TOKEN_SPLIT_RE)
     .map((token) => token.trim())
     .filter((token) => token.length > 1)
     .slice(0, 16);

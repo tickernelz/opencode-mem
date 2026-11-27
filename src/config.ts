@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { stripJsoncComments } from "./services/jsonc.js";
@@ -1305,6 +1305,24 @@ export function normalizeSimilarityUnitInterval(value: unknown, fallback: number
   return value;
 }
 
+function normalizeOptionalSimilarityThreshold(
+  value: unknown,
+  fallback: number | undefined
+): number | undefined {
+  let numeric = value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return fallback;
+    numeric = Number(trimmed);
+  }
+  if (typeof numeric !== "number" || !Number.isFinite(numeric)) {
+    return fallback;
+  }
+  if (numeric < 0) return 0;
+  if (numeric > 1) return 1;
+  return numeric;
+}
+
 export function normalizeUpdateOnCaptureMaxCandidates(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return 5;
@@ -1452,7 +1470,11 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     embeddingApiKey: fileConfig.embeddingApiUrl
       ? resolveSecretValue(fileConfig.embeddingApiKey ?? process.env.OPENAI_API_KEY)
       : undefined,
-    similarityThreshold: fileConfig.similarityThreshold ?? DEFAULTS.similarityThreshold,
+    similarityThreshold:
+      normalizeOptionalSimilarityThreshold(
+        fileConfig.similarityThreshold,
+        DEFAULTS.similarityThreshold
+      ) ?? DEFAULTS.similarityThreshold,
     maxMemories: fileConfig.maxMemories ?? DEFAULTS.maxMemories,
     /**
      * @deprecated No effect. Use userProfileInjectPreferences, userProfileInjectPatterns,
@@ -1602,11 +1624,10 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
         "first" | "always",
       recall: normalizeChatMessageRecall(fileConfig.chatMessage?.recall),
       recallScope: normalizeChatMessageRecallScope(fileConfig.chatMessage?.recallScope),
-      similarityThreshold:
-        typeof fileConfig.chatMessage?.similarityThreshold === "number" &&
-        Number.isFinite(fileConfig.chatMessage.similarityThreshold)
-          ? fileConfig.chatMessage.similarityThreshold
-          : DEFAULTS.chatMessage.similarityThreshold,
+      similarityThreshold: normalizeOptionalSimilarityThreshold(
+        fileConfig.chatMessage?.similarityThreshold,
+        DEFAULTS.chatMessage.similarityThreshold
+      ),
       filterInjectedPrompts:
         fileConfig.chatMessage?.filterInjectedPrompts ?? DEFAULTS.chatMessage.filterInjectedPrompts,
       injectionMarkers: normalizeInjectionMarkers(fileConfig.chatMessage?.injectionMarkers),
@@ -1702,16 +1723,62 @@ function projectConfigPaths(directory: string): string[] {
   ];
 }
 
-export function initConfig(directory: string): void {
+let lastConfigDirectory: string | undefined;
+let lastConfigFingerprint: string | undefined;
+
+function computeConfigFingerprint(paths: string[]): string {
+  const parts: string[] = [];
+  for (const configPath of paths) {
+    try {
+      if (!existsSync(configPath)) {
+        parts.push(`${configPath}:missing`);
+        continue;
+      }
+      const stat = statSync(configPath);
+      parts.push(`${configPath}:${stat.mtimeMs}:${stat.size}`);
+    } catch {
+      parts.push(`${configPath}:stat-error`);
+    }
+  }
+  return parts.join("|");
+}
+
+export function initConfig(directory: string, options?: { onlyIfChanged?: boolean }): void {
   const projectPaths = projectConfigPaths(directory);
+  const allPaths = [...CONFIG_FILES, ...projectPaths];
+  const fingerprint = computeConfigFingerprint(allPaths);
+  if (
+    options?.onlyIfChanged &&
+    lastConfigDirectory === directory &&
+    lastConfigFingerprint === fingerprint
+  ) {
+    return;
+  }
   const globalConfig = loadConfigFromPaths(CONFIG_FILES);
   const projectConfig = loadConfigFromPaths(projectPaths);
   assertProjectRemoteProviderConfigIsSafe(projectConfig);
   const projectOverrides = { ...projectConfig };
   delete projectOverrides.autoCleanupEnabled;
   delete projectOverrides.autoCleanupRetentionDays;
-  const merged: OpenCodeMemConfig = { ...globalConfig, ...projectOverrides };
+  const merged: OpenCodeMemConfig = {
+    ...globalConfig,
+    ...projectOverrides,
+    ...(globalConfig.memory || projectOverrides.memory
+      ? { memory: { ...globalConfig.memory, ...projectOverrides.memory } }
+      : {}),
+    ...(globalConfig.compaction || projectOverrides.compaction
+      ? { compaction: { ...globalConfig.compaction, ...projectOverrides.compaction } }
+      : {}),
+    ...(globalConfig.chatMessage || projectOverrides.chatMessage
+      ? { chatMessage: { ...globalConfig.chatMessage, ...projectOverrides.chatMessage } }
+      : {}),
+    ...(globalConfig.dreaming || projectOverrides.dreaming
+      ? { dreaming: { ...globalConfig.dreaming, ...projectOverrides.dreaming } }
+      : {}),
+  };
   CONFIG = buildConfig(merged);
+  lastConfigDirectory = directory;
+  lastConfigFingerprint = fingerprint;
 }
 
 export function isConfigured(): boolean {
