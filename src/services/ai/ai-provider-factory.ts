@@ -13,6 +13,7 @@ import { CloudGPUProvider } from "./providers/cloudgpu.js";
 import { StandardComputeProvider } from "./providers/standardcompute.js";
 import { UberLLMProvider } from "./providers/uberllm.js";
 import { AigrowProvider } from "./providers/aigrow.js";
+import { LLMTRProvider } from "./providers/llmtr.js";
 import { aiSessionManager } from "./session/ai-session-manager.js";
 import type { AIProviderType } from "./session/session-types.js";
 
@@ -39,6 +40,9 @@ export class AIProviderFactory {
 
       case "aigrow":
         return new AigrowProvider(config, aiSessionManager);
+
+      case "llmtr":
+        return new LLMTRProvider(config, aiSessionManager);
 
       case "cheaper-inference":
         return new CheaperInferenceProvider(config, aiSessionManager);
@@ -82,6 +86,7 @@ export class AIProviderFactory {
       "standardcompute",
       "uberllm",
       "aigrow",
+      "llmtr",
     ];
   }
 

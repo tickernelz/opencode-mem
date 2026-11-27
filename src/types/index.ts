@@ -31,4 +31,5 @@ export type AIProviderType =
   | "cloudgpu"
   | "standardcompute"
   | "uberllm"
-  | "aigrow";
+  | "aigrow"
+  | "llmtr";
