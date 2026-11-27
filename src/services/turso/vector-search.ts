@@ -183,10 +183,12 @@ export class TursoVectorSearch {
 
       const keywordSim = keywordScores.get(String(row.id)) ?? 0;
       const finalTagsSim = Math.max(tagsSim, exactMatchBoost);
-      // With query text: blend vector + keyword. Without: keep classic 0.6/0.4.
+      const vectorSimilarity = contentSim * 0.6 + finalTagsSim * 0.4;
+      // With query text: blend vector + keyword so keyword hits boost recall,
+      // while never penalizing pure semantic matches when keywordSim is 0 (#524).
       const similarity = hasKeyword
-        ? contentSim * 0.5 + finalTagsSim * 0.3 + keywordSim * 0.2
-        : contentSim * 0.6 + finalTagsSim * 0.4;
+        ? Math.max(vectorSimilarity, contentSim * 0.5 + finalTagsSim * 0.3 + keywordSim * 0.2)
+        : vectorSimilarity;
 
       return {
         id: String(row.id),

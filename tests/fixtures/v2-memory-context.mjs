@@ -26,6 +26,8 @@ let failLookup = false;
 let lookupCount = 0;
 let searchCount = 0;
 let failSearch = true;
+let semanticResults = [];
+let latestSavedPromptText = "fixture query";
 const captures = [];
 const histories = new Map();
 const titles = new Map();
@@ -40,7 +42,11 @@ mock.module(moduleUrl("services/client"), () => ({
       searchCount++;
       return failSearch
         ? { success: false, error: "synthetic semantic outage", results: [], total: 0 }
-        : { success: true, results: [], total: 0 };
+        : {
+            success: true,
+            results: semanticResults,
+            total: semanticResults.length,
+          };
     },
     warmup: async () => {},
     close: async () => {},
@@ -69,8 +75,11 @@ mock.module(moduleUrl("services/context"), () => ({
   formatContextForPrompt: async (_user, data) => {
     const results = data?.results ?? [];
     for (const memory of results) {
-      if (memory.selection !== "recent" || memory.similarity !== undefined) {
-        throw new Error("Shared V1/V2 loader lost the unscored recent selection metadata");
+      const validRecent = memory.selection === "recent" && memory.similarity === undefined;
+      const validSemantic =
+        memory.selection === "semantic" && typeof memory.similarity === "number";
+      if (!validRecent && !validSemantic) {
+        throw new Error("Shared V1/V2 loader lost the selection metadata");
       }
     }
     if (results.length === 0) return "";
@@ -81,7 +90,7 @@ mock.module(moduleUrl("services/user-prompt/user-prompt-manager"), () => ({
   userPromptManager: {
     savePrompt: async (...args) => captures.push(args),
     setPromptModel: async () => {},
-    getLatestPromptTextForSession: async () => "fixture query",
+    getLatestPromptTextForSession: async () => latestSavedPromptText,
   },
 }));
 mock.module(moduleUrl("services/logger"), () => ({
@@ -261,6 +270,18 @@ await host.prompt("fallback-a", "successful empty retrieval", "msg-fallback-a3")
 output.fallbackRecoveredEmpty = await host.context("fallback-a");
 output.fallbackOtherAfterRecovery = await host.context("fallback-b");
 output.fallbackFinalCounts = { search: searchCount, list: lookupCount - lookupsBeforeFallback };
+// Relevant-mode semantic matches inject project memories even when DB prompt read returns null.
+latestSavedPromptText = null;
+semanticResults = [
+  {
+    id: "sem-1",
+    memory: "semantic project memory match",
+    similarity: 0.62,
+    createdAt: Date.now(),
+  },
+];
+await host.prompt("semantic-sess", "目前mem 跳过捕获的原因是否正常", "msg-sem-1");
+output.semanticInjected = await host.context("semantic-sess");
 await host.cleanup();
 await plugin.dispose();
 console.log(JSON.stringify(output));

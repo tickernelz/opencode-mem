@@ -80,6 +80,10 @@ describe("v2 memory context lifecycle", () => {
     expect(result.authored).toBe("authored first prompt");
   });
 
+  it("injects semantic project memories in V2 relevant mode using in-memory authored prompt fallback", () => {
+    expect(result.semanticInjected).toEqual(context("semantic project memory match"));
+  });
+
   it("caches failed-semantic recent fallback for model steps and retries on authored turns", () => {
     expect(result.fallbackFirst).toEqual(context("fallback session A"));
     expect(result.fallbackModelStep).toEqual(result.fallbackFirst);

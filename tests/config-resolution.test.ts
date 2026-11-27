@@ -213,6 +213,46 @@ describe("project-scoped config resolution", () => {
     expect(CONFIG.autoCaptureEnabled).toBe(false);
   });
 
+  it("deep-merges nested chatMessage, memory, compaction, and dreaming sections across global and project configs", () => {
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+    readSpy = spyOn(fs, "readFileSync").mockImplementation((p) => {
+      const path = normalizePath(p);
+      if (path.includes(".opencode/opencode-mem")) {
+        return JSON.stringify({
+          chatMessage: { maxMemories: 5 },
+          compaction: { memoryLimit: 8 },
+          dreaming: { crossProject: true },
+        }) as any;
+      }
+      return JSON.stringify({
+        similarityThreshold: "0.45",
+        chatMessage: {
+          recall: "relevant",
+          injectOn: "always",
+          similarityThreshold: 0.45,
+          excludeCurrentSession: false,
+        },
+        memory: { defaultScope: "all-projects" },
+        compaction: { enabled: false },
+        dreaming: { enabled: true, intervalHours: 12 },
+      }) as any;
+    });
+
+    initConfig("/my/project");
+
+    expect(CONFIG.similarityThreshold).toBe(0.45);
+    expect(CONFIG.chatMessage.maxMemories).toBe(5);
+    expect(CONFIG.chatMessage.similarityThreshold).toBe(0.45);
+    expect(CONFIG.chatMessage.injectOn).toBe("always");
+    expect(CONFIG.chatMessage.excludeCurrentSession).toBe(false);
+    expect(CONFIG.memory.defaultScope).toBe("all-projects");
+    expect(CONFIG.compaction.enabled).toBe(false);
+    expect(CONFIG.compaction.memoryLimit).toBe(8);
+    expect(CONFIG.dreaming.enabled).toBe(true);
+    expect(CONFIG.dreaming.intervalHours).toBe(12);
+    expect(CONFIG.dreaming.crossProject).toBe(true);
+  });
+
   it("parses opencodeVariant when set and treats blank values as unset", () => {
     existsSpy = spyOn(fs, "existsSync").mockImplementation((p) =>
       normalizePath(p).includes(".config/opencode/opencode-mem")
